@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://www.tcbpestcontrolcanberra.com.au/sitemap.xml

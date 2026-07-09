@@ -1,0 +1,4 @@
+Contact: mailto:office@tcbpestcontrolcanberra.com.au
+Expires: 2027-07-09T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://www.tcbpestcontrolcanberra.com.au/.well-known/security.txt

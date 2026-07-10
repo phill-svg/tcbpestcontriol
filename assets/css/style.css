@@ -1368,6 +1368,21 @@ svg {
   color: var(--ink-muted);
 }
 
+.grid-card-photo {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  margin: -2rem -2rem 0 -2rem;
+}
+
+.grid-card-photo img {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+}
+
 .grid-card ul {
   margin-top: auto;
   display: flex;

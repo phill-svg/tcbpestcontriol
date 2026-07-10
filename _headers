@@ -1,6 +1,9 @@
 /
   Link: </llms.txt>; rel="describedby"
 
+/.well-known/api-catalog
+  Content-Type: application/linkset+json
+
 /assets/images/*
   Cache-Control: public, max-age=31536000, immutable
 

@@ -1,0 +1,26 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://www.tcbpestcontrolcanberra.com.au/",
+      "service-doc": [
+        {
+          "href": "https://www.tcbpestcontrolcanberra.com.au/llms.txt",
+          "type": "text/markdown",
+          "title": "Site and services overview for AI agents"
+        }
+      ],
+      "item": [
+        {
+          "href": "https://www.tcbpestcontrolcanberra.com.au/sitemap.xml",
+          "type": "application/xml",
+          "title": "XML sitemap of all pages"
+        },
+        {
+          "href": "https://www.tcbpestcontrolcanberra.com.au/feed.xml",
+          "type": "application/rss+xml",
+          "title": "Blog RSS feed"
+        }
+      ]
+    }
+  ]
+}

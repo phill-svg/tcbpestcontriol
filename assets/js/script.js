@@ -31,4 +31,64 @@ document.addEventListener("DOMContentLoaded", function () {
     applyShadow();
     window.addEventListener("scroll", applyShadow, { passive: true });
   }
+
+  if (navigator.modelContext && typeof navigator.modelContext.provideContext === "function") {
+    navigator.modelContext.provideContext({
+      tools: [
+        {
+          name: "request_pest_control_quote",
+          description:
+            "Request a pest control quote from TCB Pest Control Canberra by submitting the site's enquiry form. Only works on the /contact page — if called elsewhere, returns the contact page URL to navigate to first.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Full name of the person requesting the quote." },
+              email: { type: "string", format: "email", description: "Email address for the reply." },
+              phone: { type: "string", description: "Optional contact phone number." },
+              service: {
+                type: "string",
+                enum: [
+                  "Residential",
+                  "Commercial",
+                  "Termites",
+                  "Ants/Spiders/Cockroaches",
+                  "Rodents",
+                  "Wasps/Bees",
+                  "Moths/Silverfish",
+                  "Something else",
+                ],
+                description: "The type of pest control service being requested.",
+              },
+              message: {
+                type: "string",
+                description: "Details about the property, the pest, and preferred visit timing.",
+              },
+            },
+            required: ["name", "email", "service", "message"],
+          },
+          execute: function (input) {
+            var form = document.querySelector('form[action="https://api.web3forms.com/submit"]');
+            if (!form) {
+              return {
+                status: "navigate_required",
+                url: "https://www.tcbpestcontrolcanberra.com.au/contact",
+                detail: "Navigate to the contact page, then call this tool again to submit the enquiry.",
+              };
+            }
+            var setValue = function (fieldName, value) {
+              var el = form.elements.namedItem(fieldName);
+              if (el && value != null) el.value = value;
+            };
+            setValue("Name", input.name);
+            setValue("Email", input.email);
+            setValue("Phone", input.phone);
+            setValue("Service", input.service);
+            setValue("Message", input.message);
+            form.requestSubmit();
+            return { status: "submitted" };
+          },
+        },
+      ],
+    });
+  }
 });

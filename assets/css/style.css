@@ -1045,6 +1045,7 @@ svg {
   display: flex;
   align-items: center;
   gap: 0.25rem;
+  text-decoration: none;
 }
 
 .footer-rating svg {

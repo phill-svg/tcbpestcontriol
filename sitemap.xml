@@ -7,7 +7,7 @@
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/ant-control.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/ant-control</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
@@ -31,13 +31,13 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/bird-control.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/bird-control</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/cockroach-control.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/cockroach-control</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
@@ -61,7 +61,7 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/flea-control.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/flea-control</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
@@ -74,6 +74,7 @@
   </url>
   <url>
     <loc>https://www.tcbpestcontrolcanberra.com.au/general-pest-control.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/general-pest-control</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
@@ -97,14 +98,8 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/possum-control.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/possum-control</loc>
     <lastmod>2026-07-09</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/wildlife-removal-canberra</loc>
-    <lastmod>2026-07-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -127,13 +122,13 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/spider-control.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/spider-control</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/stored-product-pest-control.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/stored-product-pest-control</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
@@ -145,205 +140,205 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-ainslie.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-ainslie</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-braddon.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-braddon</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-campbell.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-campbell</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-canberra-city.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-canberra-city</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-crestwood.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-crestwood</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-curtin.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-curtin</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-deakin.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-deakin</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-dickson.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-dickson</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-downer.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-downer</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-farrer.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-farrer</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-fyshwick.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-fyshwick</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-garran.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-garran</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-googong.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-googong</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-hackett.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-hackett</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-hughes.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-hughes</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-inner-south.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-inner-south</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-isaacs.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-isaacs</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-jerrabomberra.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-jerrabomberra</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-karabar.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-karabar</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-letchworth.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-letchworth</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-lyneham.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-lyneham</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-mawson.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-mawson</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-molonglo-valley.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-molonglo-valley</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-oconnor.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-oconnor</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-omalley.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-omalley</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-pearce.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-pearce</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-phillip.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-phillip</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-queanbeyan-west.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-queanbeyan-west</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-reid.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-reid</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-the-angle.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-the-angle</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-turner.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-turner</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-wamboin.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-wamboin</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-watson.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-watson</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-weston-creek.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-weston-creek</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -385,49 +380,49 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/about.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/about</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/blog-european-wasps-summer-garden.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/blog-european-wasps-summer-garden</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/blog-guide-to-canberra-spiders.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/blog-guide-to-canberra-spiders</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/blog-how-pest-control-makes-your-workplace-safer.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/blog-how-pest-control-makes-your-workplace-safer</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/blog-rat-and-mouse-pest-control-canberra-autumn.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/blog-rat-and-mouse-pest-control-canberra-autumn</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/blog-termite-prevention-tips-for-canberra-homeowners.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/blog-termite-prevention-tips-for-canberra-homeowners</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/blog-why-pest-control-is-important-in-canberra.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/blog-why-pest-control-is-important-in-canberra</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/blog.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/blog</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
@@ -439,445 +434,445 @@
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/resources.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/resources</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/privacy.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/privacy</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/terms.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/terms</loc>
     <lastmod>2026-07-09</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/slater-control.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/slater-control</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/earwig-control.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/earwig-control</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/millipede-control.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/millipede-control</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/mud-wasp-control.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/mud-wasp-control</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/mosquito-control.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/mosquito-control</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/ladybug-control.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/ladybug-control</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-googong.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-googong</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-hackett.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-hackett</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-hughes.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-hughes</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-inner-south.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-inner-south</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-isaacs.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-isaacs</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-jerrabomberra.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-jerrabomberra</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-karabar.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-karabar</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-letchworth.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-letchworth</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-lyneham.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-lyneham</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-mawson.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-mawson</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-molonglo-valley.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-molonglo-valley</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-oconnor.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-oconnor</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-omalley.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-omalley</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-pearce.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-pearce</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-phillip.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-phillip</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-queanbeyan-west.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-queanbeyan-west</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-reid.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-reid</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-the-angle.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-the-angle</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-turner.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-turner</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-wamboin.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-wamboin</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-macquarie.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-macquarie</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-aranda.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-aranda</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-cook.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-cook</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-evatt.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-evatt</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-hawker.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-hawker</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-page.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-page</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-florey.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-florey</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-scullin.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-scullin</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-latham.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-latham</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-kaleen.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-kaleen</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-harrison.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-harrison</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-franklin.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-franklin</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-crace.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-crace</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-palmerston.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-palmerston</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-ngunnawal.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-ngunnawal</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-amaroo.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-amaroo</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-bonner.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-bonner</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-casey.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-casey</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-mitchell.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-mitchell</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-kambah.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-kambah</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-wanniassa.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-wanniassa</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-greenway.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-greenway</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-oxley.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-oxley</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-monash.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-monash</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-isabella-plains.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-isabella-plains</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-bonython.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-bonython</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-gordon.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-gordon</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-conder.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-conder</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-banks.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-banks</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-stirling.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-stirling</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-waramanga.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-waramanga</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-fisher.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-fisher</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-holder.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-holder</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-duffy.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-duffy</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-chapman.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-chapman</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-acton.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-acton</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-parkes.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-parkes</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-narrabundah.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-narrabundah</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-symonston.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-symonston</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-kingston.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-kingston</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-manuka.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-manuka</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-barton.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-barton</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-griffith.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-griffith</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-civic.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/locations-pest-control-civic</loc>
     <lastmod>2026-07-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/blog-dangerous-spiders-canberra.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/blog-dangerous-spiders-canberra</loc>
     <lastmod>2026-07-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -889,7 +884,7 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://www.tcbpestcontrolcanberra.com.au/faq.html</loc>
+    <loc>https://www.tcbpestcontrolcanberra.com.au/faq</loc>
     <lastmod>2026-07-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>

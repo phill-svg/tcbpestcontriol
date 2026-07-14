@@ -1,4 +1,18 @@
 {
   "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
-  "skills": []
+  "skills": [
+    {
+      "id": "tcb-pest-control-canberra-site-overview",
+      "name": "TCB Pest Control Canberra site overview",
+      "description": "Summarises services, suburbs, preparation guidance, and contact information for TCB Pest Control Canberra.",
+      "url": "https://www.tcbpestcontrolcanberra.com.au/llms.txt",
+      "tags": [
+        "pest-control",
+        "canberra",
+        "act",
+        "services",
+        "locations"
+      ]
+    }
+  ]
 }

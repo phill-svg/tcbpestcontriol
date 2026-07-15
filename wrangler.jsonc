@@ -1,8 +1,10 @@
 {
   "name": "tcbpestreal",
   "compatibility_date": "2026-07-09",
+  "main": "src/index.js",
   "assets": {
     "directory": "./",
+    "binding": "ASSETS",
     "not_found_handling": "404-page"
   }
 }

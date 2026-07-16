@@ -32,7 +32,7 @@
 ## Resources
 
 - [Preparation Guides](/preparation): Downloadable PDF guides for preparing a property before a treatment visit.
-- [Blog](/blog.html): Articles on pest identification, prevention and treatment.
+- [Blog](/blog): Articles on pest identification, prevention and treatment.
 
 ## Contact
 

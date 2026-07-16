@@ -67,17 +67,6 @@ async function fetchAsset(request, url, env) {
 		if (indexResponse.status !== 404) {
 			return indexResponse;
 		}
-
-		// A handful of pages (about, faq, privacy, resources, terms) were
-		// never migrated to the directory/index.html structure the rest of
-		// the site uses -- they only exist as a flat "<name>.html" file.
-		// Fall back to that before giving up, so their clean URL (which is
-		// what's in the sitemap and linked throughout the site) resolves.
-		const htmlPath = `${url.pathname}.html`;
-		const htmlResponse = await env.ASSETS.fetch(new Request(new URL(htmlPath, url), request));
-		if (htmlResponse.status !== 404) {
-			return htmlResponse;
-		}
 	}
 
 	return env.ASSETS.fetch(request);

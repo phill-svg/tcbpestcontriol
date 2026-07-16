@@ -549,7 +549,7 @@ svg {
 }
 
 .section-link {
-  font-size: 10px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.22em;
   color: var(--accent);

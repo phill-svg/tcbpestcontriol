@@ -11,7 +11,16 @@ export default {
                             return Response.redirect(url.toString(), 301);
             }
 
-            const response = await env.ASSETS.fetch(request);
+            // Fetch the homepage's index.html directly instead of "/".
+            // With html_handling set to drop-trailing-slash, the root path
+            // has no shorter form to drop the slash to, and asking the
+            // assets binding for "/" makes it redirect "/" to itself
+            // forever. Routing straight to "/index.html" sidesteps that.
+            const assetRequest = url.pathname === "/"
+                            ? new Request(new URL("/index.html", url), request)
+                            : request;
+
+            const response = await env.ASSETS.fetch(assetRequest);
 
             // Force every served HTML page's canonical tag to self-reference the
             // exact URL it was actually served at. A past URL-structure migration

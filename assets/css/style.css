@@ -552,7 +552,7 @@ svg {
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.22em;
-  color: var(--accent);
+  color: #f00;
   text-decoration: none;
   transition: color 0.15s var(--ease);
 }

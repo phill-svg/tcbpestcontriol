@@ -11,16 +11,17 @@ export default {
                             return Response.redirect(url.toString(), 301);
             }
 
-            // Fetch the homepage's index.html directly instead of "/".
-            // With html_handling set to drop-trailing-slash, the root path
-            // has no shorter form to drop the slash to, and asking the
-            // assets binding for "/" makes it redirect "/" to itself
-            // forever. Routing straight to "/index.html" sidesteps that.
-            const assetRequest = url.pathname === "/"
-                            ? new Request(new URL("/index.html", url), request)
-                            : request;
+            // Enforce the no-trailing-slash URL convention ourselves.
+            // html_handling is "none" below because Cloudflare's own
+            // trailing-slash/index.html canonicalisation redirects the root
+            // path "/" to itself forever -- it has no shorter form to drop
+            // the slash to. Handling this in the Worker lets us exempt "/".
+            if (url.pathname.length > 1 && url.pathname.endsWith("/")) {
+                            url.pathname = url.pathname.slice(0, -1);
+                            return Response.redirect(url.toString(), 301);
+            }
 
-            const response = await env.ASSETS.fetch(assetRequest);
+            const response = await fetchAsset(request, url, env);
 
             // Force every served HTML page's canonical tag to self-reference the
             // exact URL it was actually served at. A past URL-structure migration
@@ -42,3 +43,22 @@ export default {
             return response;
         },
 };
+
+// html_handling is "none", so the assets binding only serves exact matches
+// -- it won't map a clean URL like "/residential" to "residential/index.html"
+// on its own. Try the exact path first (covers "/", static files, and any
+// literal extensionless file like /.well-known/api-catalog), then fall back
+// to that path's index.html for directory-style URLs.
+async function fetchAsset(request, url, env) {
+        const directPath = url.pathname === "/" ? "/index.html" : url.pathname;
+        const directRequest = directPath === url.pathname
+                        ? request
+                        : new Request(new URL(directPath, url), request);
+        const directResponse = await env.ASSETS.fetch(directRequest);
+        if (directResponse.status !== 404) {
+                        return directResponse;
+        }
+
+        const indexRequest = new Request(new URL(`${url.pathname}/index.html`, url), request);
+        return env.ASSETS.fetch(indexRequest);
+}

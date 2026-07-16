@@ -552,13 +552,13 @@ svg {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.22em;
-  color: var(--ink-dim);
+  color: var(--accent);
   text-decoration: none;
   transition: color 0.15s var(--ease);
 }
 
 .section-link:hover {
-  color: var(--accent);
+  color: var(--accent-deep);
 }
 
 .head-text p {

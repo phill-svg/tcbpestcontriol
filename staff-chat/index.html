@@ -13,15 +13,23 @@
 <div class="staff-chat-shell">
   <div class="staff-login" data-staff-login hidden>
     <div class="staff-login-card">
-      <h1 class="staff-login-title">Staff sign in</h1>
+      <h1 class="staff-login-title" data-staff-login-title>Staff sign in</h1>
       <form class="form" data-staff-login-form>
         <div class="field">
-          <label for="staff-passcode">Passcode</label>
-          <input autocomplete="current-password" id="staff-passcode" name="passcode" required type="password"/>
+          <label for="staff-username">Username</label>
+          <input autocomplete="username" id="staff-username" name="username" required type="text"/>
+        </div>
+        <div class="field">
+          <label for="staff-password" data-staff-password-label>Password</label>
+          <input autocomplete="current-password" id="staff-password" name="password" required type="password"/>
+        </div>
+        <div class="field" data-staff-passcode-field hidden>
+          <label for="staff-passcode">Setup passcode</label>
+          <input autocomplete="off" id="staff-passcode" name="passcode" type="password"/>
         </div>
         <p class="staff-login-error" data-staff-login-error hidden></p>
         <div class="form-footer">
-          <button class="btn btn-primary" type="submit">Sign in</button>
+          <button class="btn btn-primary" data-staff-login-submit type="submit">Sign in</button>
         </div>
       </form>
     </div>
@@ -30,9 +38,31 @@
     <div class="staff-dashboard-head">
       <h1 class="staff-login-title">Staff chat</h1>
       <div class="staff-dashboard-head-actions">
+        <button class="btn staff-logout-btn" data-staff-manage-toggle hidden type="button">Manage staff</button>
         <button class="btn staff-logout-btn" data-staff-enable-push type="button">Enable notifications</button>
         <button class="btn staff-logout-btn" data-staff-logout type="button">Sign out</button>
       </div>
+    </div>
+    <div class="staff-manage-panel" data-staff-manage-panel hidden>
+      <div class="staff-manage-list" data-staff-manage-list></div>
+      <form class="form staff-manage-add-form" data-staff-add-form>
+        <div class="field">
+          <label for="staff-new-username">Username</label>
+          <input autocomplete="off" id="staff-new-username" name="username" required type="text"/>
+        </div>
+        <div class="field">
+          <label for="staff-new-password">Temporary password</label>
+          <input autocomplete="off" id="staff-new-password" name="password" required type="password"/>
+        </div>
+        <label class="staff-manage-admin-check">
+          <input data-staff-new-is-admin type="checkbox"/>
+          Give this account admin (can manage other staff)
+        </label>
+        <p class="staff-manage-error" data-staff-manage-error hidden></p>
+        <div class="form-footer">
+          <button class="btn btn-primary" type="submit">Add staff member</button>
+        </div>
+      </form>
     </div>
     <div class="staff-chat-layout">
       <div class="staff-conv-list" data-staff-conv-list>

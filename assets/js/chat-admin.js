@@ -3,6 +3,9 @@ document.addEventListener("DOMContentLoaded", function () {
   var loginEl = document.querySelector("[data-staff-login]");
   var dashboardEl = document.querySelector("[data-staff-dashboard]");
   var loginForm = document.querySelector("[data-staff-login-form]");
+  var loginTitleEl = document.querySelector("[data-staff-login-title]");
+  var loginSubmitBtn = document.querySelector("[data-staff-login-submit]");
+  var passcodeField = document.querySelector("[data-staff-passcode-field]");
   var errorEl = document.querySelector("[data-staff-login-error]");
   var logoutBtn = document.querySelector("[data-staff-logout]");
   var listEl = document.querySelector("[data-staff-conv-list]");
@@ -14,17 +17,27 @@ document.addEventListener("DOMContentLoaded", function () {
   var enablePushBtn = document.querySelector("[data-staff-enable-push]");
   var layoutEl = document.querySelector(".staff-chat-layout");
   var threadBackBtn = document.querySelector("[data-staff-thread-back]");
+  var manageToggleBtn = document.querySelector("[data-staff-manage-toggle]");
+  var managePanel = document.querySelector("[data-staff-manage-panel]");
+  var manageListEl = document.querySelector("[data-staff-manage-list]");
+  var addStaffForm = document.querySelector("[data-staff-add-form]");
+  var manageErrorEl = document.querySelector("[data-staff-manage-error]");
+  var newIsAdminCheckbox = document.querySelector("[data-staff-new-is-admin]");
   if (!loginEl || !dashboardEl || !loginForm) return;
 
   var socket = null;
   var reconnectDelay = 1000;
   var currentList = [];
   var activeConversationId = null;
+  var bootstrapMode = false;
+  var isAdmin = false;
 
   function showDashboard() {
     loginEl.hidden = true;
     dashboardEl.hidden = false;
     if (shellEl) shellEl.classList.add("staff-chat-shell-wide");
+    if (manageToggleBtn) manageToggleBtn.hidden = !isAdmin;
+    if (managePanel) managePanel.hidden = true;
     connect();
     checkPushSubscription();
   }
@@ -34,11 +47,25 @@ document.addEventListener("DOMContentLoaded", function () {
     loginEl.hidden = false;
     if (shellEl) shellEl.classList.remove("staff-chat-shell-wide");
     if (layoutEl) layoutEl.classList.remove("is-thread-open");
+    if (managePanel) managePanel.hidden = true;
     if (socket) {
       socket.close();
       socket = null;
     }
     activeConversationId = null;
+  }
+
+  // Toggles the login form between "create the first (admin) account"
+  // (gated by the one-time ADMIN_PASSCODE secret) and ordinary
+  // username/password sign-in, based on whether any staff_users row
+  // exists yet on the server.
+  function setupLoginForm(needed) {
+    bootstrapMode = needed;
+    if (loginTitleEl) loginTitleEl.textContent = needed ? "Create the admin account" : "Staff sign in";
+    if (loginSubmitBtn) loginSubmitBtn.textContent = needed ? "Create account" : "Sign in";
+    if (passcodeField) passcodeField.hidden = !needed;
+    var passcodeInput = document.getElementById("staff-passcode");
+    if (passcodeInput) passcodeInput.required = needed;
   }
 
   function checkSession() {
@@ -48,12 +75,21 @@ document.addEventListener("DOMContentLoaded", function () {
       })
       .then(function (data) {
         if (data.authenticated) {
+          isAdmin = !!data.isAdmin;
           showDashboard();
         } else {
-          showLogin();
+          return fetch("/api/staff/bootstrap-check")
+            .then(function (res) {
+              return res.json();
+            })
+            .then(function (bootstrap) {
+              setupLoginForm(!!bootstrap.needed);
+              showLogin();
+            });
         }
       })
       .catch(function () {
+        setupLoginForm(false);
         showLogin();
       });
   }
@@ -251,27 +287,40 @@ document.addEventListener("DOMContentLoaded", function () {
     enablePushBtn.addEventListener("click", enablePush);
   }
 
+  function jsonResult(res) {
+    return res.json().then(function (data) {
+      return { ok: res.ok, data: data };
+    });
+  }
+
   loginForm.addEventListener("submit", function (e) {
     e.preventDefault();
     errorEl.hidden = true;
 
-    var passcode = document.getElementById("staff-passcode").value;
+    var username = document.getElementById("staff-username").value.trim();
+    var password = document.getElementById("staff-password").value;
+    var endpoint = bootstrapMode ? "/api/staff/bootstrap" : "/api/staff/login";
+    var payload = { username: username, password: password };
+    if (bootstrapMode) {
+      var passcodeInput = document.getElementById("staff-passcode");
+      payload.passcode = passcodeInput ? passcodeInput.value : "";
+    }
 
-    fetch("/api/staff/login", {
+    fetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ passcode: passcode }),
+      body: JSON.stringify(payload),
     })
-      .then(function (res) {
-        if (!res.ok) throw new Error("login failed");
-        return res.json();
-      })
-      .then(function () {
+      .then(jsonResult)
+      .then(function (result) {
+        if (!result.ok) throw new Error((result.data && result.data.error) || "Something went wrong.");
         loginForm.reset();
-        showDashboard();
+        // Re-fetch rather than assuming isAdmin here -- the session
+        // endpoint is the single source of truth for it.
+        checkSession();
       })
-      .catch(function () {
-        errorEl.textContent = "Incorrect passcode.";
+      .catch(function (err) {
+        errorEl.textContent = err.message;
         errorEl.hidden = false;
       });
   });
@@ -301,6 +350,95 @@ document.addEventListener("DOMContentLoaded", function () {
   if (threadBackBtn) {
     threadBackBtn.addEventListener("click", function () {
       if (layoutEl) layoutEl.classList.remove("is-thread-open");
+    });
+  }
+
+  function renderStaffList(users) {
+    manageListEl.innerHTML = "";
+    users.forEach(function (u) {
+      var row = document.createElement("div");
+      row.className = "staff-manage-item";
+
+      var name = document.createElement("span");
+      name.textContent = u.username + (u.isAdmin ? " (admin)" : "");
+
+      var removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "staff-manage-remove";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", function () {
+        removeStaffUser(u.username);
+      });
+
+      row.appendChild(name);
+      row.appendChild(removeBtn);
+      manageListEl.appendChild(row);
+    });
+  }
+
+  function loadStaffUsers() {
+    fetch("/api/staff/users")
+      .then(function (res) {
+        return res.json();
+      })
+      .then(function (data) {
+        renderStaffList(data.users || []);
+      });
+  }
+
+  function removeStaffUser(username) {
+    if (!window.confirm('Remove staff account "' + username + '"?')) return;
+
+    fetch("/api/staff/users", {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: username }),
+    })
+      .then(jsonResult)
+      .then(function (result) {
+        if (!result.ok) throw new Error((result.data && result.data.error) || "Couldn't remove that account.");
+        loadStaffUsers();
+      })
+      .catch(function (err) {
+        window.alert(err.message);
+      });
+  }
+
+  if (manageToggleBtn) {
+    manageToggleBtn.addEventListener("click", function () {
+      if (managePanel.hidden) {
+        loadStaffUsers();
+        managePanel.hidden = false;
+      } else {
+        managePanel.hidden = true;
+      }
+    });
+  }
+
+  if (addStaffForm) {
+    addStaffForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      manageErrorEl.hidden = true;
+
+      var username = document.getElementById("staff-new-username").value.trim();
+      var password = document.getElementById("staff-new-password").value;
+      var newIsAdmin = newIsAdminCheckbox ? newIsAdminCheckbox.checked : false;
+
+      fetch("/api/staff/users", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: username, password: password, isAdmin: newIsAdmin }),
+      })
+        .then(jsonResult)
+        .then(function (result) {
+          if (!result.ok) throw new Error((result.data && result.data.error) || "Couldn't add that account.");
+          addStaffForm.reset();
+          loadStaffUsers();
+        })
+        .catch(function (err) {
+          manageErrorEl.textContent = err.message;
+          manageErrorEl.hidden = false;
+        });
     });
   }
 

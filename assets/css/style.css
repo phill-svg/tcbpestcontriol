@@ -2557,3 +2557,63 @@ html.search-open {
     bottom: 0.75rem;
   }
 }
+
+/* Staff chat admin */
+
+.staff-chat-body {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-soft);
+  padding: 1.5rem;
+}
+
+.staff-chat-shell {
+  width: 100%;
+  max-width: 26rem;
+}
+
+.staff-login-card,
+.staff-dashboard {
+  background: var(--bg-elevated);
+  border-radius: 0.75rem;
+  box-shadow: 0 20px 60px rgba(17, 17, 20, 0.16);
+  padding: 2rem;
+}
+
+.staff-login-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.staff-login-error {
+  font-size: 0.8125rem;
+  color: var(--accent);
+  margin-top: -0.5rem;
+}
+
+.staff-dashboard-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.staff-logout-btn {
+  border-color: var(--line);
+  color: var(--ink-dim);
+  padding: 0.5rem 0.875rem;
+}
+
+.staff-logout-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.staff-dashboard-placeholder {
+  font-size: 0.875rem;
+  color: var(--ink-dim);
+}

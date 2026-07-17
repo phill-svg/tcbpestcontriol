@@ -5,6 +5,10 @@ import { passcodeMatches, hashPassword, verifyPassword, loginCookieHeader } from
 const HISTORY_LIMIT = 50;
 const CONVERSATION_LIST_LIMIT = 50;
 const MAX_MESSAGE_LENGTH = 2000;
+// A conversation auto-closes once this long has passed with no new message
+// from the visitor -- tracked via last_visitor_message_at and swept by the
+// Durable Object alarm below, not a live timer (this DO can hibernate).
+const AUTO_CLOSE_AFTER_MS = 10 * 60 * 1000;
 
 // Single global instance (env.CHAT_HUB.idFromName("global")) holds every
 // conversation's messages and live WebSocket connections. Traffic for this
@@ -64,6 +68,7 @@ export class ChatHub extends DurableObject {
 		this.ensureColumn("conversations", "visitor_name", "TEXT");
 		this.ensureColumn("conversations", "visitor_email", "TEXT");
 		this.ensureColumn("messages", "sender_name", "TEXT");
+		this.ensureColumn("conversations", "last_visitor_message_at", "INTEGER");
 	}
 
 	ensureColumn(table, column, type) {
@@ -304,7 +309,7 @@ export class ChatHub extends DurableObject {
 		this.ctx.acceptWebSocket(server);
 		server.serializeAttachment({ role: "staff", username });
 
-		server.send(JSON.stringify({ type: "conversations", list: this.getConversationsSummary() }));
+		server.send(JSON.stringify({ type: "conversations", ...this.getConversationLists() }));
 
 		return new Response(null, { status: 101, webSocket: client });
 	}
@@ -347,9 +352,9 @@ export class ChatHub extends DurableObject {
 		return rows.map((r) => ({ id: r.id, sender: r.sender, senderName: r.sender_name, body: r.body, createdAt: r.created_at }));
 	}
 
-	// One row per open conversation, each carrying a preview of its most
-	// recent message, for the staff dashboard's conversation list.
-	getConversationsSummary() {
+	// One row per conversation in the given status, each carrying a preview
+	// of its most recent message, for the staff dashboard's conversation list.
+	getConversationsSummary(status) {
 		const rows = this.ctx.storage.sql
 			.exec(
 				`SELECT
@@ -357,9 +362,10 @@ export class ChatHub extends DurableObject {
 					(SELECT body FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS last_body,
 					(SELECT sender FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS last_sender
 				FROM conversations c
-				WHERE c.status = 'open'
+				WHERE c.status = ?
 				ORDER BY c.last_message_at DESC
 				LIMIT ?`,
+				status,
 				CONVERSATION_LIST_LIMIT
 			)
 			.toArray();
@@ -375,8 +381,58 @@ export class ChatHub extends DurableObject {
 		}));
 	}
 
+	// Sent to staff on connect, on any conversation-list-changing event, and
+	// after loading a conversation -- both tabs at once, since it's cheap and
+	// keeps the client from having to ask separately for each.
+	getConversationLists() {
+		return { open: this.getConversationsSummary("open"), closed: this.getConversationsSummary("closed") };
+	}
+
 	markReadByStaff(conversationId) {
 		this.ctx.storage.sql.exec("UPDATE conversations SET unread_by_staff = 0 WHERE id = ?", conversationId);
+	}
+
+	// Re-arms the close-sweep alarm to the earliest pending auto-close
+	// deadline, if any -- called after every visitor message. Durable Object
+	// alarms are exactly-once and persist across hibernation, so this is
+	// reliable without keeping the DO alive or running a live timer.
+	async scheduleCloseSweep(deadline) {
+		const current = await this.ctx.storage.getAlarm();
+		if (current === null || deadline < current) {
+			await this.ctx.storage.setAlarm(deadline);
+		}
+	}
+
+	// Fires when the earliest scheduled auto-close deadline arrives. Closes
+	// every open conversation that's been silent (from the visitor's side)
+	// for AUTO_CLOSE_AFTER_MS or longer, then re-arms itself for whichever
+	// still-open conversation is next in line, if any.
+	async alarm() {
+		const sql = this.ctx.storage.sql;
+		const cutoff = Date.now() - AUTO_CLOSE_AFTER_MS;
+		const toClose = sql
+			.exec(
+				"SELECT id FROM conversations WHERE status = 'open' AND last_visitor_message_at IS NOT NULL AND last_visitor_message_at <= ?",
+				cutoff
+			)
+			.toArray();
+
+		if (toClose.length) {
+			sql.exec(
+				"UPDATE conversations SET status = 'closed' WHERE status = 'open' AND last_visitor_message_at IS NOT NULL AND last_visitor_message_at <= ?",
+				cutoff
+			);
+			this.broadcastToStaff({ type: "conversations", ...this.getConversationLists() });
+		}
+
+		const next = sql
+			.exec(
+				"SELECT MIN(last_visitor_message_at) AS next_at FROM conversations WHERE status = 'open' AND last_visitor_message_at IS NOT NULL"
+			)
+			.one();
+		if (next && next.next_at !== null) {
+			this.ctx.storage.setAlarm(next.next_at + AUTO_CLOSE_AFTER_MS);
+		}
 	}
 
 	getPushSubscriptions() {
@@ -443,12 +499,17 @@ export class ChatHub extends DurableObject {
 			now
 		);
 		const { id } = sql.exec("SELECT last_insert_rowid() AS id").one();
+		// Any new message reopens a closed conversation -- a customer replying
+		// (or staff following up) after auto-close should surface it again.
 		sql.exec(
-			"UPDATE conversations SET last_message_at = ?, unread_by_staff = unread_by_staff + ? WHERE id = ?",
+			"UPDATE conversations SET last_message_at = ?, unread_by_staff = unread_by_staff + ?, status = 'open', last_visitor_message_at = CASE WHEN ? THEN ? ELSE last_visitor_message_at END WHERE id = ?",
 			now,
 			sender === "visitor" ? 1 : 0,
+			sender === "visitor" ? 1 : 0,
+			now,
 			conversationId
 		);
+		if (sender === "visitor") this.ctx.waitUntil(this.scheduleCloseSweep(now + AUTO_CLOSE_AFTER_MS));
 		return { id, sender, senderName: senderName || null, body, createdAt: now };
 	}
 
@@ -483,7 +544,7 @@ export class ChatHub extends DurableObject {
 		// they happen to have this exact conversation open) and a refreshed
 		// list (new preview text, moved to the top, unread count changed).
 		this.broadcastToStaff({ type: "message", conversationId: attachment.conversationId, message: saved });
-		this.broadcastToStaff({ type: "conversations", list: this.getConversationsSummary() });
+		this.broadcastToStaff({ type: "conversations", ...this.getConversationLists() });
 
 		// Only push if nobody's actually watching the dashboard right now --
 		// if a staff device is connected, the broadcasts above already reached
@@ -497,7 +558,7 @@ export class ChatHub extends DurableObject {
 		if (data.type === "loadConversation" && typeof data.conversationId === "string") {
 			this.markReadByStaff(data.conversationId);
 			ws.send(JSON.stringify({ type: "history", conversationId: data.conversationId, messages: this.getMessages(data.conversationId, 0) }));
-			this.broadcastToStaff({ type: "conversations", list: this.getConversationsSummary() });
+			this.broadcastToStaff({ type: "conversations", ...this.getConversationLists() });
 			return;
 		}
 
@@ -508,7 +569,7 @@ export class ChatHub extends DurableObject {
 			const saved = this.insertMessage(data.conversationId, "staff", body, attachment.username);
 			this.broadcastToConversation(data.conversationId, { type: "message", message: saved });
 			this.broadcastToStaff({ type: "message", conversationId: data.conversationId, message: saved });
-			this.broadcastToStaff({ type: "conversations", list: this.getConversationsSummary() });
+			this.broadcastToStaff({ type: "conversations", ...this.getConversationLists() });
 		}
 	}
 

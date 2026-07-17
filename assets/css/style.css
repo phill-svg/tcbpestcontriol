@@ -2,7 +2,7 @@
    _headers) -- every page links it as /assets/css/style.css?v=N. Bump that
    N (repo-wide) whenever you edit this file, or visitors' browsers will
    keep using their old cached copy for up to a year regardless of what's
-   actually deployed. Current version: v=8. */
+   actually deployed. Current version: v=9. */
 
 @font-face {
   font-family: "Inter";
@@ -3167,6 +3167,25 @@ html.search-open {
   white-space: nowrap;
 }
 
+.staff-thread-status-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.staff-thread-status-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* The back button itself is mobile-only (see the max-width: 700px block
    below) -- desktop shows both panes side by side, so there's nothing to
    "go back" from. The head bar stays visible on desktop too, though, since
@@ -3195,11 +3214,20 @@ html.search-open {
    thread, "Conversations" to go back. Toggled via the is-thread-open
    class on .staff-chat-layout (assets/js/chat-admin.js). */
 @media (max-width: 700px) {
-  /* Only stretch/de-pad the shell once the dashboard itself is showing --
-     the sign-in card should stay a normal centered, padded card. */
+  /* Only fix the shell to the viewport height once the dashboard itself is
+     showing -- the sign-in card should stay a normal centered, padded card
+     that can scroll like any other page. Once signed in, this becomes a
+     fixed-height app shell instead: the header (and any open panel) stays
+     put, and only the conversation list / thread messages scroll inside
+     their own regions -- otherwise the whole page scrolled as one long
+     column, and reaching Sign out/Notifications from partway down a long
+     thread meant scrolling all the way back to the top. */
   .staff-chat-body:has(.staff-dashboard:not([hidden])) {
     padding: 0;
     align-items: stretch;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
   }
 
   .staff-chat-shell,
@@ -3212,7 +3240,14 @@ html.search-open {
     box-shadow: none;
   }
 
+  .staff-dashboard:not([hidden]) {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
   .staff-dashboard-head {
+    flex-shrink: 0;
     flex-wrap: wrap;
     row-gap: 0.5rem;
     padding: 1rem;
@@ -3229,9 +3264,17 @@ html.search-open {
     padding: 0.4375rem 0.625rem;
   }
 
+  .staff-team-panel,
+  .staff-manage-panel {
+    flex-shrink: 0;
+    overflow-y: auto;
+    max-height: 45vh;
+    max-height: 45dvh;
+  }
+
   .staff-chat-layout {
-    min-height: calc(100vh - 4.5rem);
-    min-height: calc(100dvh - 4.5rem);
+    flex: 1;
+    min-height: 0;
     max-height: none;
   }
 

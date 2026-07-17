@@ -25,6 +25,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var manageErrorEl = document.querySelector("[data-staff-manage-error]");
   var newIsAdminCheckbox = document.querySelector("[data-staff-new-is-admin]");
   var threadAvatarEl = document.querySelector("[data-staff-thread-avatar]");
+  var threadStatusBtn = document.querySelector("[data-staff-thread-status-toggle]");
   var tabButtons = document.querySelectorAll("[data-staff-conv-tab]");
   var teamToggleBtn = document.querySelector("[data-staff-team-toggle]");
   var teamToggleBadge = document.querySelector("[data-staff-team-toggle-badge]");
@@ -83,6 +84,12 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function showDashboard() {
+    // Blur whatever's focused (almost always the username/password field
+    // right after a successful sign-in) before hiding the login form --
+    // otherwise iOS Safari can leave its autofill suggestion strip stuck
+    // rendered at the top of the screen even though the field it belonged
+    // to is now hidden.
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     loginEl.hidden = true;
     dashboardEl.hidden = false;
     if (shellEl) shellEl.classList.add("staff-chat-shell-wide");
@@ -239,6 +246,21 @@ document.addEventListener("DOMContentLoaded", function () {
     threadMessagesEl.scrollTop = threadMessagesEl.scrollHeight;
   }
 
+  function conversationStatus(conversationId) {
+    return openList.some(function (c) {
+      return c.id === conversationId;
+    })
+      ? "open"
+      : "closed";
+  }
+
+  function updateThreadStatusButton(conversationId) {
+    if (!threadStatusBtn) return;
+    var status = conversationStatus(conversationId);
+    threadStatusBtn.textContent = status === "open" ? "Close" : "Reopen";
+    threadStatusBtn.dataset.status = status;
+  }
+
   function selectConversation(conversationId) {
     activeConversationId = conversationId;
     renderConversationList();
@@ -253,10 +275,19 @@ document.addEventListener("DOMContentLoaded", function () {
       threadVisitorEl.textContent = conv ? [conv.visitorName, conv.visitorEmail].filter(Boolean).join(" · ") : "";
     }
     if (threadAvatarEl) paintAvatar(threadAvatarEl, conv ? conv.visitorName : "");
+    updateThreadStatusButton(conversationId);
 
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: "loadConversation", conversationId: conversationId }));
     }
+  }
+
+  if (threadStatusBtn) {
+    threadStatusBtn.addEventListener("click", function () {
+      if (!activeConversationId || !socket || socket.readyState !== WebSocket.OPEN) return;
+      var newStatus = threadStatusBtn.dataset.status === "open" ? "closed" : "open";
+      socket.send(JSON.stringify({ type: "setConversationStatus", conversationId: activeConversationId, status: newStatus }));
+    });
   }
 
   tabButtons.forEach(function (btn) {
@@ -400,6 +431,7 @@ document.addEventListener("DOMContentLoaded", function () {
         openList = data.open || [];
         closedList = data.closed || [];
         renderConversationList();
+        if (activeConversationId) updateThreadStatusButton(activeConversationId);
       } else if (data.type === "history" && data.conversationId === activeConversationId) {
         threadMessagesEl.innerHTML = "";
         data.messages.forEach(renderThreadMessage);

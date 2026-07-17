@@ -423,6 +423,23 @@ export class ChatHub extends DurableObject {
 		this.ctx.storage.sql.exec("UPDATE conversations SET unread_by_staff = 0 WHERE id = ?", conversationId);
 	}
 
+	// Manual close/reopen from the staff dashboard, independent of the
+	// auto-close sweep. Reopening gives it a fresh AUTO_CLOSE_AFTER_MS grace
+	// period from now (bumping last_visitor_message_at) -- otherwise a
+	// conversation reopened well after the visitor's last message would look
+	// re-opened for only an instant before the very next alarm sweep closed
+	// it straight back up again.
+	setConversationStatus(conversationId, status) {
+		const sql = this.ctx.storage.sql;
+		if (status === "open") {
+			const now = Date.now();
+			sql.exec("UPDATE conversations SET status = 'open', last_visitor_message_at = ? WHERE id = ?", now, conversationId);
+			this.ctx.waitUntil(this.scheduleCloseSweep(now + AUTO_CLOSE_AFTER_MS));
+		} else {
+			sql.exec("UPDATE conversations SET status = 'closed' WHERE id = ?", conversationId);
+		}
+	}
+
 	// A DM room id is deterministic regardless of which of the two staff
 	// members is asking -- alphabetically sorted usernames joined together.
 	dmRoomId(a, b) {
@@ -744,6 +761,16 @@ export class ChatHub extends DurableObject {
 		if (data.type === "loadConversation" && typeof data.conversationId === "string") {
 			this.markReadByStaff(data.conversationId);
 			ws.send(JSON.stringify({ type: "history", conversationId: data.conversationId, messages: this.getMessages(data.conversationId, 0) }));
+			this.broadcastToStaff({ type: "conversations", ...this.getConversationLists() });
+			return;
+		}
+
+		if (
+			data.type === "setConversationStatus" &&
+			typeof data.conversationId === "string" &&
+			(data.status === "open" || data.status === "closed")
+		) {
+			this.setConversationStatus(data.conversationId, data.status);
 			this.broadcastToStaff({ type: "conversations", ...this.getConversationLists() });
 			return;
 		}

@@ -96,11 +96,16 @@ export default {
 		}
 		if (url.pathname === "/api/push/subscribe" || url.pathname === "/api/push/unsubscribe") {
 			if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
-			if (!(await getStaffSession(request, env))) {
+			const session = await getStaffSession(request, env);
+			if (!session) {
 				return new Response("Unauthorized", { status: 401 });
 			}
+			// Attaches the verified username so team/DM push notifications can
+			// target the right device instead of every staff device.
+			const forwardUrl = new URL(request.url);
+			forwardUrl.searchParams.set("username", session.username);
 			const id = env.CHAT_HUB.idFromName("global");
-			return env.CHAT_HUB.get(id).fetch(request);
+			return env.CHAT_HUB.get(id).fetch(new Request(forwardUrl, request));
 		}
 
 		const response = await fetchAsset(request, url, env);

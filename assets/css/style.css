@@ -2,7 +2,7 @@
    _headers) -- every page links it as /assets/css/style.css?v=N. Bump that
    N (repo-wide) whenever you edit this file, or visitors' browsers will
    keep using their old cached copy for up to a year regardless of what's
-   actually deployed. Current version: v=7. */
+   actually deployed. Current version: v=8. */
 
 @font-face {
   font-family: "Inter";
@@ -2832,6 +2832,106 @@ html.search-open {
 .staff-manage-error {
   font-size: 0.8125rem;
   color: var(--accent);
+}
+
+.staff-team-toggle-badge {
+  flex-shrink: 0;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  padding: 0 0.3rem;
+  border-radius: 1rem;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.staff-team-panel {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-soft);
+}
+
+.staff-team-rooms {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.staff-team-rooms[hidden] {
+  display: none;
+}
+
+.staff-team-room-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  background: var(--bg-elevated);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s var(--ease);
+}
+
+.staff-team-room-item:hover {
+  background: var(--panel);
+}
+
+.staff-team-room-badge {
+  flex-shrink: 0;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.375rem;
+  border-radius: 1rem;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.staff-team-thread {
+  display: flex;
+  flex-direction: column;
+  max-height: 26rem;
+}
+
+.staff-team-thread[hidden] {
+  display: none;
+}
+
+.staff-team-thread-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.staff-team-thread-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.staff-team-messages {
+  max-height: 18rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  margin-bottom: 0.75rem;
 }
 
 .staff-chat-layout {

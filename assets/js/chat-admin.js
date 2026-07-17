@@ -26,6 +26,16 @@ document.addEventListener("DOMContentLoaded", function () {
   var newIsAdminCheckbox = document.querySelector("[data-staff-new-is-admin]");
   var threadAvatarEl = document.querySelector("[data-staff-thread-avatar]");
   var tabButtons = document.querySelectorAll("[data-staff-conv-tab]");
+  var teamToggleBtn = document.querySelector("[data-staff-team-toggle]");
+  var teamToggleBadge = document.querySelector("[data-staff-team-toggle-badge]");
+  var teamPanel = document.querySelector("[data-staff-team-panel]");
+  var teamRoomsEl = document.querySelector("[data-staff-team-rooms]");
+  var teamThreadEl = document.querySelector("[data-staff-team-thread]");
+  var teamThreadTitleEl = document.querySelector("[data-staff-team-thread-title]");
+  var teamMessagesEl = document.querySelector("[data-staff-team-messages]");
+  var teamBackBtn = document.querySelector("[data-staff-team-back]");
+  var teamReplyForm = document.querySelector("[data-staff-team-reply-form]");
+  var teamReplyInput = document.querySelector("[data-staff-team-reply-input]");
   if (!loginEl || !dashboardEl || !loginForm) return;
 
   var AVATAR_COLORS = ["#2563eb", "#059669", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
@@ -59,6 +69,10 @@ document.addEventListener("DOMContentLoaded", function () {
   var activeConversationId = null;
   var bootstrapMode = false;
   var isAdmin = false;
+  var myUsername = null;
+  var teamStaffList = [];
+  var teamUnread = {};
+  var activeTeamRoom = null;
 
   function findConversation(conversationId) {
     var all = openList.concat(closedList);
@@ -84,11 +98,15 @@ document.addEventListener("DOMContentLoaded", function () {
     if (shellEl) shellEl.classList.remove("staff-chat-shell-wide");
     if (layoutEl) layoutEl.classList.remove("is-thread-open");
     if (managePanel) managePanel.hidden = true;
+    if (teamPanel) teamPanel.hidden = true;
     if (socket) {
       socket.close();
       socket = null;
     }
     activeConversationId = null;
+    activeTeamRoom = null;
+    teamStaffList = [];
+    teamUnread = {};
   }
 
   // Toggles the login form between "create the first (admin) account"
@@ -112,6 +130,7 @@ document.addEventListener("DOMContentLoaded", function () {
       .then(function (data) {
         if (data.authenticated) {
           isAdmin = !!data.isAdmin;
+          myUsername = data.username;
           showDashboard();
         } else {
           return fetch("/api/staff/bootstrap-check")
@@ -247,6 +266,119 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   });
 
+  function teamDmRoomId(otherUsername) {
+    return "dm:" + [myUsername, otherUsername].sort().join(":");
+  }
+
+  function updateTeamToggleBadge() {
+    if (!teamToggleBadge) return;
+    var total = Object.keys(teamUnread).reduce(function (sum, room) {
+      return sum + (teamUnread[room] || 0);
+    }, 0);
+    teamToggleBadge.textContent = total;
+    teamToggleBadge.hidden = total === 0;
+  }
+
+  function buildTeamRoomItem(room, label, unread) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "staff-team-room-item";
+
+    var name = document.createElement("span");
+    name.className = "staff-team-room-name";
+    name.textContent = label;
+    btn.appendChild(name);
+
+    if (unread > 0) {
+      var badge = document.createElement("span");
+      badge.className = "staff-team-room-badge";
+      badge.textContent = unread;
+      btn.appendChild(badge);
+    }
+
+    btn.addEventListener("click", function () {
+      openTeamRoom(room, label);
+    });
+    return btn;
+  }
+
+  function renderTeamRooms() {
+    if (!teamRoomsEl) return;
+    teamRoomsEl.innerHTML = "";
+    teamRoomsEl.appendChild(buildTeamRoomItem("team", "Team channel", teamUnread.team || 0));
+    teamStaffList.forEach(function (username) {
+      var room = teamDmRoomId(username);
+      teamRoomsEl.appendChild(buildTeamRoomItem(room, username, teamUnread[room] || 0));
+    });
+    updateTeamToggleBadge();
+  }
+
+  function renderTeamMessage(message) {
+    var row = document.createElement("div");
+    row.className = "chat-message " + (message.sender === myUsername ? "chat-message-mine" : "chat-message-theirs");
+
+    var bubble = document.createElement("div");
+    bubble.className = "chat-message-bubble";
+    bubble.textContent = message.body;
+
+    var meta = document.createElement("div");
+    meta.className = "chat-message-meta";
+    var metaParts = [];
+    if (message.sender !== myUsername) metaParts.push(message.sender);
+    if (message.createdAt) metaParts.push(formatTime(message.createdAt));
+    meta.textContent = metaParts.join(" · ");
+
+    row.appendChild(bubble);
+    row.appendChild(meta);
+    teamMessagesEl.appendChild(row);
+    teamMessagesEl.scrollTop = teamMessagesEl.scrollHeight;
+  }
+
+  function openTeamRoom(room, label) {
+    activeTeamRoom = room;
+    if (teamThreadTitleEl) teamThreadTitleEl.textContent = label;
+    if (teamMessagesEl) teamMessagesEl.innerHTML = "";
+    if (teamRoomsEl) teamRoomsEl.hidden = true;
+    if (teamThreadEl) teamThreadEl.hidden = false;
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "loadTeamRoom", room: room }));
+    }
+  }
+
+  function closeTeamRoom() {
+    activeTeamRoom = null;
+    if (teamThreadEl) teamThreadEl.hidden = true;
+    if (teamRoomsEl) teamRoomsEl.hidden = false;
+    renderTeamRooms();
+  }
+
+  if (teamToggleBtn) {
+    teamToggleBtn.addEventListener("click", function () {
+      if (!teamPanel) return;
+      if (teamPanel.hidden) {
+        teamPanel.hidden = false;
+        renderTeamRooms();
+      } else {
+        teamPanel.hidden = true;
+      }
+    });
+  }
+
+  if (teamBackBtn) {
+    teamBackBtn.addEventListener("click", closeTeamRoom);
+  }
+
+  if (teamReplyForm) {
+    teamReplyForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var body = teamReplyInput.value.trim();
+      if (!body || !activeTeamRoom || !socket || socket.readyState !== WebSocket.OPEN) return;
+
+      socket.send(JSON.stringify({ type: "teamMessage", room: activeTeamRoom, body: body }));
+      teamReplyInput.value = "";
+    });
+  }
+
   function connect() {
     if (socket) return;
     var protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -273,6 +405,19 @@ document.addEventListener("DOMContentLoaded", function () {
         data.messages.forEach(renderThreadMessage);
       } else if (data.type === "message" && data.conversationId === activeConversationId) {
         renderThreadMessage(data.message);
+      } else if (data.type === "teamRooms") {
+        teamStaffList = data.staff || [];
+        teamUnread = data.unread || {};
+        if (teamPanel && !teamPanel.hidden && teamRoomsEl && !teamRoomsEl.hidden) {
+          renderTeamRooms();
+        } else {
+          updateTeamToggleBadge();
+        }
+      } else if (data.type === "teamHistory" && data.room === activeTeamRoom) {
+        teamMessagesEl.innerHTML = "";
+        data.messages.forEach(renderTeamMessage);
+      } else if (data.type === "teamMessage" && data.room === activeTeamRoom) {
+        renderTeamMessage(data.message);
       }
     });
 

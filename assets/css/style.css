@@ -2711,6 +2711,80 @@ html.search-open {
   color: var(--ink-dim);
 }
 
+/* Hidden on desktop -- both panes are visible side by side there, so
+   there's nothing to "go back" from. Shown only in the mobile layout
+   below, where the thread takes over the full screen. */
+.staff-thread-head {
+  display: none;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.staff-thread-back {
+  border: none;
+  background: transparent;
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  padding: 0.25rem 0;
+}
+
+.staff-thread-back:hover {
+  color: var(--accent);
+}
+
+/* Below this width, the side-by-side list+thread layout has no room to
+   breathe, so it switches to a single full-screen pane at a time --
+   list first, tap a conversation to take over the screen with the
+   thread, "Conversations" to go back. Toggled via the is-thread-open
+   class on .staff-chat-layout (assets/js/chat-admin.js). */
+@media (max-width: 700px) {
+  .staff-chat-body {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .staff-chat-shell,
+  .staff-chat-shell-wide {
+    max-width: 100%;
+  }
+
+  .staff-dashboard {
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .staff-dashboard-head {
+    flex-wrap: wrap;
+    row-gap: 0.75rem;
+  }
+
+  .staff-chat-layout {
+    min-height: calc(100vh - 4.5rem);
+    max-height: none;
+  }
+
+  .staff-conv-list {
+    width: 100%;
+    border-right: none;
+  }
+
+  .staff-thread-head {
+    display: flex;
+  }
+
+  .staff-chat-layout:not(.is-thread-open) .staff-thread {
+    display: none;
+  }
+
+  .staff-chat-layout.is-thread-open .staff-conv-list {
+    display: none;
+  }
+}
+
 .staff-thread-active {
   flex: 1;
   min-height: 0;

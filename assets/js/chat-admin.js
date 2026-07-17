@@ -12,6 +12,8 @@ document.addEventListener("DOMContentLoaded", function () {
   var replyForm = document.querySelector("[data-staff-reply-form]");
   var replyInput = document.querySelector("[data-staff-reply-input]");
   var enablePushBtn = document.querySelector("[data-staff-enable-push]");
+  var layoutEl = document.querySelector(".staff-chat-layout");
+  var threadBackBtn = document.querySelector("[data-staff-thread-back]");
   if (!loginEl || !dashboardEl || !loginForm) return;
 
   var socket = null;
@@ -31,6 +33,7 @@ document.addEventListener("DOMContentLoaded", function () {
     dashboardEl.hidden = true;
     loginEl.hidden = false;
     if (shellEl) shellEl.classList.remove("staff-chat-shell-wide");
+    if (layoutEl) layoutEl.classList.remove("is-thread-open");
     if (socket) {
       socket.close();
       socket = null;
@@ -117,6 +120,7 @@ document.addEventListener("DOMContentLoaded", function () {
     threadPlaceholder.hidden = true;
     threadActive.hidden = false;
     threadMessagesEl.innerHTML = "";
+    if (layoutEl) layoutEl.classList.add("is-thread-open");
 
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: "loadConversation", conversationId: conversationId }));
@@ -288,6 +292,15 @@ document.addEventListener("DOMContentLoaded", function () {
 
       socket.send(JSON.stringify({ type: "reply", conversationId: activeConversationId, body: body }));
       replyInput.value = "";
+    });
+  }
+
+  // Mobile only (see the max-width: 700px rules in style.css) -- desktop
+  // shows both panes at once, so there's nothing for this button to do
+  // there beyond harmlessly clearing a class with no effect.
+  if (threadBackBtn) {
+    threadBackBtn.addEventListener("click", function () {
+      if (layoutEl) layoutEl.classList.remove("is-thread-open");
     });
   }
 

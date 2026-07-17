@@ -2,7 +2,7 @@
    _headers) -- every page links it as /assets/css/style.css?v=N. Bump that
    N (repo-wide) whenever you edit this file, or visitors' browsers will
    keep using their old cached copy for up to a year regardless of what's
-   actually deployed. Current version: v=6. */
+   actually deployed. Current version: v=7. */
 
 @font-face {
   font-family: "Inter";
@@ -225,7 +225,12 @@ svg {
   top: 0;
   z-index: 40;
   border-bottom: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.85);
+  /* Solid background, not translucent -- on browsers/situations where
+     backdrop-filter doesn't apply (seen on iOS Safari with the site added
+     to the Home Screen), a translucent header lets whatever's scrolled
+     underneath (e.g. the footer logo) show through as a ghosted duplicate
+     right below the header. */
+  background: var(--bg);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
@@ -2750,6 +2755,10 @@ html.search-open {
   padding: 0.5rem 0.875rem;
 }
 
+.staff-logout-btn[hidden] {
+  display: none;
+}
+
 .staff-logout-btn .icon {
   flex-shrink: 0;
 }
@@ -3015,6 +3024,10 @@ html.search-open {
   text-align: center;
   font-size: 0.875rem;
   color: var(--ink-faint);
+}
+
+.staff-thread-placeholder[hidden] {
+  display: none;
 }
 
 .staff-thread-placeholder .icon {

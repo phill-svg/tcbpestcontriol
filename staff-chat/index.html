@@ -7,7 +7,7 @@
 <title>Staff Chat | TCB Pest Control Canberra</title>
 <meta content="noindex,nofollow" name="robots"/>
 <link href="/favicon.ico" rel="icon" type="image/x-icon"/><link href="/assets/favicon/favicon-32x32.png" rel="icon" sizes="32x32" type="image/png"/><link href="/assets/favicon/favicon-16x16.png" rel="icon" sizes="16x16" type="image/png"/>
-<link href="/assets/css/style.css?v=7" rel="stylesheet"/>
+<link href="/assets/css/style.css?v=8" rel="stylesheet"/>
 </head>
 <body class="staff-chat-body">
 <div class="staff-chat-shell">
@@ -47,7 +47,22 @@
       <div class="staff-dashboard-head-actions">
         <button class="btn staff-logout-btn" data-staff-manage-toggle hidden type="button"><svg aria-hidden="true" class="icon" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg><span>Manage staff</span></button>
         <button class="btn staff-logout-btn" data-staff-enable-push type="button"><svg aria-hidden="true" class="icon" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg><span>Notifications</span></button>
+        <button class="btn staff-logout-btn" data-staff-team-toggle type="button"><svg aria-hidden="true" class="icon" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg><span>Team chat</span><span class="staff-team-toggle-badge" data-staff-team-toggle-badge hidden></span></button>
         <button class="btn staff-logout-btn" data-staff-logout type="button"><svg aria-hidden="true" class="icon" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" x2="9" y1="12" y2="12"></line></svg><span>Sign out</span></button>
+      </div>
+    </div>
+    <div class="staff-team-panel" data-staff-team-panel hidden>
+      <div class="staff-team-rooms" data-staff-team-rooms></div>
+      <div class="staff-team-thread" data-staff-team-thread hidden>
+        <div class="staff-team-thread-head">
+          <button class="staff-thread-back" data-staff-team-back type="button">&larr; Team chat</button>
+          <span class="staff-team-thread-title" data-staff-team-thread-title></span>
+        </div>
+        <div class="chat-messages staff-team-messages" data-staff-team-messages></div>
+        <form class="chat-input-row" data-staff-team-reply-form>
+          <input aria-label="Message" autocomplete="off" class="chat-input" data-staff-team-reply-input maxlength="2000" placeholder="Type a message..." required type="text"/>
+          <button class="btn btn-primary chat-send" type="submit">Send</button>
+        </form>
       </div>
     </div>
     <div class="staff-manage-panel" data-staff-manage-panel hidden>

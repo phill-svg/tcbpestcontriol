@@ -61,14 +61,42 @@ export class ChatHub extends DurableObject {
 				created_at INTEGER NOT NULL
 			)
 		`);
+		// Staff-to-staff messages -- room is either the fixed string "team"
+		// (one shared channel everyone can see) or "dm:<a>:<b>" with the two
+		// usernames alphabetically sorted, so a DM room id is the same
+		// regardless of who's asking for it.
+		sql.exec(`
+			CREATE TABLE IF NOT EXISTS staff_messages (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				room TEXT NOT NULL,
+				sender_username TEXT NOT NULL,
+				body TEXT NOT NULL,
+				created_at INTEGER NOT NULL
+			)
+		`);
+		sql.exec(`CREATE INDEX IF NOT EXISTS idx_staff_messages_room ON staff_messages(room, id)`);
+		sql.exec(`
+			CREATE TABLE IF NOT EXISTS staff_read_marks (
+				username TEXT NOT NULL,
+				room TEXT NOT NULL,
+				last_read_message_id INTEGER NOT NULL DEFAULT 0,
+				PRIMARY KEY (username, room)
+			)
+		`);
 
-		// These three columns were added after conversations/messages already
-		// existed in production -- CREATE TABLE IF NOT EXISTS above is a no-op
-		// on an existing table, so they need an explicit, idempotent ALTER.
+		// These columns were added after their tables already existed in
+		// production -- CREATE TABLE IF NOT EXISTS above is a no-op on an
+		// existing table, so they need an explicit, idempotent ALTER.
 		this.ensureColumn("conversations", "visitor_name", "TEXT");
 		this.ensureColumn("conversations", "visitor_email", "TEXT");
 		this.ensureColumn("messages", "sender_name", "TEXT");
 		this.ensureColumn("conversations", "last_visitor_message_at", "INTEGER");
+		// Which staff member a push subscription belongs to -- lets team/DM
+		// notifications target the right device(s) instead of every staff
+		// device. Subscriptions created before this column existed have a
+		// NULL username and simply won't be targeted by those (customer chat
+		// notifications are unaffected -- they still push to everyone).
+		this.ensureColumn("push_subscriptions", "username", "TEXT");
 	}
 
 	ensureColumn(table, column, type) {
@@ -99,9 +127,11 @@ export class ChatHub extends DurableObject {
 			return this.acceptStaff(url);
 		}
 
-		// Also already auth-gated in the Worker before reaching here.
+		// Also already auth-gated in the Worker before reaching here, which
+		// also attaches ?username= (verified, not trusted from the client) so
+		// team/DM push notifications can target the right device.
 		if (url.pathname === "/api/push/subscribe" && request.method === "POST") {
-			return this.handleSubscribe(request);
+			return this.handleSubscribe(request, url.searchParams.get("username"));
 		}
 		if (url.pathname === "/api/push/unsubscribe" && request.method === "POST") {
 			return this.handleUnsubscribe(request);
@@ -248,7 +278,7 @@ export class ChatHub extends DurableObject {
 		return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
 	}
 
-	async handleSubscribe(request) {
+	async handleSubscribe(request, username) {
 		let body;
 		try {
 			body = await request.json();
@@ -266,7 +296,7 @@ export class ChatHub extends DurableObject {
 			});
 		}
 
-		this.addPushSubscription(body.endpoint, body.keys.p256dh, body.keys.auth);
+		this.addPushSubscription(body.endpoint, body.keys.p256dh, body.keys.auth, username || null);
 		return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
 	}
 
@@ -310,6 +340,7 @@ export class ChatHub extends DurableObject {
 		server.serializeAttachment({ role: "staff", username });
 
 		server.send(JSON.stringify({ type: "conversations", ...this.getConversationLists() }));
+		server.send(JSON.stringify({ type: "teamRooms", ...this.getTeamRoomsSummary(username) }));
 
 		return new Response(null, { status: 101, webSocket: client });
 	}
@@ -392,6 +423,141 @@ export class ChatHub extends DurableObject {
 		this.ctx.storage.sql.exec("UPDATE conversations SET unread_by_staff = 0 WHERE id = ?", conversationId);
 	}
 
+	// A DM room id is deterministic regardless of which of the two staff
+	// members is asking -- alphabetically sorted usernames joined together.
+	dmRoomId(a, b) {
+		return "dm:" + [a, b].sort().join(":");
+	}
+
+	isDmRoom(room) {
+		return room.startsWith("dm:");
+	}
+
+	dmParticipants(room) {
+		return room.slice(3).split(":");
+	}
+
+	// The fixed "team" channel is open to every staff account; a DM room is
+	// only open to its two named participants.
+	canAccessRoom(room, username) {
+		if (room === "team") return true;
+		if (this.isDmRoom(room)) return this.dmParticipants(room).includes(username);
+		return false;
+	}
+
+	getTeamMessages(room, sinceId) {
+		const rows = this.ctx.storage.sql
+			.exec(
+				"SELECT id, sender_username, body, created_at FROM staff_messages WHERE room = ? AND id > ? ORDER BY id ASC LIMIT ?",
+				room,
+				sinceId,
+				HISTORY_LIMIT
+			)
+			.toArray();
+		return rows.map((r) => ({ id: r.id, sender: r.sender_username, body: r.body, createdAt: r.created_at }));
+	}
+
+	// Every room this staff member can see (the shared channel plus one
+	// potential DM per other staff account) with an unread count for each,
+	// so the client can render the picker with badges without a round trip
+	// per room.
+	getTeamRoomsSummary(username) {
+		const sql = this.ctx.storage.sql;
+		const staffList = this.listStaffUsers()
+			.map((u) => u.username)
+			.filter((u) => u !== username);
+
+		const rooms = ["team", ...staffList.map((other) => this.dmRoomId(username, other))];
+		const unread = {};
+		for (const room of rooms) {
+			const mark = sql.exec("SELECT last_read_message_id FROM staff_read_marks WHERE username = ? AND room = ?", username, room).toArray()[0];
+			const lastRead = mark ? mark.last_read_message_id : 0;
+			unread[room] = sql
+				.exec("SELECT COUNT(*) AS n FROM staff_messages WHERE room = ? AND id > ? AND sender_username != ?", room, lastRead, username)
+				.one().n;
+		}
+		return { staff: staffList, unread };
+	}
+
+	markTeamRoomRead(username, room, messageId) {
+		this.ctx.storage.sql.exec(
+			`INSERT INTO staff_read_marks (username, room, last_read_message_id) VALUES (?, ?, ?)
+			 ON CONFLICT(username, room) DO UPDATE SET last_read_message_id = MAX(last_read_message_id, excluded.last_read_message_id)`,
+			username,
+			room,
+			messageId
+		);
+	}
+
+	insertTeamMessage(room, senderUsername, body) {
+		const sql = this.ctx.storage.sql;
+		const now = Date.now();
+		sql.exec("INSERT INTO staff_messages (room, sender_username, body, created_at) VALUES (?, ?, ?, ?)", room, senderUsername, body, now);
+		const { id } = sql.exec("SELECT last_insert_rowid() AS id").one();
+		// The sender's own read cursor advances too, so their own message
+		// never shows up as unread to them on reconnect.
+		this.markTeamRoomRead(senderUsername, room, id);
+		return { id, sender: senderUsername, body, createdAt: now };
+	}
+
+	// Reaches only the staff sockets allowed to see this room -- everyone for
+	// "team", just the two participants for a DM.
+	broadcastToRoom(room, payload) {
+		const text = JSON.stringify(payload);
+		const targets = this.isDmRoom(room) ? new Set(this.dmParticipants(room)) : null;
+		for (const ws of this.ctx.getWebSockets()) {
+			const attachment = ws.deserializeAttachment();
+			if (!attachment || attachment.role !== "staff") continue;
+			if (targets && !targets.has(attachment.username)) continue;
+			ws.send(text);
+		}
+	}
+
+	sendToUsername(username, payload) {
+		const text = JSON.stringify(payload);
+		for (const ws of this.ctx.getWebSockets()) {
+			const attachment = ws.deserializeAttachment();
+			if (attachment && attachment.role === "staff" && attachment.username === username) ws.send(text);
+		}
+	}
+
+	// Refreshes the unread badge counts for whichever staff members can see
+	// this room -- called after every team/DM message so a badge updates
+	// live even for someone who doesn't have that room open right now.
+	broadcastRoomsSummary(room) {
+		const usernames = this.isDmRoom(room) ? this.dmParticipants(room) : this.listStaffUsers().map((u) => u.username);
+		for (const username of usernames) {
+			this.sendToUsername(username, { type: "teamRooms", ...this.getTeamRoomsSummary(username) });
+		}
+	}
+
+	// Same "don't buzz an open dashboard" rule as customer-chat notifications
+	// (notifyStaffOfNewMessage below), but per-recipient and targeted --
+	// only whoever can see this room, minus the sender, minus anyone with a
+	// dashboard already connected.
+	async notifyTeamMessage(room, senderUsername, body) {
+		const recipients = (this.isDmRoom(room) ? this.dmParticipants(room) : this.listStaffUsers().map((u) => u.username)).filter(
+			(u) => u !== senderUsername && !this.isUsernameConnected(u)
+		);
+		if (!recipients.length) return;
+
+		const subscriptions = this.getPushSubscriptionsForUsernames(recipients);
+		if (!subscriptions.length) return;
+
+		const payload = {
+			title: (room === "team" ? "Team chat — " : "") + senderUsername,
+			body: body.length > 120 ? body.slice(0, 117) + "..." : body,
+			url: "/staff-chat",
+		};
+
+		await Promise.all(
+			subscriptions.map(async (subscription) => {
+				const result = await sendPushNotification(this.env, subscription, payload);
+				if (result === "gone") this.removePushSubscription(subscription.endpoint);
+			})
+		);
+	}
+
 	// Re-arms the close-sweep alarm to the earliest pending auto-close
 	// deadline, if any -- called after every visitor message. Durable Object
 	// alarms are exactly-once and persist across hibernation, so this is
@@ -439,17 +605,29 @@ export class ChatHub extends DurableObject {
 		return this.ctx.storage.sql.exec("SELECT endpoint, p256dh, auth FROM push_subscriptions").toArray();
 	}
 
-	addPushSubscription(endpoint, p256dh, auth) {
+	// Only subscriptions known to belong to one of the given usernames --
+	// used for team/DM notifications so they don't fan out to every staff
+	// device the way customer-chat notifications intentionally do.
+	getPushSubscriptionsForUsernames(usernames) {
+		if (!usernames.length) return [];
+		const placeholders = usernames.map(() => "?").join(",");
+		return this.ctx.storage.sql
+			.exec(`SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE username IN (${placeholders})`, ...usernames)
+			.toArray();
+	}
+
+	addPushSubscription(endpoint, p256dh, auth, username) {
 		const sql = this.ctx.storage.sql;
 		// Delete-then-insert rather than an upsert -- simpler to reason about,
 		// and this table is small enough (one row per staff device) that there's
 		// no meaningful cost to it.
 		sql.exec("DELETE FROM push_subscriptions WHERE endpoint = ?", endpoint);
 		sql.exec(
-			"INSERT INTO push_subscriptions (endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?)",
+			"INSERT INTO push_subscriptions (endpoint, p256dh, auth, username, created_at) VALUES (?, ?, ?, ?, ?)",
 			endpoint,
 			p256dh,
 			auth,
+			username || null,
 			Date.now()
 		);
 	}
@@ -462,6 +640,14 @@ export class ChatHub extends DurableObject {
 		for (const ws of this.ctx.getWebSockets()) {
 			const attachment = ws.deserializeAttachment();
 			if (attachment && attachment.role === "staff") return true;
+		}
+		return false;
+	}
+
+	isUsernameConnected(username) {
+		for (const ws of this.ctx.getWebSockets()) {
+			const attachment = ws.deserializeAttachment();
+			if (attachment && attachment.role === "staff" && attachment.username === username) return true;
 		}
 		return false;
 	}
@@ -570,6 +756,28 @@ export class ChatHub extends DurableObject {
 			this.broadcastToConversation(data.conversationId, { type: "message", message: saved });
 			this.broadcastToStaff({ type: "message", conversationId: data.conversationId, message: saved });
 			this.broadcastToStaff({ type: "conversations", ...this.getConversationLists() });
+			return;
+		}
+
+		if (data.type === "loadTeamRoom" && typeof data.room === "string") {
+			if (!this.canAccessRoom(data.room, attachment.username)) return;
+			const messages = this.getTeamMessages(data.room, 0);
+			const latestId = messages.length ? messages[messages.length - 1].id : 0;
+			this.markTeamRoomRead(attachment.username, data.room, latestId);
+			ws.send(JSON.stringify({ type: "teamHistory", room: data.room, messages }));
+			ws.send(JSON.stringify({ type: "teamRooms", ...this.getTeamRoomsSummary(attachment.username) }));
+			return;
+		}
+
+		if (data.type === "teamMessage" && typeof data.room === "string" && typeof data.body === "string") {
+			if (!this.canAccessRoom(data.room, attachment.username)) return;
+			const body = data.body.trim().slice(0, MAX_MESSAGE_LENGTH);
+			if (!body) return;
+
+			const saved = this.insertTeamMessage(data.room, attachment.username, body);
+			this.broadcastToRoom(data.room, { type: "teamMessage", room: data.room, message: saved });
+			this.broadcastRoomsSummary(data.room);
+			this.ctx.waitUntil(this.notifyTeamMessage(data.room, attachment.username, body));
 		}
 	}
 

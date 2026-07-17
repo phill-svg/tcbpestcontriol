@@ -61,6 +61,22 @@ export default {
 			});
 		}
 
+		// Web Push: the public key is safe to hand out to anyone (it's designed
+		// to be public -- only the private half, held server-side, is secret).
+		// Subscribe/unsubscribe are staff-only, same auth gate as the staff
+		// socket above, before ever reaching the Durable Object.
+		if (url.pathname === "/api/push/vapid-public-key") {
+			return new Response(env.VAPID_PUBLIC_KEY || "", { status: 200, headers: { "content-type": "text/plain" } });
+		}
+		if (url.pathname === "/api/push/subscribe" || url.pathname === "/api/push/unsubscribe") {
+			if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+			if (!(await isStaffSession(request, env))) {
+				return new Response("Unauthorized", { status: 401 });
+			}
+			const id = env.CHAT_HUB.idFromName("global");
+			return env.CHAT_HUB.get(id).fetch(request);
+		}
+
 		const response = await fetchAsset(request, url, env);
 
 		// Force every served HTML page's canonical tag to self-reference the

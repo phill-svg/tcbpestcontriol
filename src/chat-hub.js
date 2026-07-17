@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { sendPushNotification } from "./push.js";
 
 const HISTORY_LIMIT = 50;
 const CONVERSATION_LIST_LIMIT = 50;
@@ -68,7 +69,51 @@ export class ChatHub extends DurableObject {
 			return this.acceptStaff();
 		}
 
+		// Also already auth-gated in the Worker before reaching here.
+		if (url.pathname === "/api/push/subscribe" && request.method === "POST") {
+			return this.handleSubscribe(request);
+		}
+		if (url.pathname === "/api/push/unsubscribe" && request.method === "POST") {
+			return this.handleUnsubscribe(request);
+		}
+
 		return new Response("Not found", { status: 404 });
+	}
+
+	async handleSubscribe(request) {
+		let body;
+		try {
+			body = await request.json();
+		} catch {
+			return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+				status: 400,
+				headers: { "content-type": "application/json" },
+			});
+		}
+
+		if (!body || typeof body.endpoint !== "string" || !body.keys || typeof body.keys.p256dh !== "string" || typeof body.keys.auth !== "string") {
+			return new Response(JSON.stringify({ error: "Invalid subscription" }), {
+				status: 400,
+				headers: { "content-type": "application/json" },
+			});
+		}
+
+		this.addPushSubscription(body.endpoint, body.keys.p256dh, body.keys.auth);
+		return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+	}
+
+	async handleUnsubscribe(request) {
+		let body;
+		try {
+			body = await request.json();
+		} catch {
+			body = null;
+		}
+
+		if (body && typeof body.endpoint === "string") {
+			this.removePushSubscription(body.endpoint);
+		}
+		return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
 	}
 
 	acceptVisitor(url) {
@@ -152,6 +197,58 @@ export class ChatHub extends DurableObject {
 		this.ctx.storage.sql.exec("UPDATE conversations SET unread_by_staff = 0 WHERE id = ?", conversationId);
 	}
 
+	getPushSubscriptions() {
+		return this.ctx.storage.sql.exec("SELECT endpoint, p256dh, auth FROM push_subscriptions").toArray();
+	}
+
+	addPushSubscription(endpoint, p256dh, auth) {
+		const sql = this.ctx.storage.sql;
+		// Delete-then-insert rather than an upsert -- simpler to reason about,
+		// and this table is small enough (one row per staff device) that there's
+		// no meaningful cost to it.
+		sql.exec("DELETE FROM push_subscriptions WHERE endpoint = ?", endpoint);
+		sql.exec(
+			"INSERT INTO push_subscriptions (endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?)",
+			endpoint,
+			p256dh,
+			auth,
+			Date.now()
+		);
+	}
+
+	removePushSubscription(endpoint) {
+		this.ctx.storage.sql.exec("DELETE FROM push_subscriptions WHERE endpoint = ?", endpoint);
+	}
+
+	hasConnectedStaff() {
+		for (const ws of this.ctx.getWebSockets()) {
+			const attachment = ws.deserializeAttachment();
+			if (attachment && attachment.role === "staff") return true;
+		}
+		return false;
+	}
+
+	// Fire-and-forget from the caller's perspective (wrapped in ctx.waitUntil
+	// there) -- pushes every stored subscription, dropping any the push
+	// service reports as gone (unsubscribed/expired).
+	async notifyStaffOfNewMessage(conversationId, body) {
+		const subscriptions = this.getPushSubscriptions();
+		if (!subscriptions.length) return;
+
+		const payload = {
+			title: "New chat message — TCB Pest Control",
+			body: body.length > 120 ? body.slice(0, 117) + "..." : body,
+			url: "/staff-chat?c=" + encodeURIComponent(conversationId),
+		};
+
+		await Promise.all(
+			subscriptions.map(async (subscription) => {
+				const result = await sendPushNotification(this.env, subscription, payload);
+				if (result === "gone") this.removePushSubscription(subscription.endpoint);
+			})
+		);
+	}
+
 	insertMessage(conversationId, sender, body) {
 		const sql = this.ctx.storage.sql;
 		const now = Date.now();
@@ -204,6 +301,13 @@ export class ChatHub extends DurableObject {
 		// list (new preview text, moved to the top, unread count changed).
 		this.broadcastToStaff({ type: "message", conversationId: attachment.conversationId, message: saved });
 		this.broadcastToStaff({ type: "conversations", list: this.getConversationsSummary() });
+
+		// Only push if nobody's actually watching the dashboard right now --
+		// if a staff device is connected, the broadcasts above already reached
+		// it live, a phone buzz would just be noise.
+		if (!this.hasConnectedStaff()) {
+			this.ctx.waitUntil(this.notifyStaffOfNewMessage(attachment.conversationId, body));
+		}
 	}
 
 	handleStaffMessage(ws, data) {

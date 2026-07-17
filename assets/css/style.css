@@ -2615,10 +2615,21 @@ html.search-open {
   border-bottom: 1px solid var(--line);
 }
 
+.staff-dashboard-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .staff-logout-btn {
   border-color: var(--line);
   color: var(--ink-dim);
   padding: 0.5rem 0.875rem;
+}
+
+.staff-logout-btn[disabled] {
+  color: var(--ink-faint);
+  cursor: default;
 }
 
 .staff-logout-btn:hover {

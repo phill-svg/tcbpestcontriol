@@ -11,6 +11,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var threadMessagesEl = document.querySelector("[data-staff-thread-messages]");
   var replyForm = document.querySelector("[data-staff-reply-form]");
   var replyInput = document.querySelector("[data-staff-reply-input]");
+  var enablePushBtn = document.querySelector("[data-staff-enable-push]");
   if (!loginEl || !dashboardEl || !loginForm) return;
 
   var socket = null;
@@ -23,6 +24,7 @@ document.addEventListener("DOMContentLoaded", function () {
     dashboardEl.hidden = false;
     if (shellEl) shellEl.classList.add("staff-chat-shell-wide");
     connect();
+    checkPushSubscription();
   }
 
   function showLogin() {
@@ -155,6 +157,94 @@ document.addEventListener("DOMContentLoaded", function () {
         if (!dashboardEl.hidden) connect();
       }, reconnectDelay);
     });
+  }
+
+  function urlBase64ToUint8Array(base64String) {
+    var padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    var base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    var rawData = window.atob(base64);
+    var outputArray = new Uint8Array(rawData.length);
+    for (var i = 0; i < rawData.length; i++) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  }
+
+  function setPushButtonState(subscribed) {
+    if (!enablePushBtn) return;
+    if (subscribed) {
+      enablePushBtn.textContent = "Notifications on";
+      enablePushBtn.disabled = true;
+    } else {
+      enablePushBtn.textContent = "Enable notifications";
+      enablePushBtn.disabled = false;
+    }
+  }
+
+  // Silent check on dashboard load -- never prompts for permission, just
+  // reflects whether this browser is already subscribed.
+  function checkPushSubscription() {
+    if (!enablePushBtn || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      if (enablePushBtn) enablePushBtn.hidden = true;
+      return;
+    }
+
+    navigator.serviceWorker
+      .register("/chat-sw.js")
+      .then(function (registration) {
+        return registration.pushManager.getSubscription();
+      })
+      .then(function (subscription) {
+        setPushButtonState(!!subscription);
+      })
+      .catch(function () {
+        setPushButtonState(false);
+      });
+  }
+
+  // Only ever called from the button's click handler -- requesting
+  // notification permission outside a direct user gesture is against
+  // browser policy (and gets silently ignored or auto-denied anyway).
+  function enablePush() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      window.alert("Push notifications aren't supported in this browser.");
+      return;
+    }
+
+    Notification.requestPermission().then(function (permission) {
+      if (permission !== "granted") return;
+
+      navigator.serviceWorker.ready
+        .then(function (registration) {
+          return fetch("/api/push/vapid-public-key")
+            .then(function (res) {
+              return res.text();
+            })
+            .then(function (publicKey) {
+              return registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(publicKey),
+              });
+            });
+        })
+        .then(function (subscription) {
+          return fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(subscription.toJSON()),
+          });
+        })
+        .then(function () {
+          setPushButtonState(true);
+        })
+        .catch(function (err) {
+          window.console && console.error("Push subscribe failed", err);
+        });
+    });
+  }
+
+  if (enablePushBtn) {
+    enablePushBtn.addEventListener("click", enablePush);
   }
 
   loginForm.addEventListener("submit", function (e) {

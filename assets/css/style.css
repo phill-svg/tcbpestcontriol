@@ -2,7 +2,7 @@
    _headers) -- every page links it as /assets/css/style.css?v=N. Bump that
    N (repo-wide) whenever you edit this file, or visitors' browsers will
    keep using their old cached copy for up to a year regardless of what's
-   actually deployed. Current version: v=10. */
+   actually deployed. Current version: v=11. */
 
 @font-face {
   font-family: "Inter";
@@ -2681,8 +2681,10 @@ html.search-open {
   overflow: hidden;
 }
 
-.staff-login-accent {
+.staff-login-accent,
+.staff-dashboard-accent {
   height: 0.25rem;
+  flex-shrink: 0;
   background: linear-gradient(90deg, var(--accent), var(--accent-deep));
 }
 
@@ -3030,16 +3032,25 @@ html.search-open {
   text-align: left;
   padding: 0.875rem 1rem;
   border: none;
+  border-left: 3px solid transparent;
   border-bottom: 1px solid var(--line);
   background: transparent;
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: background-color 0.15s var(--ease);
+  transition: background-color 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+
+.staff-conv-item.is-unread {
+  background: rgba(229, 37, 26, 0.04);
 }
 
 .staff-conv-item:hover,
 .staff-conv-item.is-active {
   background: var(--bg-elevated);
+}
+
+.staff-conv-item.is-active {
+  border-left-color: var(--accent);
 }
 
 .staff-conv-item-avatar {

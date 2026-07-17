@@ -30,11 +30,16 @@ export default {
 		// ever reaches the Durable Object: only a request already carrying a
 		// valid staff session cookie gets forwarded.
 		if (url.pathname === "/api/chat/staff/ws") {
-			if (!(await getStaffSession(request, env))) {
+			const session = await getStaffSession(request, env);
+			if (!session) {
 				return new Response("Unauthorized", { status: 401 });
 			}
+			// Attaches the verified username (not trusted from the client) so
+			// replies can be attributed to whoever actually sent them.
+			const forwardUrl = new URL(request.url);
+			forwardUrl.searchParams.set("username", session.username);
 			const id = env.CHAT_HUB.idFromName("global");
-			return env.CHAT_HUB.get(id).fetch(request);
+			return env.CHAT_HUB.get(id).fetch(new Request(forwardUrl, request));
 		}
 		if (url.pathname.startsWith("/api/chat/")) {
 			const id = env.CHAT_HUB.idFromName("global");
@@ -182,4 +187,4 @@ const SEARCH_OVERLAY_HTML = `<div class="search-overlay" id="site-search" role="
 // admin page, which gets its own dashboard UI). assets/js/chat.js wires it
 // up and opens a WebSocket to /api/chat/ws, backed by the ChatHub Durable
 // Object above.
-const CHAT_WIDGET_HTML = `<button type="button" class="chat-bubble" data-chat-open aria-label="Chat with us" title="Chat with us"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></button><div class="chat-panel" id="site-chat" role="dialog" aria-modal="true" aria-label="Chat with TCB Pest Control" hidden><div class="chat-panel-inner"><div class="chat-header"><span class="chat-header-title">Chat with us</span><button type="button" class="chat-close" data-chat-close aria-label="Close chat">Esc</button></div><div class="chat-messages" data-chat-messages><p class="chat-hint">Send us a message and we will reply here as soon as we can.</p></div><form class="chat-input-row" data-chat-form><input type="text" class="chat-input" data-chat-input placeholder="Type a message..." autocomplete="off" aria-label="Message" maxlength="2000" required/><button type="submit" class="btn btn-primary chat-send">Send</button></form></div></div><script src="/assets/js/chat.js"></script>`;
+const CHAT_WIDGET_HTML = `<button type="button" class="chat-bubble" data-chat-open aria-label="Chat with us" title="Chat with us"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></button><div class="chat-panel" id="site-chat" role="dialog" aria-modal="true" aria-label="Chat with TCB Pest Control" hidden><div class="chat-panel-inner"><div class="chat-header"><span class="chat-header-title">Chat with us</span><button type="button" class="chat-close" data-chat-close aria-label="Close chat"><span class="chat-close-esc">Esc</span><span class="chat-close-icon">&times;</span></button></div><div class="chat-intake" data-chat-intake><p class="chat-intake-lead">Tell us who you are before we get started.</p><form class="form" data-chat-intake-form><div class="field"><label for="chat-name">Name</label><input id="chat-name" name="name" type="text" autocomplete="name" required/></div><div class="field"><label for="chat-email">Email</label><input id="chat-email" name="email" type="email" autocomplete="email" required/></div><div class="form-footer"><button class="btn btn-primary" type="submit">Start chat</button></div></form></div><div class="chat-messages" data-chat-messages hidden><p class="chat-hint">Send us a message and we will reply here as soon as we can.</p></div><form class="chat-input-row" data-chat-form hidden><input type="text" class="chat-input" data-chat-input placeholder="Type a message..." autocomplete="off" aria-label="Message" maxlength="2000" required/><button type="submit" class="btn btn-primary chat-send">Send</button></form></div></div><script src="/assets/js/chat.js"></script>`;

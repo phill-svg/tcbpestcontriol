@@ -2468,6 +2468,13 @@ html.search-open {
   background: rgba(255, 255, 255, 0.12);
 }
 
+/* "Esc" is a useful hint on desktop; meaningless on a phone (no Escape
+   key), where a plain close icon takes over instead -- see the
+   max-width: 640px rules further down. */
+.chat-close-icon {
+  display: none;
+}
+
 .chat-messages {
   flex: 1;
   overflow-y: auto;
@@ -2478,6 +2485,20 @@ html.search-open {
   min-height: 12rem;
 }
 
+.chat-messages[hidden] {
+  display: none;
+}
+
+.chat-intake {
+  padding: 1.25rem 1rem;
+}
+
+.chat-intake-lead {
+  font-size: 0.8125rem;
+  color: var(--ink-dim);
+  margin-bottom: 1rem;
+}
+
 .chat-hint {
   font-size: 0.8125rem;
   color: var(--ink-dim);
@@ -2485,17 +2506,19 @@ html.search-open {
 
 .chat-message {
   display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
 }
 
 /* "mine"/"theirs" rather than "visitor"/"staff" -- the visitor widget and
    the staff dashboard both render the same message shape, but each needs
    its own messages aligned right and the other party's aligned left. */
 .chat-message-mine {
-  justify-content: flex-end;
+  align-items: flex-end;
 }
 
 .chat-message-theirs {
-  justify-content: flex-start;
+  align-items: flex-start;
 }
 
 .chat-message-bubble {
@@ -2506,6 +2529,19 @@ html.search-open {
   line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.chat-message-meta {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  padding-inline: 0.25rem;
+}
+
+.chat-message-meta:empty {
+  display: none;
 }
 
 .chat-message-mine .chat-message-bubble {
@@ -2527,13 +2563,20 @@ html.search-open {
   border-top: 1px solid var(--line);
 }
 
+.chat-input-row[hidden] {
+  display: none;
+}
+
 .chat-input {
   flex: 1;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: 0.5rem 0.625rem;
   font-family: var(--font-sans);
-  font-size: 0.875rem;
+  /* 16px, not smaller -- iOS Safari auto-zooms the whole page on focus for
+     any input below that, which feels broken. Shared by the visitor widget
+     and the staff reply box. */
+  font-size: 1rem;
   background: var(--bg);
   color: var(--ink);
 }
@@ -2550,14 +2593,50 @@ html.search-open {
 }
 
 @media (max-width: 640px) {
-  .chat-panel {
-    right: 0.75rem;
-    bottom: 4.75rem;
-  }
-
   .chat-bubble {
     right: 0.75rem;
-    bottom: 0.75rem;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
+
+  /* A small floating card is hard to actually type in on a phone -- below
+     this width the panel takes over the full screen instead, same pattern
+     as most mobile chat widgets. 100dvh (dynamic viewport height) accounts
+     for the mobile browser's address bar showing/hiding; 100vh alone can
+     leave a gap or clip content as it does. */
+  .chat-panel {
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 100vh;
+    max-height: 100dvh;
+  }
+
+  .chat-panel-inner {
+    height: 100%;
+    height: 100dvh;
+    border-radius: 0;
+  }
+
+  .chat-close {
+    padding: 0.5rem 0.625rem;
+  }
+
+  .chat-close-esc {
+    display: none;
+  }
+
+  .chat-close-icon {
+    display: inline;
+    font-size: 1.125rem;
+    line-height: 1;
+  }
+
+  /* Keeps the input row clear of the home-indicator gesture area on
+     notched iPhones when the panel is full-screen. */
+  .chat-input-row {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
   }
 }
 
@@ -2730,8 +2809,19 @@ html.search-open {
   background: var(--bg-soft);
 }
 
+.staff-conv-item-name {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .staff-conv-item-time {
   display: block;
+  margin-top: 0.125rem;
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   text-transform: uppercase;
@@ -2767,16 +2857,29 @@ html.search-open {
   color: var(--ink-dim);
 }
 
-/* Hidden on desktop -- both panes are visible side by side there, so
-   there's nothing to "go back" from. Shown only in the mobile layout
-   below, where the thread takes over the full screen. */
 .staff-thread-head {
-  display: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--line);
 }
 
+.staff-thread-visitor {
+  font-size: 0.8125rem;
+  color: var(--ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The back button itself is mobile-only (see the max-width: 700px block
+   below) -- desktop shows both panes side by side, so there's nothing to
+   "go back" from. The head bar stays visible on desktop too, though, since
+   the visitor name/email label above is useful there regardless. */
 .staff-thread-back {
+  display: none;
   border: none;
   background: transparent;
   color: var(--ink-dim);
@@ -2786,6 +2889,7 @@ html.search-open {
   letter-spacing: 0.08em;
   cursor: pointer;
   padding: 0.25rem 0;
+  flex-shrink: 0;
 }
 
 .staff-thread-back:hover {
@@ -2798,7 +2902,9 @@ html.search-open {
    thread, "Conversations" to go back. Toggled via the is-thread-open
    class on .staff-chat-layout (assets/js/chat-admin.js). */
 @media (max-width: 700px) {
-  .staff-chat-body {
+  /* Only stretch/de-pad the shell once the dashboard itself is showing --
+     the sign-in card should stay a normal centered, padded card. */
+  .staff-chat-body:has(.staff-dashboard:not([hidden])) {
     padding: 0;
     align-items: stretch;
   }
@@ -2815,11 +2921,24 @@ html.search-open {
 
   .staff-dashboard-head {
     flex-wrap: wrap;
-    row-gap: 0.75rem;
+    row-gap: 0.5rem;
+    padding: 1rem;
+  }
+
+  .staff-dashboard-head-actions {
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
+    width: 100%;
+  }
+
+  .staff-logout-btn {
+    font-size: 0.6875rem;
+    padding: 0.4375rem 0.625rem;
   }
 
   .staff-chat-layout {
     min-height: calc(100vh - 4.5rem);
+    min-height: calc(100dvh - 4.5rem);
     max-height: none;
   }
 
@@ -2828,8 +2947,8 @@ html.search-open {
     border-right: none;
   }
 
-  .staff-thread-head {
-    display: flex;
+  .staff-thread-back {
+    display: inline-flex;
   }
 
   .staff-chat-layout:not(.is-thread-open) .staff-thread {

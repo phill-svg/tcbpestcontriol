@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var enablePushBtn = document.querySelector("[data-staff-enable-push]");
   var layoutEl = document.querySelector(".staff-chat-layout");
   var threadBackBtn = document.querySelector("[data-staff-thread-back]");
+  var threadVisitorEl = document.querySelector("[data-staff-thread-visitor]");
   var manageToggleBtn = document.querySelector("[data-staff-manage-toggle]");
   var managePanel = document.querySelector("[data-staff-manage-panel]");
   var manageListEl = document.querySelector("[data-staff-manage-list]");
@@ -119,6 +120,10 @@ document.addEventListener("DOMContentLoaded", function () {
         (conv.unreadByStaff ? " is-unread" : "") +
         (conv.id === activeConversationId ? " is-active" : "");
 
+      var name = document.createElement("span");
+      name.className = "staff-conv-item-name";
+      name.textContent = conv.visitorName || "Anonymous";
+
       var time = document.createElement("span");
       time.className = "staff-conv-item-time";
       time.textContent = formatTime(conv.lastMessageAt);
@@ -127,6 +132,7 @@ document.addEventListener("DOMContentLoaded", function () {
       preview.className = "staff-conv-item-preview";
       preview.textContent = (conv.lastSender === "staff" ? "You: " : "") + (conv.lastBody || "");
 
+      item.appendChild(name);
       item.appendChild(time);
       item.appendChild(preview);
       item.addEventListener("click", function () {
@@ -144,7 +150,15 @@ document.addEventListener("DOMContentLoaded", function () {
     bubble.className = "chat-message-bubble";
     bubble.textContent = message.body;
 
+    var meta = document.createElement("div");
+    meta.className = "chat-message-meta";
+    var metaParts = [];
+    if (message.sender === "staff" && message.senderName) metaParts.push(message.senderName);
+    if (message.createdAt) metaParts.push(formatTime(message.createdAt));
+    meta.textContent = metaParts.join(" · ");
+
     row.appendChild(bubble);
+    row.appendChild(meta);
     threadMessagesEl.appendChild(row);
     threadMessagesEl.scrollTop = threadMessagesEl.scrollHeight;
   }
@@ -157,6 +171,13 @@ document.addEventListener("DOMContentLoaded", function () {
     threadActive.hidden = false;
     threadMessagesEl.innerHTML = "";
     if (layoutEl) layoutEl.classList.add("is-thread-open");
+
+    if (threadVisitorEl) {
+      var conv = currentList.filter(function (c) {
+        return c.id === conversationId;
+      })[0];
+      threadVisitorEl.textContent = conv ? [conv.visitorName, conv.visitorEmail].filter(Boolean).join(" · ") : "";
+    }
 
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: "loadConversation", conversationId: conversationId }));

@@ -1,3 +1,9 @@
+/* This file is served with a 1-year immutable Cache-Control header (see
+   _headers) -- every page links it as /assets/css/style.css?v=N. Bump that
+   N (repo-wide) whenever you edit this file, or visitors' browsers will
+   keep using their old cached copy for up to a year regardless of what's
+   actually deployed. Current version: v=5. */
+
 @font-face {
   font-family: "Inter";
   font-style: normal;

@@ -2,7 +2,7 @@
    _headers) -- every page links it as /assets/css/style.css?v=N. Bump that
    N (repo-wide) whenever you edit this file, or visitors' browsers will
    keep using their old cached copy for up to a year regardless of what's
-   actually deployed. Current version: v=11. */
+   actually deployed. Current version: v=12. */
 
 @font-face {
   font-family: "Inter";
@@ -2410,15 +2410,15 @@ html.search-open {
   height: 3.25rem;
   border-radius: 50%;
   border: none;
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
   color: var(--ink-on-accent);
-  box-shadow: 0 12px 28px rgba(17, 17, 20, 0.24);
+  box-shadow: 0 12px 28px rgba(229, 37, 26, 0.35);
   cursor: pointer;
-  transition: background-color 0.15s var(--ease), transform 0.15s var(--ease);
+  transition: box-shadow 0.15s var(--ease), transform 0.15s var(--ease);
 }
 
 .chat-bubble:hover {
-  background: var(--accent-deep);
+  box-shadow: 0 14px 32px rgba(229, 37, 26, 0.45);
   transform: translateY(-2px);
 }
 
@@ -2450,21 +2450,41 @@ html.search-open {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.875rem 1rem;
-  background: var(--ink);
-  color: #ffffff;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-elevated);
+  color: var(--ink);
+  border-bottom: 3px solid var(--accent);
+}
+
+.chat-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.chat-header-logo {
+  height: 1.375rem;
+  width: auto;
+  flex-shrink: 0;
 }
 
 .chat-header-title {
   font-family: var(--font-display);
   font-size: 0.9375rem;
   font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-close {
+  flex-shrink: 0;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--ink-faint);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   text-transform: uppercase;
@@ -2475,8 +2495,8 @@ html.search-open {
 }
 
 .chat-close:hover {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.12);
+  color: var(--accent);
+  background: var(--bg-soft);
 }
 
 /* "Esc" is a useful hint on desktop; meaningless on a phone (no Escape
@@ -2502,6 +2522,14 @@ html.search-open {
 
 .chat-intake {
   padding: 1.25rem 1rem;
+}
+
+.chat-intake-title {
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 0.25rem;
 }
 
 .chat-intake-lead {

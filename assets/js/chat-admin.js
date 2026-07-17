@@ -24,7 +24,31 @@ document.addEventListener("DOMContentLoaded", function () {
   var addStaffForm = document.querySelector("[data-staff-add-form]");
   var manageErrorEl = document.querySelector("[data-staff-manage-error]");
   var newIsAdminCheckbox = document.querySelector("[data-staff-new-is-admin]");
+  var threadAvatarEl = document.querySelector("[data-staff-thread-avatar]");
   if (!loginEl || !dashboardEl || !loginForm) return;
+
+  var AVATAR_COLORS = ["#2563eb", "#059669", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
+
+  function initials(name) {
+    var trimmed = (name || "").trim();
+    if (!trimmed) return "?";
+    var parts = trimmed.split(/\s+/);
+    var chars = parts.length > 1 ? parts[0][0] + parts[1][0] : trimmed.slice(0, 2);
+    return chars.toUpperCase();
+  }
+
+  function avatarColor(name) {
+    var str = name || "?";
+    var hash = 0;
+    for (var i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+    return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+  }
+
+  function paintAvatar(el, name) {
+    if (!el) return;
+    el.textContent = initials(name);
+    el.style.background = avatarColor(name);
+  }
 
   var socket = null;
   var reconnectDelay = 1000;
@@ -105,9 +129,10 @@ document.addEventListener("DOMContentLoaded", function () {
     listEl.innerHTML = "";
 
     if (!list.length) {
-      var empty = document.createElement("p");
+      var empty = document.createElement("div");
       empty.className = "staff-conv-empty";
-      empty.textContent = "No conversations yet.";
+      empty.innerHTML =
+        '<svg aria-hidden="true" class="icon" fill="none" height="30" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" viewBox="0 0 24 24" width="30"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg><p>No conversations yet.</p>';
       listEl.appendChild(empty);
       return;
     }
@@ -119,6 +144,13 @@ document.addEventListener("DOMContentLoaded", function () {
         "staff-conv-item" +
         (conv.unreadByStaff ? " is-unread" : "") +
         (conv.id === activeConversationId ? " is-active" : "");
+
+      var avatar = document.createElement("span");
+      avatar.className = "staff-conv-item-avatar";
+      paintAvatar(avatar, conv.visitorName);
+
+      var body = document.createElement("span");
+      body.className = "staff-conv-item-body";
 
       var name = document.createElement("span");
       name.className = "staff-conv-item-name";
@@ -132,9 +164,11 @@ document.addEventListener("DOMContentLoaded", function () {
       preview.className = "staff-conv-item-preview";
       preview.textContent = (conv.lastSender === "staff" ? "You: " : "") + (conv.lastBody || "");
 
-      item.appendChild(name);
-      item.appendChild(time);
-      item.appendChild(preview);
+      body.appendChild(name);
+      body.appendChild(time);
+      body.appendChild(preview);
+      item.appendChild(avatar);
+      item.appendChild(body);
       item.addEventListener("click", function () {
         selectConversation(conv.id);
       });
@@ -172,12 +206,13 @@ document.addEventListener("DOMContentLoaded", function () {
     threadMessagesEl.innerHTML = "";
     if (layoutEl) layoutEl.classList.add("is-thread-open");
 
+    var conv = currentList.filter(function (c) {
+      return c.id === conversationId;
+    })[0];
     if (threadVisitorEl) {
-      var conv = currentList.filter(function (c) {
-        return c.id === conversationId;
-      })[0];
       threadVisitorEl.textContent = conv ? [conv.visitorName, conv.visitorEmail].filter(Boolean).join(" · ") : "";
     }
+    if (threadAvatarEl) paintAvatar(threadAvatarEl, conv ? conv.visitorName : "");
 
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: "loadConversation", conversationId: conversationId }));
@@ -233,11 +268,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function setPushButtonState(subscribed) {
     if (!enablePushBtn) return;
+    var label = enablePushBtn.querySelector("span");
     if (subscribed) {
-      enablePushBtn.textContent = "Notifications on";
+      if (label) label.textContent = "Notifications on";
       enablePushBtn.disabled = true;
     } else {
-      enablePushBtn.textContent = "Enable notifications";
+      if (label) label.textContent = "Enable notifications";
       enablePushBtn.disabled = false;
     }
   }

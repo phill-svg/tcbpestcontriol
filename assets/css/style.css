@@ -2,7 +2,7 @@
    _headers) -- every page links it as /assets/css/style.css?v=N. Bump that
    N (repo-wide) whenever you edit this file, or visitors' browsers will
    keep using their old cached copy for up to a year regardless of what's
-   actually deployed. Current version: v=5. */
+   actually deployed. Current version: v=6. */
 
 @font-face {
   font-family: "Inter";
@@ -2653,7 +2653,7 @@ html.search-open {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-soft);
+  background: radial-gradient(ellipse 60rem 40rem at 50% -10%, rgba(229, 37, 26, 0.08), transparent), var(--bg-soft);
   padding: 1.5rem;
 }
 
@@ -2675,14 +2675,33 @@ html.search-open {
   overflow: hidden;
 }
 
-.staff-login-card {
-  padding: 2rem;
+.staff-login-accent {
+  height: 0.25rem;
+  background: linear-gradient(90deg, var(--accent), var(--accent-deep));
+}
+
+.staff-login-body {
+  padding: 2.25rem 2rem 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.staff-login-logo {
+  height: 2.625rem;
+  width: auto;
+  margin-bottom: 1.25rem;
 }
 
 .staff-login-title {
   font-family: var(--font-display);
   font-size: 1.25rem;
   font-weight: 600;
+  margin-bottom: 1.25rem;
+}
+
+.staff-login-body .form {
+  width: 100%;
 }
 
 .staff-login-error {
@@ -2698,6 +2717,22 @@ html.search-open {
   gap: 1rem;
   padding: 1.25rem 1.5rem;
   border-bottom: 1px solid var(--line);
+  background: var(--bg-elevated);
+}
+
+.staff-dashboard-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.staff-dashboard-brand .staff-login-title {
+  margin-bottom: 0;
+}
+
+.staff-dashboard-logo {
+  height: 1.75rem;
+  width: auto;
 }
 
 .staff-dashboard-head-actions {
@@ -2707,14 +2742,26 @@ html.search-open {
 }
 
 .staff-logout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
   border-color: var(--line);
   color: var(--ink-dim);
   padding: 0.5rem 0.875rem;
 }
 
+.staff-logout-btn .icon {
+  flex-shrink: 0;
+}
+
 .staff-logout-btn[disabled] {
   color: var(--ink-faint);
   cursor: default;
+}
+
+.staff-logout-btn[disabled]:hover {
+  border-color: var(--line);
+  color: var(--ink-faint);
 }
 
 .staff-logout-btn:hover {
@@ -2789,16 +2836,31 @@ html.search-open {
   flex-shrink: 0;
   overflow-y: auto;
   border-right: 1px solid var(--line);
+  background: var(--bg-soft);
 }
 
 .staff-conv-empty {
+  height: 100%;
   padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  text-align: center;
   font-size: 0.875rem;
-  color: var(--ink-dim);
+  color: var(--ink-faint);
+}
+
+.staff-conv-empty .icon {
+  color: var(--ink-faint);
+  opacity: 0.6;
 }
 
 .staff-conv-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   width: 100%;
   text-align: left;
   padding: 0.875rem 1rem;
@@ -2812,7 +2874,27 @@ html.search-open {
 
 .staff-conv-item:hover,
 .staff-conv-item.is-active {
-  background: var(--bg-soft);
+  background: var(--bg-elevated);
+}
+
+.staff-conv-item-avatar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.staff-conv-item-body {
+  display: block;
+  min-width: 0;
+  flex: 1;
 }
 
 .staff-conv-item-name {
@@ -2823,6 +2905,17 @@ html.search-open {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.staff-conv-item.is-unread .staff-conv-item-name::after {
+  content: "";
+  display: inline-block;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  margin-left: 0.375rem;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
 }
 
 .staff-conv-item-time {
@@ -2858,21 +2951,48 @@ html.search-open {
 }
 
 .staff-thread-placeholder {
+  height: 100%;
   padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  text-align: center;
   font-size: 0.875rem;
-  color: var(--ink-dim);
+  color: var(--ink-faint);
+}
+
+.staff-thread-placeholder .icon {
+  color: var(--ink-faint);
+  opacity: 0.5;
 }
 
 .staff-thread-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.75rem;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--line);
 }
 
+.staff-thread-avatar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.875rem;
+  height: 1.875rem;
+  border-radius: 50%;
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
 .staff-thread-visitor {
+  flex: 1;
+  min-width: 0;
   font-size: 0.8125rem;
   color: var(--ink-dim);
   overflow: hidden;

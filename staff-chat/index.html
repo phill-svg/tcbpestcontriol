@@ -7,14 +7,17 @@
 <title>Staff Chat | TCB Pest Control Canberra</title>
 <meta content="noindex,nofollow" name="robots"/>
 <link href="/favicon.ico" rel="icon" type="image/x-icon"/><link href="/assets/favicon/favicon-32x32.png" rel="icon" sizes="32x32" type="image/png"/><link href="/assets/favicon/favicon-16x16.png" rel="icon" sizes="16x16" type="image/png"/>
-<link href="/assets/css/style.css?v=5" rel="stylesheet"/>
+<link href="/assets/css/style.css?v=6" rel="stylesheet"/>
 </head>
 <body class="staff-chat-body">
 <div class="staff-chat-shell">
   <div class="staff-login" data-staff-login hidden>
     <div class="staff-login-card">
-      <h1 class="staff-login-title" data-staff-login-title>Staff sign in</h1>
-      <form class="form" data-staff-login-form>
+      <div class="staff-login-accent"></div>
+      <div class="staff-login-body">
+        <img alt="TCB Pest Control" class="staff-login-logo" height="42" src="/assets/images/tcb-pest-control-logo-03284.webp" width="100"/>
+        <h1 class="staff-login-title" data-staff-login-title>Staff sign in</h1>
+        <form class="form" data-staff-login-form>
         <div class="field">
           <label for="staff-username">Username</label>
           <input autocomplete="username" id="staff-username" name="username" required type="text"/>
@@ -31,16 +34,20 @@
         <div class="form-footer">
           <button class="btn btn-primary" data-staff-login-submit type="submit">Sign in</button>
         </div>
-      </form>
+        </form>
+      </div>
     </div>
   </div>
   <div class="staff-dashboard" data-staff-dashboard hidden>
     <div class="staff-dashboard-head">
-      <h1 class="staff-login-title">Staff chat</h1>
+      <div class="staff-dashboard-brand">
+        <img alt="TCB Pest Control" class="staff-dashboard-logo" height="28" src="/assets/images/tcb-pest-control-logo-03284.webp" width="66"/>
+        <h1 class="staff-login-title">Staff chat</h1>
+      </div>
       <div class="staff-dashboard-head-actions">
-        <button class="btn staff-logout-btn" data-staff-manage-toggle hidden type="button">Manage staff</button>
-        <button class="btn staff-logout-btn" data-staff-enable-push type="button">Enable notifications</button>
-        <button class="btn staff-logout-btn" data-staff-logout type="button">Sign out</button>
+        <button class="btn staff-logout-btn" data-staff-manage-toggle hidden type="button"><svg aria-hidden="true" class="icon" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg><span>Manage staff</span></button>
+        <button class="btn staff-logout-btn" data-staff-enable-push type="button"><svg aria-hidden="true" class="icon" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg><span>Notifications</span></button>
+        <button class="btn staff-logout-btn" data-staff-logout type="button"><svg aria-hidden="true" class="icon" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" x2="9" y1="12" y2="12"></line></svg><span>Sign out</span></button>
       </div>
     </div>
     <div class="staff-manage-panel" data-staff-manage-panel hidden>
@@ -66,13 +73,20 @@
     </div>
     <div class="staff-chat-layout">
       <div class="staff-conv-list" data-staff-conv-list>
-        <p class="staff-conv-empty">No conversations yet.</p>
+        <div class="staff-conv-empty">
+          <svg aria-hidden="true" class="icon" fill="none" height="30" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" viewBox="0 0 24 24" width="30"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+          <p>No conversations yet.</p>
+        </div>
       </div>
       <div class="staff-thread">
-        <p class="staff-thread-placeholder" data-staff-thread-placeholder>Select a conversation to view messages.</p>
+        <div class="staff-thread-placeholder" data-staff-thread-placeholder>
+          <svg aria-hidden="true" class="icon" fill="none" height="34" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" viewBox="0 0 24 24" width="34"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+          <p>Select a conversation to view messages.</p>
+        </div>
         <div class="staff-thread-active" data-staff-thread-active hidden>
           <div class="staff-thread-head">
             <button class="staff-thread-back" data-staff-thread-back type="button">&larr; Conversations</button>
+            <span class="staff-thread-avatar" data-staff-thread-avatar></span>
             <span class="staff-thread-visitor" data-staff-thread-visitor></span>
           </div>
           <div class="chat-messages staff-thread-messages" data-staff-thread-messages></div>

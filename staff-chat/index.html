@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Staff Chat | TCB Pest Control Canberra</title>
+<meta content="noindex,nofollow" name="robots"/>
+<link href="/favicon.ico" rel="icon" type="image/x-icon"/><link href="/assets/favicon/favicon-32x32.png" rel="icon" sizes="32x32" type="image/png"/><link href="/assets/favicon/favicon-16x16.png" rel="icon" sizes="16x16" type="image/png"/>
+<link href="/assets/css/style.css" rel="stylesheet"/>
+</head>
+<body class="staff-chat-body">
+<div class="staff-chat-shell">
+  <div class="staff-login" data-staff-login hidden>
+    <div class="staff-login-card">
+      <h1 class="staff-login-title">Staff sign in</h1>
+      <form class="form" data-staff-login-form>
+        <div class="field">
+          <label for="staff-passcode">Passcode</label>
+          <input autocomplete="current-password" id="staff-passcode" name="passcode" required type="password"/>
+        </div>
+        <p class="staff-login-error" data-staff-login-error hidden></p>
+        <div class="form-footer">
+          <button class="btn btn-primary" type="submit">Sign in</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="staff-dashboard" data-staff-dashboard hidden>
+    <div class="staff-dashboard-head">
+      <h1 class="staff-login-title">Staff chat</h1>
+      <button class="btn staff-logout-btn" data-staff-logout type="button">Sign out</button>
+    </div>
+    <div class="staff-chat-layout">
+      <div class="staff-conv-list" data-staff-conv-list>
+        <p class="staff-conv-empty">No conversations yet.</p>
+      </div>
+      <div class="staff-thread">
+        <p class="staff-thread-placeholder" data-staff-thread-placeholder>Select a conversation to view messages.</p>
+        <div class="staff-thread-active" data-staff-thread-active hidden>
+          <div class="chat-messages staff-thread-messages" data-staff-thread-messages></div>
+          <form class="chat-input-row" data-staff-reply-form>
+            <input aria-label="Reply" autocomplete="off" class="chat-input" data-staff-reply-input maxlength="2000" placeholder="Type a reply..." required type="text"/>
+            <button class="btn btn-primary chat-send" type="submit">Send</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/assets/js/chat-admin.js"></script>
+</body>
+</html>

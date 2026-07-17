@@ -25,6 +25,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var manageErrorEl = document.querySelector("[data-staff-manage-error]");
   var newIsAdminCheckbox = document.querySelector("[data-staff-new-is-admin]");
   var threadAvatarEl = document.querySelector("[data-staff-thread-avatar]");
+  var tabButtons = document.querySelectorAll("[data-staff-conv-tab]");
   if (!loginEl || !dashboardEl || !loginForm) return;
 
   var AVATAR_COLORS = ["#2563eb", "#059669", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
@@ -52,10 +53,20 @@ document.addEventListener("DOMContentLoaded", function () {
 
   var socket = null;
   var reconnectDelay = 1000;
-  var currentList = [];
+  var openList = [];
+  var closedList = [];
+  var activeTab = "open";
   var activeConversationId = null;
   var bootstrapMode = false;
   var isAdmin = false;
+
+  function findConversation(conversationId) {
+    var all = openList.concat(closedList);
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].id === conversationId) return all[i];
+    }
+    return null;
+  }
 
   function showDashboard() {
     loginEl.hidden = true;
@@ -124,15 +135,27 @@ document.addEventListener("DOMContentLoaded", function () {
     return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   }
 
-  function renderConversationList(list) {
-    currentList = list;
+  function updateTabs() {
+    tabButtons.forEach(function (btn) {
+      var tab = btn.getAttribute("data-staff-conv-tab");
+      btn.classList.toggle("is-active", tab === activeTab);
+      var countEl = btn.querySelector("[data-staff-conv-tab-count]");
+      if (countEl) countEl.textContent = (tab === "open" ? openList : closedList).length;
+    });
+  }
+
+  function renderConversationList() {
+    var list = activeTab === "open" ? openList : closedList;
     listEl.innerHTML = "";
+    updateTabs();
 
     if (!list.length) {
       var empty = document.createElement("div");
       empty.className = "staff-conv-empty";
       empty.innerHTML =
-        '<svg aria-hidden="true" class="icon" fill="none" height="30" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" viewBox="0 0 24 24" width="30"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg><p>No conversations yet.</p>';
+        '<svg aria-hidden="true" class="icon" fill="none" height="30" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" viewBox="0 0 24 24" width="30"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg><p>' +
+        (activeTab === "open" ? "No open conversations." : "No closed conversations.") +
+        "</p>";
       listEl.appendChild(empty);
       return;
     }
@@ -199,16 +222,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function selectConversation(conversationId) {
     activeConversationId = conversationId;
-    renderConversationList(currentList);
+    renderConversationList();
 
     threadPlaceholder.hidden = true;
     threadActive.hidden = false;
     threadMessagesEl.innerHTML = "";
     if (layoutEl) layoutEl.classList.add("is-thread-open");
 
-    var conv = currentList.filter(function (c) {
-      return c.id === conversationId;
-    })[0];
+    var conv = findConversation(conversationId);
     if (threadVisitorEl) {
       threadVisitorEl.textContent = conv ? [conv.visitorName, conv.visitorEmail].filter(Boolean).join(" · ") : "";
     }
@@ -218,6 +239,13 @@ document.addEventListener("DOMContentLoaded", function () {
       socket.send(JSON.stringify({ type: "loadConversation", conversationId: conversationId }));
     }
   }
+
+  tabButtons.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      activeTab = btn.getAttribute("data-staff-conv-tab");
+      renderConversationList();
+    });
+  });
 
   function connect() {
     if (socket) return;
@@ -237,7 +265,9 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       if (data.type === "conversations") {
-        renderConversationList(data.list);
+        openList = data.open || [];
+        closedList = data.closed || [];
+        renderConversationList();
       } else if (data.type === "history" && data.conversationId === activeConversationId) {
         threadMessagesEl.innerHTML = "";
         data.messages.forEach(renderThreadMessage);

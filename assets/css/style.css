@@ -2,7 +2,7 @@
    _headers) -- every page links it as /assets/css/style.css?v=N. Bump that
    N (repo-wide) whenever you edit this file, or visitors' browsers will
    keep using their old cached copy for up to a year regardless of what's
-   actually deployed. Current version: v=12. */
+   actually deployed. Current version: v=13. */
 
 @font-face {
   font-family: "Inter";
@@ -2417,6 +2417,35 @@ html.search-open {
   transition: box-shadow 0.15s var(--ease), transform 0.15s var(--ease);
 }
 
+/* A slow pulsing ring draws the eye to the bubble without being an
+   animated GIF-style distraction -- purely decorative, so it's excluded
+   from hit-testing. */
+.chat-bubble::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  animation: chat-bubble-pulse 2.5s ease-out infinite;
+}
+
+@keyframes chat-bubble-pulse {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+}
+
 .chat-bubble:hover {
   box-shadow: 0 14px 32px rgba(229, 37, 26, 0.45);
   transform: translateY(-2px);
@@ -2441,7 +2470,7 @@ html.search-open {
   flex-direction: column;
   width: 100%;
   background: var(--bg-elevated);
-  border-radius: 0.75rem;
+  border-radius: 1.125rem;
   box-shadow: 0 20px 60px rgba(17, 17, 20, 0.28);
   overflow: hidden;
 }
@@ -2451,10 +2480,9 @@ html.search-open {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  background: var(--bg-elevated);
-  color: var(--ink);
-  border-bottom: 3px solid var(--accent);
+  padding: 0.875rem 1rem;
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  color: #ffffff;
 }
 
 .chat-header-brand {
@@ -2464,17 +2492,37 @@ html.search-open {
   min-width: 0;
 }
 
-.chat-header-logo {
-  height: 1.375rem;
-  width: auto;
+.chat-header-badge {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.chat-header-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .chat-header-title {
   font-family: var(--font-display);
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--ink);
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #ffffff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-header-subtitle {
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.82);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2484,7 +2532,7 @@ html.search-open {
   flex-shrink: 0;
   border: none;
   background: transparent;
-  color: var(--ink-faint);
+  color: rgba(255, 255, 255, 0.75);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   text-transform: uppercase;
@@ -2495,8 +2543,8 @@ html.search-open {
 }
 
 .chat-close:hover {
-  color: var(--accent);
-  background: var(--bg-soft);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.18);
 }
 
 /* "Esc" is a useful hint on desktop; meaningless on a phone (no Escape
@@ -2585,7 +2633,7 @@ html.search-open {
 }
 
 .chat-message-mine .chat-message-bubble {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
   color: var(--ink-on-accent);
   border-bottom-right-radius: 0.25rem;
 }
@@ -2630,6 +2678,21 @@ html.search-open {
 .chat-send {
   padding: 0.5rem 0.875rem;
   font-size: 0.8125rem;
+}
+
+/* A dedicated class rather than reusing .chat-send -- the customer widget
+   swapped its "Send" text button for an icon-only circle, but .chat-send
+   is shared with the staff dashboard's text-labelled reply buttons, which
+   should stay exactly as they are. */
+.chat-send-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border-radius: 50%;
 }
 
 @media (max-width: 640px) {

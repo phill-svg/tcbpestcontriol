@@ -37,6 +37,16 @@ export default {
 						el.setAttribute("href", canonicalUrl);
 					},
 				})
+				.on(".header-actions", {
+					element(el) {
+						el.before(SEARCH_TRIGGER_HTML, { html: true });
+					},
+				})
+				.on("body", {
+					element(el) {
+						el.append(SEARCH_OVERLAY_HTML, { html: true });
+					},
+				})
 				.transform(response);
 		}
 
@@ -71,3 +81,16 @@ async function fetchAsset(request, url, env) {
 
 	return env.ASSETS.fetch(request);
 }
+
+// Injected into every page's header, right before the phone/CTA group, via
+// HTMLRewriter -- same "fix it once at the edge" approach used above for
+// canonical tags. Visible at every breakpoint (it sits outside the
+// .main-nav/.header-actions containers that main.css hides on mobile), so it
+// doubles as the mobile search entry point next to the hamburger button.
+const SEARCH_TRIGGER_HTML = `<button type="button" class="search-trigger" data-search-open aria-label="Search the site" title="Search (press /)"><svg aria-hidden="true" class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg></button>`;
+
+// Command-palette style overlay appended once per page, just before </body>.
+// assets/js/search.js wires it up and lazy-loads assets/search-index.json
+// (regenerate that with `node scripts/build-search-index.js` after adding,
+// removing, or retitling a page).
+const SEARCH_OVERLAY_HTML = `<div class="search-overlay" id="site-search" role="dialog" aria-modal="true" aria-label="Search the site" hidden><div class="search-backdrop" data-search-close></div><div class="search-panel"><div class="search-field"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input type="text" class="search-input" placeholder="Search services, suburbs, articles..." autocomplete="off" aria-label="Search"/><button type="button" class="search-close" data-search-close>Esc</button></div><div class="search-results"></div></div></div><script src="/assets/js/search.js"></script>`;

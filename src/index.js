@@ -1,5 +1,5 @@
 export { ChatHub } from "./chat-hub.js";
-import { passcodeMatches, loginCookieHeader, logoutCookieHeader, isStaffSession } from "./staff-auth.js";
+import { logoutCookieHeader, getStaffSession } from "./staff-auth.js";
 
 export default {
 	async fetch(request, env) {
@@ -30,7 +30,7 @@ export default {
 		// ever reaches the Durable Object: only a request already carrying a
 		// valid staff session cookie gets forwarded.
 		if (url.pathname === "/api/chat/staff/ws") {
-			if (!(await isStaffSession(request, env))) {
+			if (!(await getStaffSession(request, env))) {
 				return new Response("Unauthorized", { status: 401 });
 			}
 			const id = env.CHAT_HUB.idFromName("global");
@@ -41,11 +41,20 @@ export default {
 			return env.CHAT_HUB.get(id).fetch(request);
 		}
 
-		// Staff auth: a single shared passcode grants a signed session cookie.
-		// See src/staff-auth.js -- there's no session storage anywhere, the
-		// cookie itself is the session, re-verified fresh on every request.
+		// Staff auth: individual username/password accounts, stored in the
+		// ChatHub Durable Object (see src/chat-hub.js's staff_users table and
+		// src/staff-auth.js for the password hashing / session cookie).
+		// bootstrap-check and bootstrap exist to create the very first (admin)
+		// account when no accounts exist yet; ordinary logins are always
+		// username/password from then on. There's no session storage anywhere
+		// beyond the signed cookie -- it's re-verified fresh on every request.
+		if (url.pathname === "/api/staff/bootstrap-check" || (url.pathname === "/api/staff/bootstrap" && request.method === "POST")) {
+			const id = env.CHAT_HUB.idFromName("global");
+			return env.CHAT_HUB.get(id).fetch(request);
+		}
 		if (url.pathname === "/api/staff/login" && request.method === "POST") {
-			return handleStaffLogin(request, env);
+			const id = env.CHAT_HUB.idFromName("global");
+			return env.CHAT_HUB.get(id).fetch(request);
 		}
 		if (url.pathname === "/api/staff/logout" && request.method === "POST") {
 			return new Response(JSON.stringify({ ok: true }), {
@@ -54,11 +63,39 @@ export default {
 			});
 		}
 		if (url.pathname === "/api/staff/session") {
-			const authenticated = await isStaffSession(request, env);
-			return new Response(JSON.stringify({ authenticated }), {
-				status: 200,
-				headers: { "content-type": "application/json" },
-			});
+			const session = await getStaffSession(request, env);
+			return new Response(
+				JSON.stringify({ authenticated: !!session, username: session ? session.username : null, isAdmin: session ? session.isAdmin : false }),
+				{ status: 200, headers: { "content-type": "application/json" } }
+			);
+		}
+		// Admin-only: managing other staff accounts. actingUser is attached
+		// here (not trusted from the client) so the Durable Object's safety
+		// checks -- can't remove yourself, can't remove the last admin -- know
+		// who's actually asking.
+		if (url.pathname === "/api/staff/users") {
+			const session = await getStaffSession(request, env);
+			if (!session || !session.isAdmin) return new Response("Forbidden", { status: 403 });
+			const forwardUrl = new URL(request.url);
+			forwardUrl.searchParams.set("actingUser", session.username);
+			const id = env.CHAT_HUB.idFromName("global");
+			return env.CHAT_HUB.get(id).fetch(new Request(forwardUrl, request));
+		}
+
+		// Web Push: the public key is safe to hand out to anyone (it's designed
+		// to be public -- only the private half, held server-side, is secret).
+		// Subscribe/unsubscribe are staff-only, same auth gate as the staff
+		// socket above, before ever reaching the Durable Object.
+		if (url.pathname === "/api/push/vapid-public-key") {
+			return new Response(env.VAPID_PUBLIC_KEY || "", { status: 200, headers: { "content-type": "text/plain" } });
+		}
+		if (url.pathname === "/api/push/subscribe" || url.pathname === "/api/push/unsubscribe") {
+			if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+			if (!(await getStaffSession(request, env))) {
+				return new Response("Unauthorized", { status: 401 });
+			}
+			const id = env.CHAT_HUB.idFromName("global");
+			return env.CHAT_HUB.get(id).fetch(request);
 		}
 
 		const response = await fetchAsset(request, url, env);
@@ -113,30 +150,6 @@ export default {
 // their index.html directly, first. Only paths that already look like a
 // literal file (have an extension) or don't match any index.html fall back
 // to an exact-match lookup.
-async function handleStaffLogin(request, env) {
-	let body;
-	try {
-		body = await request.json();
-	} catch {
-		return new Response(JSON.stringify({ error: "Invalid request body" }), {
-			status: 400,
-			headers: { "content-type": "application/json" },
-		});
-	}
-
-	if (!(await passcodeMatches(env, body.passcode))) {
-		return new Response(JSON.stringify({ error: "Incorrect passcode" }), {
-			status: 401,
-			headers: { "content-type": "application/json" },
-		});
-	}
-
-	return new Response(JSON.stringify({ ok: true }), {
-		status: 200,
-		headers: { "content-type": "application/json", "Set-Cookie": await loginCookieHeader(env) },
-	});
-}
-
 async function fetchAsset(request, url, env) {
 	const lastSegment = url.pathname.split("/").pop();
 	const looksLikeDirectory = url.pathname === "/" || !lastSegment.includes(".");

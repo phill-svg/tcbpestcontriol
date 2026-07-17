@@ -1,4 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
+import { sendPushNotification } from "./push.js";
+import { passcodeMatches, hashPassword, verifyPassword, loginCookieHeader } from "./staff-auth.js";
 
 const HISTORY_LIMIT = 50;
 const CONVERSATION_LIST_LIMIT = 50;
@@ -46,6 +48,15 @@ export class ChatHub extends DurableObject {
 				created_at INTEGER NOT NULL
 			)
 		`);
+		sql.exec(`
+			CREATE TABLE IF NOT EXISTS staff_users (
+				username TEXT PRIMARY KEY,
+				password_salt TEXT NOT NULL,
+				password_hash TEXT NOT NULL,
+				is_admin INTEGER NOT NULL DEFAULT 0,
+				created_at INTEGER NOT NULL
+			)
+		`);
 	}
 
 	async fetch(request) {
@@ -68,7 +79,189 @@ export class ChatHub extends DurableObject {
 			return this.acceptStaff();
 		}
 
+		// Also already auth-gated in the Worker before reaching here.
+		if (url.pathname === "/api/push/subscribe" && request.method === "POST") {
+			return this.handleSubscribe(request);
+		}
+		if (url.pathname === "/api/push/unsubscribe" && request.method === "POST") {
+			return this.handleUnsubscribe(request);
+		}
+
+		if (url.pathname === "/api/staff/bootstrap-check") {
+			const count = this.ctx.storage.sql.exec("SELECT COUNT(*) AS n FROM staff_users").one().n;
+			return new Response(JSON.stringify({ needed: count === 0 }), { status: 200, headers: { "content-type": "application/json" } });
+		}
+		if (url.pathname === "/api/staff/bootstrap" && request.method === "POST") {
+			return this.handleBootstrap(request);
+		}
+		if (url.pathname === "/api/staff/login" && request.method === "POST") {
+			return this.handleLogin(request);
+		}
+		// Admin-only -- already checked in the Worker before forwarding here,
+		// which also attaches ?actingUser= so the safety checks below (can't
+		// remove yourself, can't remove the last admin) know who's asking.
+		if (url.pathname === "/api/staff/users") {
+			if (request.method === "GET") {
+				return new Response(JSON.stringify({ users: this.listStaffUsers() }), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				});
+			}
+			if (request.method === "POST") return this.handleCreateStaffUser(request);
+			if (request.method === "DELETE") return this.handleRemoveStaffUser(request, url.searchParams.get("actingUser"));
+		}
+
 		return new Response("Not found", { status: 404 });
+	}
+
+	async handleBootstrap(request) {
+		let body;
+		try {
+			body = await request.json();
+		} catch {
+			return jsonError(400, "Invalid JSON");
+		}
+
+		const count = this.ctx.storage.sql.exec("SELECT COUNT(*) AS n FROM staff_users").one().n;
+		if (count > 0) return jsonError(409, "Setup has already been completed");
+
+		if (!(await passcodeMatches(this.env, body.passcode))) return jsonError(401, "Incorrect passcode");
+
+		const username = normalizeUsername(body.username);
+		const password = typeof body.password === "string" ? body.password : "";
+		if (!username) return jsonError(400, "Username is required");
+		if (password.length < 8) return jsonError(400, "Password must be at least 8 characters");
+
+		const { salt, hash } = await hashPassword(password);
+		this.ctx.storage.sql.exec(
+			"INSERT INTO staff_users (username, password_salt, password_hash, is_admin, created_at) VALUES (?, ?, ?, 1, ?)",
+			username,
+			salt,
+			hash,
+			Date.now()
+		);
+
+		const cookie = await loginCookieHeader(this.env, { username, isAdmin: true });
+		return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json", "Set-Cookie": cookie } });
+	}
+
+	async handleLogin(request) {
+		let body;
+		try {
+			body = await request.json();
+		} catch {
+			return jsonError(400, "Invalid JSON");
+		}
+
+		const username = normalizeUsername(body.username);
+		const password = typeof body.password === "string" ? body.password : "";
+		if (!username || !password) return jsonError(401, "Incorrect username or password");
+
+		const row = this.ctx.storage.sql
+			.exec("SELECT password_salt, password_hash, is_admin FROM staff_users WHERE username = ?", username)
+			.toArray()[0];
+		if (!row || !(await verifyPassword(password, row.password_salt, row.password_hash))) {
+			return jsonError(401, "Incorrect username or password");
+		}
+
+		const cookie = await loginCookieHeader(this.env, { username, isAdmin: !!row.is_admin });
+		return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json", "Set-Cookie": cookie } });
+	}
+
+	listStaffUsers() {
+		return this.ctx.storage.sql
+			.exec("SELECT username, is_admin, created_at FROM staff_users ORDER BY created_at ASC")
+			.toArray()
+			.map((r) => ({ username: r.username, isAdmin: !!r.is_admin, createdAt: r.created_at }));
+	}
+
+	async handleCreateStaffUser(request) {
+		let body;
+		try {
+			body = await request.json();
+		} catch {
+			return jsonError(400, "Invalid JSON");
+		}
+
+		const username = normalizeUsername(body.username);
+		const password = typeof body.password === "string" ? body.password : "";
+		if (!username) return jsonError(400, "Username is required");
+		if (password.length < 8) return jsonError(400, "Password must be at least 8 characters");
+
+		const exists = this.ctx.storage.sql.exec("SELECT username FROM staff_users WHERE username = ?", username).toArray().length > 0;
+		if (exists) return jsonError(409, "That username is already taken");
+
+		const { salt, hash } = await hashPassword(password);
+		this.ctx.storage.sql.exec(
+			"INSERT INTO staff_users (username, password_salt, password_hash, is_admin, created_at) VALUES (?, ?, ?, ?, ?)",
+			username,
+			salt,
+			hash,
+			body.isAdmin ? 1 : 0,
+			Date.now()
+		);
+
+		return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+	}
+
+	async handleRemoveStaffUser(request, actingUser) {
+		let body;
+		try {
+			body = await request.json();
+		} catch {
+			return jsonError(400, "Invalid JSON");
+		}
+
+		const username = normalizeUsername(body.username);
+		if (!username) return jsonError(400, "Username is required");
+		if (username === actingUser) return jsonError(400, "You can't remove your own account while signed in as it");
+
+		const row = this.ctx.storage.sql.exec("SELECT is_admin FROM staff_users WHERE username = ?", username).toArray()[0];
+		if (!row) return jsonError(404, "No such user");
+
+		if (row.is_admin) {
+			const adminCount = this.ctx.storage.sql.exec("SELECT COUNT(*) AS n FROM staff_users WHERE is_admin = 1").one().n;
+			if (adminCount <= 1) return jsonError(400, "Can't remove the last remaining admin account");
+		}
+
+		this.ctx.storage.sql.exec("DELETE FROM staff_users WHERE username = ?", username);
+		return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+	}
+
+	async handleSubscribe(request) {
+		let body;
+		try {
+			body = await request.json();
+		} catch {
+			return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+				status: 400,
+				headers: { "content-type": "application/json" },
+			});
+		}
+
+		if (!body || typeof body.endpoint !== "string" || !body.keys || typeof body.keys.p256dh !== "string" || typeof body.keys.auth !== "string") {
+			return new Response(JSON.stringify({ error: "Invalid subscription" }), {
+				status: 400,
+				headers: { "content-type": "application/json" },
+			});
+		}
+
+		this.addPushSubscription(body.endpoint, body.keys.p256dh, body.keys.auth);
+		return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+	}
+
+	async handleUnsubscribe(request) {
+		let body;
+		try {
+			body = await request.json();
+		} catch {
+			body = null;
+		}
+
+		if (body && typeof body.endpoint === "string") {
+			this.removePushSubscription(body.endpoint);
+		}
+		return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
 	}
 
 	acceptVisitor(url) {
@@ -152,6 +345,58 @@ export class ChatHub extends DurableObject {
 		this.ctx.storage.sql.exec("UPDATE conversations SET unread_by_staff = 0 WHERE id = ?", conversationId);
 	}
 
+	getPushSubscriptions() {
+		return this.ctx.storage.sql.exec("SELECT endpoint, p256dh, auth FROM push_subscriptions").toArray();
+	}
+
+	addPushSubscription(endpoint, p256dh, auth) {
+		const sql = this.ctx.storage.sql;
+		// Delete-then-insert rather than an upsert -- simpler to reason about,
+		// and this table is small enough (one row per staff device) that there's
+		// no meaningful cost to it.
+		sql.exec("DELETE FROM push_subscriptions WHERE endpoint = ?", endpoint);
+		sql.exec(
+			"INSERT INTO push_subscriptions (endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?)",
+			endpoint,
+			p256dh,
+			auth,
+			Date.now()
+		);
+	}
+
+	removePushSubscription(endpoint) {
+		this.ctx.storage.sql.exec("DELETE FROM push_subscriptions WHERE endpoint = ?", endpoint);
+	}
+
+	hasConnectedStaff() {
+		for (const ws of this.ctx.getWebSockets()) {
+			const attachment = ws.deserializeAttachment();
+			if (attachment && attachment.role === "staff") return true;
+		}
+		return false;
+	}
+
+	// Fire-and-forget from the caller's perspective (wrapped in ctx.waitUntil
+	// there) -- pushes every stored subscription, dropping any the push
+	// service reports as gone (unsubscribed/expired).
+	async notifyStaffOfNewMessage(conversationId, body) {
+		const subscriptions = this.getPushSubscriptions();
+		if (!subscriptions.length) return;
+
+		const payload = {
+			title: "New chat message — TCB Pest Control",
+			body: body.length > 120 ? body.slice(0, 117) + "..." : body,
+			url: "/staff-chat?c=" + encodeURIComponent(conversationId),
+		};
+
+		await Promise.all(
+			subscriptions.map(async (subscription) => {
+				const result = await sendPushNotification(this.env, subscription, payload);
+				if (result === "gone") this.removePushSubscription(subscription.endpoint);
+			})
+		);
+	}
+
 	insertMessage(conversationId, sender, body) {
 		const sql = this.ctx.storage.sql;
 		const now = Date.now();
@@ -204,6 +449,13 @@ export class ChatHub extends DurableObject {
 		// list (new preview text, moved to the top, unread count changed).
 		this.broadcastToStaff({ type: "message", conversationId: attachment.conversationId, message: saved });
 		this.broadcastToStaff({ type: "conversations", list: this.getConversationsSummary() });
+
+		// Only push if nobody's actually watching the dashboard right now --
+		// if a staff device is connected, the broadcasts above already reached
+		// it live, a phone buzz would just be noise.
+		if (!this.hasConnectedStaff()) {
+			this.ctx.waitUntil(this.notifyStaffOfNewMessage(attachment.conversationId, body));
+		}
 	}
 
 	handleStaffMessage(ws, data) {
@@ -254,4 +506,12 @@ export class ChatHub extends DurableObject {
 	}
 
 	async webSocketError() {}
+}
+
+function normalizeUsername(value) {
+	return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function jsonError(status, message) {
+	return new Response(JSON.stringify({ error: message }), { status, headers: { "content-type": "application/json" } });
 }

@@ -1,4 +1,5 @@
 export { ChatHub } from "./chat-hub.js";
+import { passcodeMatches, loginCookieHeader, logoutCookieHeader, isStaffSession } from "./staff-auth.js";
 
 export default {
 	async fetch(request, env) {
@@ -31,6 +32,26 @@ export default {
 			return env.CHAT_HUB.get(id).fetch(request);
 		}
 
+		// Staff auth: a single shared passcode grants a signed session cookie.
+		// See src/staff-auth.js -- there's no session storage anywhere, the
+		// cookie itself is the session, re-verified fresh on every request.
+		if (url.pathname === "/api/staff/login" && request.method === "POST") {
+			return handleStaffLogin(request, env);
+		}
+		if (url.pathname === "/api/staff/logout" && request.method === "POST") {
+			return new Response(JSON.stringify({ ok: true }), {
+				status: 200,
+				headers: { "content-type": "application/json", "Set-Cookie": logoutCookieHeader() },
+			});
+		}
+		if (url.pathname === "/api/staff/session") {
+			const authenticated = await isStaffSession(request, env);
+			return new Response(JSON.stringify({ authenticated }), {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			});
+		}
+
 		const response = await fetchAsset(request, url, env);
 
 		// Force every served HTML page's canonical tag to self-reference the
@@ -52,13 +73,13 @@ export default {
 				})
 				.on(".header-actions", {
 					element(el) {
-						el.before(SEARCH_TRIGGER_HTML, { html: true });
+						if (!isStaffPage) el.before(SEARCH_TRIGGER_HTML, { html: true });
 					},
 				})
 				.on("body", {
 					element(el) {
-						el.append(SEARCH_OVERLAY_HTML, { html: true });
 						if (!isStaffPage) {
+							el.append(SEARCH_OVERLAY_HTML, { html: true });
 							el.append(CHAT_WIDGET_HTML, { html: true });
 						}
 					},
@@ -83,6 +104,30 @@ export default {
 // their index.html directly, first. Only paths that already look like a
 // literal file (have an extension) or don't match any index.html fall back
 // to an exact-match lookup.
+async function handleStaffLogin(request, env) {
+	let body;
+	try {
+		body = await request.json();
+	} catch {
+		return new Response(JSON.stringify({ error: "Invalid request body" }), {
+			status: 400,
+			headers: { "content-type": "application/json" },
+		});
+	}
+
+	if (!(await passcodeMatches(env, body.passcode))) {
+		return new Response(JSON.stringify({ error: "Incorrect passcode" }), {
+			status: 401,
+			headers: { "content-type": "application/json" },
+		});
+	}
+
+	return new Response(JSON.stringify({ ok: true }), {
+		status: 200,
+		headers: { "content-type": "application/json", "Set-Cookie": await loginCookieHeader(env) },
+	});
+}
+
 async function fetchAsset(request, url, env) {
 	const lastSegment = url.pathname.split("/").pop();
 	const looksLikeDirectory = url.pathname === "/" || !lastSegment.includes(".");

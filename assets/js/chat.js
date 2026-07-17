@@ -2,6 +2,8 @@ document.addEventListener("DOMContentLoaded", function () {
   var panel = document.getElementById("site-chat");
   if (!panel) return;
 
+  var intakeEl = panel.querySelector("[data-chat-intake]");
+  var intakeForm = panel.querySelector("[data-chat-intake-form]");
   var messagesEl = panel.querySelector("[data-chat-messages]");
   var form = panel.querySelector("[data-chat-form]");
   var input = panel.querySelector("[data-chat-input]");
@@ -9,7 +11,11 @@ document.addEventListener("DOMContentLoaded", function () {
   var closers = panel.querySelectorAll("[data-chat-close]");
 
   var STORAGE_KEY = "tcb_chat_cid";
+  var NAME_KEY = "tcb_chat_name";
+  var EMAIL_KEY = "tcb_chat_email";
   var conversationId = null;
+  var visitorName = null;
+  var visitorEmail = null;
   var lastSeenId = 0;
   var socket = null;
   var reconnectDelay = 1000;
@@ -33,9 +39,34 @@ document.addEventListener("DOMContentLoaded", function () {
     return conversationId;
   }
 
+  function loadVisitorInfo() {
+    try {
+      visitorName = window.localStorage.getItem(NAME_KEY);
+      visitorEmail = window.localStorage.getItem(EMAIL_KEY);
+    } catch (e) {}
+  }
+
+  function saveVisitorInfo(name, email) {
+    visitorName = name;
+    visitorEmail = email;
+    try {
+      window.localStorage.setItem(NAME_KEY, name);
+      window.localStorage.setItem(EMAIL_KEY, email);
+    } catch (e) {}
+  }
+
+  function hasVisitorInfo() {
+    return !!(visitorName && visitorEmail);
+  }
+
   function clearHint() {
     var hint = messagesEl.querySelector(".chat-hint");
     if (hint) hint.remove();
+  }
+
+  function formatTimestamp(ms) {
+    var d = new Date(ms);
+    return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   }
 
   function renderMessage(message, trackId) {
@@ -47,7 +78,12 @@ document.addEventListener("DOMContentLoaded", function () {
     bubble.className = "chat-message-bubble";
     bubble.textContent = message.body;
 
+    var meta = document.createElement("div");
+    meta.className = "chat-message-meta";
+    meta.textContent = message.createdAt ? formatTimestamp(message.createdAt) : "";
+
     row.appendChild(bubble);
+    row.appendChild(meta);
     messagesEl.appendChild(row);
     messagesEl.scrollTop = messagesEl.scrollHeight;
 
@@ -59,7 +95,16 @@ document.addEventListener("DOMContentLoaded", function () {
   function connect() {
     if (socket) return;
     var protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    var url = protocol + "//" + window.location.host + "/api/chat/ws?cid=" + encodeURIComponent(getConversationId());
+    var url =
+      protocol +
+      "//" +
+      window.location.host +
+      "/api/chat/ws?cid=" +
+      encodeURIComponent(getConversationId()) +
+      "&name=" +
+      encodeURIComponent(visitorName || "") +
+      "&email=" +
+      encodeURIComponent(visitorEmail || "");
     if (lastSeenId) url += "&since=" + lastSeenId;
 
     socket = new WebSocket(url);
@@ -93,14 +138,32 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  function open() {
-    lastFocused = document.activeElement;
-    panel.hidden = false;
+  function showIntake() {
+    intakeEl.hidden = false;
+    messagesEl.hidden = true;
+    form.hidden = true;
+  }
+
+  function showChat() {
+    intakeEl.hidden = true;
+    messagesEl.hidden = false;
+    form.hidden = false;
     if (!hasOpened) {
       hasOpened = true;
       connect();
     }
     input.focus();
+  }
+
+  function open() {
+    lastFocused = document.activeElement;
+    panel.hidden = false;
+    loadVisitorInfo();
+    if (hasVisitorInfo()) {
+      showChat();
+    } else {
+      showIntake();
+    }
   }
 
   function close() {
@@ -123,13 +186,25 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
+  if (intakeForm) {
+    intakeForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var name = document.getElementById("chat-name").value.trim();
+      var email = document.getElementById("chat-email").value.trim();
+      if (!name || !email) return;
+
+      saveVisitorInfo(name, email);
+      showChat();
+    });
+  }
+
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     var body = input.value.trim();
     if (!body || !socket || socket.readyState !== WebSocket.OPEN) return;
 
     socket.send(JSON.stringify({ type: "message", body: body }));
-    renderMessage({ sender: "visitor", body: body }, false);
+    renderMessage({ sender: "visitor", body: body, createdAt: Date.now() }, false);
     input.value = "";
   });
 });

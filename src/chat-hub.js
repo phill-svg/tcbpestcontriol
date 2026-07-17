@@ -57,6 +57,21 @@ export class ChatHub extends DurableObject {
 				created_at INTEGER NOT NULL
 			)
 		`);
+
+		// These three columns were added after conversations/messages already
+		// existed in production -- CREATE TABLE IF NOT EXISTS above is a no-op
+		// on an existing table, so they need an explicit, idempotent ALTER.
+		this.ensureColumn("conversations", "visitor_name", "TEXT");
+		this.ensureColumn("conversations", "visitor_email", "TEXT");
+		this.ensureColumn("messages", "sender_name", "TEXT");
+	}
+
+	ensureColumn(table, column, type) {
+		const sql = this.ctx.storage.sql;
+		const columns = sql.exec(`PRAGMA table_info(${table})`).toArray();
+		if (!columns.some((c) => c.name === column)) {
+			sql.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+		}
 	}
 
 	async fetch(request) {
@@ -76,7 +91,7 @@ export class ChatHub extends DurableObject {
 			if (request.headers.get("Upgrade") !== "websocket") {
 				return new Response("Expected WebSocket", { status: 400 });
 			}
-			return this.acceptStaff();
+			return this.acceptStaff(url);
 		}
 
 		// Also already auth-gated in the Worker before reaching here.
@@ -268,37 +283,54 @@ export class ChatHub extends DurableObject {
 		const conversationId = url.searchParams.get("cid");
 		if (!conversationId) return new Response("Missing cid", { status: 400 });
 		const since = Number(url.searchParams.get("since")) || 0;
+		const visitorName = (url.searchParams.get("name") || "").trim().slice(0, 200);
+		const visitorEmail = (url.searchParams.get("email") || "").trim().slice(0, 200);
+		if (!visitorName || !visitorEmail) return new Response("Name and email required", { status: 400 });
 
 		const { 0: client, 1: server } = new WebSocketPair();
 		this.ctx.acceptWebSocket(server);
 		server.serializeAttachment({ role: "visitor", conversationId });
 
-		this.ensureConversation(conversationId);
+		this.ensureConversation(conversationId, visitorName, visitorEmail);
 		server.send(JSON.stringify({ type: "history", messages: this.getMessages(conversationId, since) }));
 
 		return new Response(null, { status: 101, webSocket: client });
 	}
 
-	acceptStaff() {
+	acceptStaff(url) {
+		const username = url.searchParams.get("username") || "";
+
 		const { 0: client, 1: server } = new WebSocketPair();
 		this.ctx.acceptWebSocket(server);
-		server.serializeAttachment({ role: "staff" });
+		server.serializeAttachment({ role: "staff", username });
 
 		server.send(JSON.stringify({ type: "conversations", list: this.getConversationsSummary() }));
 
 		return new Response(null, { status: 101, webSocket: client });
 	}
 
-	ensureConversation(conversationId) {
+	ensureConversation(conversationId, visitorName, visitorEmail) {
 		const sql = this.ctx.storage.sql;
 		const exists = sql.exec("SELECT id FROM conversations WHERE id = ?", conversationId).toArray().length > 0;
 		if (!exists) {
 			const now = Date.now();
 			sql.exec(
-				"INSERT INTO conversations (id, created_at, last_message_at, status, unread_by_staff) VALUES (?, ?, ?, 'open', 0)",
+				"INSERT INTO conversations (id, created_at, last_message_at, status, unread_by_staff, visitor_name, visitor_email) VALUES (?, ?, ?, 'open', 0, ?, ?)",
 				conversationId,
 				now,
-				now
+				now,
+				visitorName || null,
+				visitorEmail || null
+			);
+		} else if (visitorName || visitorEmail) {
+			// Keep it current if the visitor re-enters their details later (e.g.
+			// localStorage got cleared) -- COALESCE so an empty value here never
+			// wipes out one already on file.
+			sql.exec(
+				"UPDATE conversations SET visitor_name = COALESCE(?, visitor_name), visitor_email = COALESCE(?, visitor_email) WHERE id = ?",
+				visitorName || null,
+				visitorEmail || null,
+				conversationId
 			);
 		}
 	}
@@ -306,13 +338,13 @@ export class ChatHub extends DurableObject {
 	getMessages(conversationId, sinceId) {
 		const rows = this.ctx.storage.sql
 			.exec(
-				"SELECT id, sender, body, created_at FROM messages WHERE conversation_id = ? AND id > ? ORDER BY id ASC LIMIT ?",
+				"SELECT id, sender, sender_name, body, created_at FROM messages WHERE conversation_id = ? AND id > ? ORDER BY id ASC LIMIT ?",
 				conversationId,
 				sinceId,
 				HISTORY_LIMIT
 			)
 			.toArray();
-		return rows.map((r) => ({ id: r.id, sender: r.sender, body: r.body, createdAt: r.created_at }));
+		return rows.map((r) => ({ id: r.id, sender: r.sender, senderName: r.sender_name, body: r.body, createdAt: r.created_at }));
 	}
 
 	// One row per open conversation, each carrying a preview of its most
@@ -321,7 +353,7 @@ export class ChatHub extends DurableObject {
 		const rows = this.ctx.storage.sql
 			.exec(
 				`SELECT
-					c.id, c.created_at, c.last_message_at, c.unread_by_staff,
+					c.id, c.created_at, c.last_message_at, c.unread_by_staff, c.visitor_name, c.visitor_email,
 					(SELECT body FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS last_body,
 					(SELECT sender FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS last_sender
 				FROM conversations c
@@ -336,6 +368,8 @@ export class ChatHub extends DurableObject {
 			createdAt: r.created_at,
 			lastMessageAt: r.last_message_at,
 			unreadByStaff: r.unread_by_staff,
+			visitorName: r.visitor_name,
+			visitorEmail: r.visitor_email,
 			lastBody: r.last_body,
 			lastSender: r.last_sender,
 		}));
@@ -397,13 +431,14 @@ export class ChatHub extends DurableObject {
 		);
 	}
 
-	insertMessage(conversationId, sender, body) {
+	insertMessage(conversationId, sender, body, senderName) {
 		const sql = this.ctx.storage.sql;
 		const now = Date.now();
 		sql.exec(
-			"INSERT INTO messages (conversation_id, sender, body, created_at) VALUES (?, ?, ?, ?)",
+			"INSERT INTO messages (conversation_id, sender, sender_name, body, created_at) VALUES (?, ?, ?, ?, ?)",
 			conversationId,
 			sender,
+			senderName || null,
 			body,
 			now
 		);
@@ -414,7 +449,7 @@ export class ChatHub extends DurableObject {
 			sender === "visitor" ? 1 : 0,
 			conversationId
 		);
-		return { id, sender, body, createdAt: now };
+		return { id, sender, senderName: senderName || null, body, createdAt: now };
 	}
 
 	async webSocketMessage(ws, raw) {
@@ -431,7 +466,7 @@ export class ChatHub extends DurableObject {
 		if (attachment.role === "visitor") {
 			this.handleVisitorMessage(ws, attachment, data);
 		} else if (attachment.role === "staff") {
-			this.handleStaffMessage(ws, data);
+			this.handleStaffMessage(ws, attachment, data);
 		}
 	}
 
@@ -458,7 +493,7 @@ export class ChatHub extends DurableObject {
 		}
 	}
 
-	handleStaffMessage(ws, data) {
+	handleStaffMessage(ws, attachment, data) {
 		if (data.type === "loadConversation" && typeof data.conversationId === "string") {
 			this.markReadByStaff(data.conversationId);
 			ws.send(JSON.stringify({ type: "history", conversationId: data.conversationId, messages: this.getMessages(data.conversationId, 0) }));
@@ -470,7 +505,7 @@ export class ChatHub extends DurableObject {
 			const body = data.body.trim().slice(0, MAX_MESSAGE_LENGTH);
 			if (!body) return;
 
-			const saved = this.insertMessage(data.conversationId, "staff", body);
+			const saved = this.insertMessage(data.conversationId, "staff", body, attachment.username);
 			this.broadcastToConversation(data.conversationId, { type: "message", message: saved });
 			this.broadcastToStaff({ type: "message", conversationId: data.conversationId, message: saved });
 			this.broadcastToStaff({ type: "conversations", list: this.getConversationsSummary() });

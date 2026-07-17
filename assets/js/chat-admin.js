@@ -161,6 +161,21 @@ document.addEventListener("DOMContentLoaded", function () {
     return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   }
 
+  // iOS Safari can leave the page stuck zoomed in after the on-screen
+  // keyboard closes (e.g. after sending a reply), even though nothing
+  // actually needs zooming. Briefly forcing a maximum-scale constraint
+  // right as the keyboard closes makes Safari snap the zoom back to
+  // normal; removing it again straight after restores normal pinch-zoom.
+  function resetViewportZoom() {
+    var viewportMeta = document.querySelector('meta[name="viewport"]');
+    if (!viewportMeta) return;
+    var original = viewportMeta.getAttribute("content");
+    viewportMeta.setAttribute("content", original + ", maximum-scale=1.0");
+    window.setTimeout(function () {
+      viewportMeta.setAttribute("content", original);
+    }, 100);
+  }
+
   function updateTabs() {
     tabButtons.forEach(function (btn) {
       var tab = btn.getAttribute("data-staff-conv-tab");
@@ -410,6 +425,10 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  if (teamReplyInput) {
+    teamReplyInput.addEventListener("blur", resetViewportZoom);
+  }
+
   function connect() {
     if (socket) return;
     var protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -606,6 +625,10 @@ document.addEventListener("DOMContentLoaded", function () {
       socket.send(JSON.stringify({ type: "reply", conversationId: activeConversationId, body: body }));
       replyInput.value = "";
     });
+  }
+
+  if (replyInput) {
+    replyInput.addEventListener("blur", resetViewportZoom);
   }
 
   // Mobile only (see the max-width: 700px rules in style.css) -- desktop

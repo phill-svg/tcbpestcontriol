@@ -69,6 +69,23 @@ document.addEventListener("DOMContentLoaded", function () {
     return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   }
 
+  // iOS Safari has a long-standing bug where the page can stay zoomed in
+  // after the on-screen keyboard closes (e.g. after sending a message),
+  // even though nothing on the page actually needs zooming -- the user is
+  // stuck having to manually pinch out. Briefly forcing a maximum-scale
+  // constraint right as the keyboard closes makes Safari recompute and
+  // snap the effective zoom back to normal; removing it again straight
+  // after restores normal pinch-to-zoom.
+  function resetViewportZoom() {
+    var viewportMeta = document.querySelector('meta[name="viewport"]');
+    if (!viewportMeta) return;
+    var original = viewportMeta.getAttribute("content");
+    viewportMeta.setAttribute("content", original + ", maximum-scale=1.0");
+    window.setTimeout(function () {
+      viewportMeta.setAttribute("content", original);
+    }, 100);
+  }
+
   function renderMessage(message, trackId) {
     clearHint();
     var row = document.createElement("div");
@@ -207,4 +224,6 @@ document.addEventListener("DOMContentLoaded", function () {
     renderMessage({ sender: "visitor", body: body, createdAt: Date.now() }, false);
     input.value = "";
   });
+
+  input.addEventListener("blur", resetViewportZoom);
 });

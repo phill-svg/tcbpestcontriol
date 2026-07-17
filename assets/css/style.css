@@ -2,7 +2,7 @@
    _headers) -- every page links it as /assets/css/style.css?v=N. Bump that
    N (repo-wide) whenever you edit this file, or visitors' browsers will
    keep using their old cached copy for up to a year regardless of what's
-   actually deployed. Current version: v=9. */
+   actually deployed. Current version: v=10. */
 
 @font-face {
   font-family: "Inter";
@@ -2519,6 +2519,7 @@ html.search-open {
   display: flex;
   flex-direction: column;
   gap: 0.1875rem;
+  min-width: 0;
 }
 
 /* "mine"/"theirs" rather than "visitor"/"staff" -- the visitor widget and
@@ -2906,6 +2907,7 @@ html.search-open {
 .staff-team-thread {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   max-height: 26rem;
 }
 
@@ -3298,6 +3300,7 @@ html.search-open {
 
 .staff-thread-active {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;

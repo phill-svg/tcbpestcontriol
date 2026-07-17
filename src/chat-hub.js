@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 
 const HISTORY_LIMIT = 50;
+const CONVERSATION_LIST_LIMIT = 50;
 const MAX_MESSAGE_LENGTH = 2000;
 
 // Single global instance (env.CHAT_HUB.idFromName("global")) holds every
@@ -57,6 +58,16 @@ export class ChatHub extends DurableObject {
 			return this.acceptVisitor(url);
 		}
 
+		// Auth for this one already happened in the Worker (src/index.js) before
+		// the request reached this Durable Object -- only a request that already
+		// carried a valid staff session cookie gets forwarded here.
+		if (url.pathname === "/api/chat/staff/ws") {
+			if (request.headers.get("Upgrade") !== "websocket") {
+				return new Response("Expected WebSocket", { status: 400 });
+			}
+			return this.acceptStaff();
+		}
+
 		return new Response("Not found", { status: 404 });
 	}
 
@@ -71,6 +82,16 @@ export class ChatHub extends DurableObject {
 
 		this.ensureConversation(conversationId);
 		server.send(JSON.stringify({ type: "history", messages: this.getMessages(conversationId, since) }));
+
+		return new Response(null, { status: 101, webSocket: client });
+	}
+
+	acceptStaff() {
+		const { 0: client, 1: server } = new WebSocketPair();
+		this.ctx.acceptWebSocket(server);
+		server.serializeAttachment({ role: "staff" });
+
+		server.send(JSON.stringify({ type: "conversations", list: this.getConversationsSummary() }));
 
 		return new Response(null, { status: 101, webSocket: client });
 	}
@@ -101,6 +122,36 @@ export class ChatHub extends DurableObject {
 		return rows.map((r) => ({ id: r.id, sender: r.sender, body: r.body, createdAt: r.created_at }));
 	}
 
+	// One row per open conversation, each carrying a preview of its most
+	// recent message, for the staff dashboard's conversation list.
+	getConversationsSummary() {
+		const rows = this.ctx.storage.sql
+			.exec(
+				`SELECT
+					c.id, c.created_at, c.last_message_at, c.unread_by_staff,
+					(SELECT body FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS last_body,
+					(SELECT sender FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS last_sender
+				FROM conversations c
+				WHERE c.status = 'open'
+				ORDER BY c.last_message_at DESC
+				LIMIT ?`,
+				CONVERSATION_LIST_LIMIT
+			)
+			.toArray();
+		return rows.map((r) => ({
+			id: r.id,
+			createdAt: r.created_at,
+			lastMessageAt: r.last_message_at,
+			unreadByStaff: r.unread_by_staff,
+			lastBody: r.last_body,
+			lastSender: r.last_sender,
+		}));
+	}
+
+	markReadByStaff(conversationId) {
+		this.ctx.storage.sql.exec("UPDATE conversations SET unread_by_staff = 0 WHERE id = ?", conversationId);
+	}
+
 	insertMessage(conversationId, sender, body) {
 		const sql = this.ctx.storage.sql;
 		const now = Date.now();
@@ -123,7 +174,7 @@ export class ChatHub extends DurableObject {
 
 	async webSocketMessage(ws, raw) {
 		const attachment = ws.deserializeAttachment();
-		if (!attachment || attachment.role !== "visitor") return;
+		if (!attachment) return;
 
 		let data;
 		try {
@@ -131,6 +182,15 @@ export class ChatHub extends DurableObject {
 		} catch {
 			return;
 		}
+
+		if (attachment.role === "visitor") {
+			this.handleVisitorMessage(ws, attachment, data);
+		} else if (attachment.role === "staff") {
+			this.handleStaffMessage(ws, data);
+		}
+	}
+
+	handleVisitorMessage(ws, attachment, data) {
 		if (data.type !== "message" || typeof data.body !== "string") return;
 
 		const body = data.body.trim().slice(0, MAX_MESSAGE_LENGTH);
@@ -138,17 +198,52 @@ export class ChatHub extends DurableObject {
 
 		const saved = this.insertMessage(attachment.conversationId, "visitor", body);
 		this.broadcastToConversation(attachment.conversationId, { type: "message", message: saved }, ws);
+
+		// Let any connected staff know live -- both an in-thread update (if
+		// they happen to have this exact conversation open) and a refreshed
+		// list (new preview text, moved to the top, unread count changed).
+		this.broadcastToStaff({ type: "message", conversationId: attachment.conversationId, message: saved });
+		this.broadcastToStaff({ type: "conversations", list: this.getConversationsSummary() });
 	}
 
-	// Reaches every other WebSocket open on the same conversation (e.g. the
-	// same visitor with two tabs open). Staff broadcasting arrives in a later
-	// stage once /api/chat/staff/ws exists.
+	handleStaffMessage(ws, data) {
+		if (data.type === "loadConversation" && typeof data.conversationId === "string") {
+			this.markReadByStaff(data.conversationId);
+			ws.send(JSON.stringify({ type: "history", conversationId: data.conversationId, messages: this.getMessages(data.conversationId, 0) }));
+			this.broadcastToStaff({ type: "conversations", list: this.getConversationsSummary() });
+			return;
+		}
+
+		if (data.type === "reply" && typeof data.conversationId === "string" && typeof data.body === "string") {
+			const body = data.body.trim().slice(0, MAX_MESSAGE_LENGTH);
+			if (!body) return;
+
+			const saved = this.insertMessage(data.conversationId, "staff", body);
+			this.broadcastToConversation(data.conversationId, { type: "message", message: saved });
+			this.broadcastToStaff({ type: "message", conversationId: data.conversationId, message: saved });
+			this.broadcastToStaff({ type: "conversations", list: this.getConversationsSummary() });
+		}
+	}
+
+	// Reaches every visitor WebSocket open on the given conversation (e.g. the
+	// same visitor with two tabs open, plus wherever a staff reply needs to
+	// land).
 	broadcastToConversation(conversationId, payload, exclude) {
 		const text = JSON.stringify(payload);
 		for (const ws of this.ctx.getWebSockets()) {
 			if (ws === exclude) continue;
 			const attachment = ws.deserializeAttachment();
 			if (attachment && attachment.role === "visitor" && attachment.conversationId === conversationId) {
+				ws.send(text);
+			}
+		}
+	}
+
+	broadcastToStaff(payload) {
+		const text = JSON.stringify(payload);
+		for (const ws of this.ctx.getWebSockets()) {
+			const attachment = ws.deserializeAttachment();
+			if (attachment && attachment.role === "staff") {
 				ws.send(text);
 			}
 		}

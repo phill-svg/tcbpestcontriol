@@ -24,9 +24,18 @@ export default {
 			return Response.redirect(url.toString(), 301);
 		}
 
-		// Live chat API: WebSocket upgrades (and, in later stages, staff/push
-		// routes) are all handled by a single global ChatHub Durable Object
-		// instance -- see src/chat-hub.js.
+		// Live chat API: WebSocket upgrades (and staff/push routes) are all
+		// handled by a single global ChatHub Durable Object instance -- see
+		// src/chat-hub.js. The staff socket is gated here, before the request
+		// ever reaches the Durable Object: only a request already carrying a
+		// valid staff session cookie gets forwarded.
+		if (url.pathname === "/api/chat/staff/ws") {
+			if (!(await isStaffSession(request, env))) {
+				return new Response("Unauthorized", { status: 401 });
+			}
+			const id = env.CHAT_HUB.idFromName("global");
+			return env.CHAT_HUB.get(id).fetch(request);
+		}
 		if (url.pathname.startsWith("/api/chat/")) {
 			const id = env.CHAT_HUB.idFromName("global");
 			return env.CHAT_HUB.get(id).fetch(request);

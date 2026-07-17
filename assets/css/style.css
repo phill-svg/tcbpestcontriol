@@ -2487,11 +2487,14 @@ html.search-open {
   display: flex;
 }
 
-.chat-message-visitor {
+/* "mine"/"theirs" rather than "visitor"/"staff" -- the visitor widget and
+   the staff dashboard both render the same message shape, but each needs
+   its own messages aligned right and the other party's aligned left. */
+.chat-message-mine {
   justify-content: flex-end;
 }
 
-.chat-message-staff {
+.chat-message-theirs {
   justify-content: flex-start;
 }
 
@@ -2505,13 +2508,13 @@ html.search-open {
   word-break: break-word;
 }
 
-.chat-message-visitor .chat-message-bubble {
+.chat-message-mine .chat-message-bubble {
   background: var(--accent);
   color: var(--ink-on-accent);
   border-bottom-right-radius: 0.25rem;
 }
 
-.chat-message-staff .chat-message-bubble {
+.chat-message-theirs .chat-message-bubble {
   background: var(--bg-soft);
   color: var(--ink);
   border-bottom-left-radius: 0.25rem;
@@ -2572,6 +2575,11 @@ html.search-open {
 .staff-chat-shell {
   width: 100%;
   max-width: 26rem;
+  transition: max-width 0.15s var(--ease);
+}
+
+.staff-chat-shell-wide {
+  max-width: 64rem;
 }
 
 .staff-login-card,
@@ -2579,6 +2587,10 @@ html.search-open {
   background: var(--bg-elevated);
   border-radius: 0.75rem;
   box-shadow: 0 20px 60px rgba(17, 17, 20, 0.16);
+  overflow: hidden;
+}
+
+.staff-login-card {
   padding: 2rem;
 }
 
@@ -2599,7 +2611,8 @@ html.search-open {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1.25rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--line);
 }
 
 .staff-logout-btn {
@@ -2613,7 +2626,91 @@ html.search-open {
   color: var(--accent);
 }
 
-.staff-dashboard-placeholder {
+.staff-chat-layout {
+  display: flex;
+  min-height: 28rem;
+  max-height: 70vh;
+}
+
+.staff-conv-list {
+  width: 16rem;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+}
+
+.staff-conv-empty {
+  padding: 1.5rem;
   font-size: 0.875rem;
   color: var(--ink-dim);
+}
+
+.staff-conv-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.875rem 1rem;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background-color 0.15s var(--ease);
+}
+
+.staff-conv-item:hover,
+.staff-conv-item.is-active {
+  background: var(--bg-soft);
+}
+
+.staff-conv-item-time {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+}
+
+.staff-conv-item-preview {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staff-conv-item.is-unread .staff-conv-item-preview {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.staff-thread {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.staff-thread-placeholder {
+  padding: 1.5rem;
+  font-size: 0.875rem;
+  color: var(--ink-dim);
+}
+
+.staff-thread-active {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.staff-thread-active[hidden] {
+  display: none;
+}
+
+.staff-thread-messages {
+  flex: 1;
 }

@@ -41,7 +41,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function renderMessage(message, trackId) {
     clearHint();
     var row = document.createElement("div");
-    row.className = "chat-message chat-message-" + (message.sender === "staff" ? "staff" : "visitor");
+    row.className = "chat-message " + (message.sender === "visitor" ? "chat-message-mine" : "chat-message-theirs");
 
     var bubble = document.createElement("div");
     bubble.className = "chat-message-bubble";

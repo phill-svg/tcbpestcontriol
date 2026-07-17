@@ -31,7 +31,21 @@
       <h1 class="staff-login-title">Staff chat</h1>
       <button class="btn staff-logout-btn" data-staff-logout type="button">Sign out</button>
     </div>
-    <p class="staff-dashboard-placeholder">You're signed in. The conversation list and reply view are coming in the next update.</p>
+    <div class="staff-chat-layout">
+      <div class="staff-conv-list" data-staff-conv-list>
+        <p class="staff-conv-empty">No conversations yet.</p>
+      </div>
+      <div class="staff-thread">
+        <p class="staff-thread-placeholder" data-staff-thread-placeholder>Select a conversation to view messages.</p>
+        <div class="staff-thread-active" data-staff-thread-active hidden>
+          <div class="chat-messages staff-thread-messages" data-staff-thread-messages></div>
+          <form class="chat-input-row" data-staff-reply-form>
+            <input aria-label="Reply" autocomplete="off" class="chat-input" data-staff-reply-input maxlength="2000" placeholder="Type a reply..." required type="text"/>
+            <button class="btn btn-primary chat-send" type="submit">Send</button>
+          </form>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 <script src="/assets/js/chat-admin.js"></script>

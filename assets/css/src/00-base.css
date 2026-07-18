@@ -7,7 +7,7 @@
    that N (repo-wide, e.g. `sed -i 's/style.css?v=OLD/style.css?v=NEW/g'
    across every *.html file) whenever the built output changes, or
    visitors' browsers will keep using their old cached copy for up to a
-   year regardless of what's actually deployed. Current version: v=19. */
+   year regardless of what's actually deployed. Current version: v=20. */
 
 @font-face {
   font-family: "Inter";

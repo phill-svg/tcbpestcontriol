@@ -86,7 +86,14 @@ document.addEventListener("DOMContentLoaded", function () {
     }, 100);
   }
 
-  function renderMessage(message, trackId) {
+  function scrollToBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  // scroll defaults to true -- pass false when batch-rendering (e.g. chat
+  // history) so the caller can scroll once after the whole batch is in the
+  // DOM instead of forcing a synchronous layout reflow after every message.
+  function renderMessage(message, trackId, scroll) {
     clearHint();
     var row = document.createElement("div");
     row.className = "chat-message " + (message.sender === "visitor" ? "chat-message-mine" : "chat-message-theirs");
@@ -102,7 +109,7 @@ document.addEventListener("DOMContentLoaded", function () {
     row.appendChild(bubble);
     row.appendChild(meta);
     messagesEl.appendChild(row);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    if (scroll !== false) scrollToBottom();
 
     if (trackId !== false && typeof message.id === "number" && message.id > lastSeenId) {
       lastSeenId = message.id;
@@ -139,8 +146,9 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       if (data.type === "history") {
         data.messages.forEach(function (m) {
-          renderMessage(m);
+          renderMessage(m, true, false);
         });
+        scrollToBottom();
       } else if (data.type === "message") {
         renderMessage(data.message);
       }

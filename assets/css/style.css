@@ -1,8 +1,13 @@
-/* This file is served with a 1-year immutable Cache-Control header (see
-   _headers) -- every page links it as /assets/css/style.css?v=N. Bump that
-   N (repo-wide) whenever you edit this file, or visitors' browsers will
-   keep using their old cached copy for up to a year regardless of what's
-   actually deployed. Current version: v=13. */
+/* assets/css/style.css is a GENERATED FILE -- edit the source files in
+   assets/css/src/ instead (this one, 00-base.css, is the first of them),
+   then run `node scripts/build-css.js` to rebuild style.css.
+
+   style.css is served with a 1-year immutable Cache-Control header (see
+   _headers) -- every page links it as /assets/css/style.css?v=N. Bump
+   that N (repo-wide, e.g. `sed -i 's/style.css?v=OLD/style.css?v=NEW/g'
+   across every *.html file) whenever the built output changes, or
+   visitors' browsers will keep using their old cached copy for up to a
+   year regardless of what's actually deployed. Current version: v=14. */
 
 @font-face {
   font-family: "Inter";

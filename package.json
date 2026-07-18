@@ -2,6 +2,9 @@
   "name": "tcbpestreal",
   "private": true,
   "type": "module",
+  "scripts": {
+    "build:css": "node scripts/build-css.js"
+  },
   "dependencies": {
     "@pushforge/builder": "^2.0.5"
   }

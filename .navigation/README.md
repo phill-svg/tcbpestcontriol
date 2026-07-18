@@ -7,7 +7,7 @@ A category map of every page on the site, for finding things fast in an editor o
 | Section | Pages |
 |---|---|
 | [Home & error page](#home--error-page) | 2 |
-| [Core business pages](#core-business-pages) | 13 |
+| [Core business pages](#core-business-pages) | 14 |
 | [Pest-specific service pages](#pest-specific-service-pages) | 22 |
 | [Blog](#blog) | 7 |
 | [Location pages](#location-pages) | 85 |
@@ -28,6 +28,7 @@ A category map of every page on the site, for finding things fast in an editor o
 - **[`residential/index.html`](residential/index.html)** — `/residential` — Service hub for homeowners.
 - **[`commercial/index.html`](commercial/index.html)** — `/commercial` — Service hub for businesses.
 - **[`pests-we-treat/index.html`](pests-we-treat/index.html)** — `/pests-we-treat` — Index of all 24 pests treated, links to each pest-specific page below.
+- **[`pricing/index.html`](pricing/index.html)** — `/pricing` — Starting prices for the most-booked services (general pest, termite inspection, rodent control).
 - **[`pre-purchase-inspection/index.html`](pre-purchase-inspection/index.html)** — `/pre-purchase-inspection` — Pre-purchase timber pest inspection service, for home buyers/conveyancers.
 - **[`preparation/index.html`](preparation/index.html)** — `/preparation` — Index of 'what to do before we arrive' prep guides per treatment type.
 - **[`resources/index.html`](resources/index.html)** — `/resources` — Broader resources hub: prep guides, after-care notes, species fact sheets.

@@ -7,9 +7,11 @@
 // Worker), so this stays a manual, rerun-when-needed script rather than
 // something wired into a deploy pipeline.
 
-const fs = require("fs");
-const path = require("path");
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
 const SKIP_DIRS = new Set([".git", ".well-known", "assets", "src", "scripts", "node_modules"]);
 const BRAND_SUFFIX = " | TCB Pest Control Canberra";
@@ -19,7 +21,7 @@ function categorize(urlPath) {
 	if (seg === "" ) return "Home";
 	if (seg.startsWith("locations-pest-control") || seg === "locations") return "Location";
 	if (seg.startsWith("blog-") || seg === "blog") return "Blog";
-	if (["about", "contact", "faq", "privacy", "terms", "resources", "preparation", "pre-purchase-inspection", "servicem8-setup-training", "thank-you"].includes(seg)) return "Page";
+	if (["about", "contact", "faq", "privacy", "terms", "resources", "preparation", "pre-purchase-inspection", "servicem8-setup-training", "thank-you", "pricing"].includes(seg)) return "Page";
 	return "Service";
 }
 
@@ -35,13 +37,17 @@ function decodeEntities(str) {
 
 function extract(html) {
 	const titleMatch = html.match(/<title>([^<]*)<\/title>/i);
-	const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)["']/i)
-		|| html.match(/<meta[^>]*content=["']([^"']*)["'][^>]*name=["']description["']/i);
+	// The quote character is captured and backreferenced (\1) rather than
+	// just excluded from the value, so a description containing an
+	// apostrophe (e.g. "TCB's...", "O'Connor") doesn't get truncated at
+	// the first one when the attribute itself is double-quoted.
+	const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=(["'])([^>]*?)\1/i)
+		|| html.match(/<meta[^>]*content=(["'])([^>]*?)\1[^>]*name=["']description["']/i);
 
 	let title = titleMatch ? decodeEntities(titleMatch[1].trim()) : "";
 	if (title.endsWith(BRAND_SUFFIX)) title = title.slice(0, -BRAND_SUFFIX.length);
 
-	const description = descMatch ? decodeEntities(descMatch[1].trim()) : "";
+	const description = descMatch ? decodeEntities(descMatch[2].trim()) : "";
 	return { title, description };
 }
 

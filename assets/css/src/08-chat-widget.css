@@ -1,0 +1,346 @@
+/* Live chat */
+
+.chat-bubble {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  color: var(--ink-on-accent);
+  box-shadow: 0 12px 28px rgba(229, 37, 26, 0.35);
+  cursor: pointer;
+  transition: box-shadow 0.15s var(--ease), transform 0.15s var(--ease);
+}
+
+/* A slow pulsing ring draws the eye to the bubble without being an
+   animated GIF-style distraction -- purely decorative, so it's excluded
+   from hit-testing. */
+.chat-bubble::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  animation: chat-bubble-pulse 2.5s ease-out infinite;
+}
+
+@keyframes chat-bubble-pulse {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+}
+
+.chat-bubble:hover {
+  box-shadow: 0 14px 32px rgba(229, 37, 26, 0.45);
+  transform: translateY(-2px);
+}
+
+.chat-panel {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 5.25rem;
+  z-index: 91;
+  width: min(22rem, calc(100vw - 2.5rem));
+  max-height: min(32rem, calc(100vh - 8rem));
+  display: flex;
+}
+
+.chat-panel[hidden] {
+  display: none;
+}
+
+.chat-panel-inner {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background: var(--bg-elevated);
+  border-radius: 1.125rem;
+  box-shadow: 0 20px 60px rgba(17, 17, 20, 0.28);
+  overflow: hidden;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  color: #ffffff;
+}
+
+.chat-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.chat-header-badge {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.chat-header-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat-header-title {
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #ffffff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-header-subtitle {
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.82);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-close {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.chat-close:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* "Esc" is a useful hint on desktop; meaningless on a phone (no Escape
+   key), where a plain close icon takes over instead -- see the
+   max-width: 640px rules further down. */
+.chat-close-icon {
+  display: none;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  min-height: 12rem;
+}
+
+.chat-messages[hidden] {
+  display: none;
+}
+
+.chat-intake {
+  padding: 1.25rem 1rem;
+}
+
+.chat-intake-title {
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 0.25rem;
+}
+
+.chat-intake-lead {
+  font-size: 0.8125rem;
+  color: var(--ink-dim);
+  margin-bottom: 1rem;
+}
+
+.chat-hint {
+  font-size: 0.8125rem;
+  color: var(--ink-dim);
+}
+
+.chat-message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+  min-width: 0;
+}
+
+/* "mine"/"theirs" rather than "visitor"/"staff" -- the visitor widget and
+   the staff dashboard both render the same message shape, but each needs
+   its own messages aligned right and the other party's aligned left. */
+.chat-message-mine {
+  align-items: flex-end;
+}
+
+.chat-message-theirs {
+  align-items: flex-start;
+}
+
+.chat-message-bubble {
+  max-width: 85%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-message-meta {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  padding-inline: 0.25rem;
+}
+
+.chat-message-meta:empty {
+  display: none;
+}
+
+.chat-message-mine .chat-message-bubble {
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  color: var(--ink-on-accent);
+  border-bottom-right-radius: 0.25rem;
+}
+
+.chat-message-theirs .chat-message-bubble {
+  background: var(--bg-soft);
+  color: var(--ink);
+  border-bottom-left-radius: 0.25rem;
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.chat-input-row[hidden] {
+  display: none;
+}
+
+.chat-input {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.625rem;
+  font-family: var(--font-sans);
+  /* 16px, not smaller -- iOS Safari auto-zooms the whole page on focus for
+     any input below that, which feels broken. Shared by the visitor widget
+     and the staff reply box. */
+  font-size: 1rem;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(229, 37, 26, 0.15);
+}
+
+.chat-send {
+  padding: 0.5rem 0.875rem;
+  font-size: 0.8125rem;
+}
+
+/* A dedicated class rather than reusing .chat-send -- the customer widget
+   swapped its "Send" text button for an icon-only circle, but .chat-send
+   is shared with the staff dashboard's text-labelled reply buttons, which
+   should stay exactly as they are. */
+.chat-send-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border-radius: 50%;
+}
+
+@media (max-width: 640px) {
+  .chat-bubble {
+    right: 0.75rem;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
+
+  /* A small floating card is hard to actually type in on a phone -- below
+     this width the panel takes over the full screen instead, same pattern
+     as most mobile chat widgets. 100dvh (dynamic viewport height) accounts
+     for the mobile browser's address bar showing/hiding; 100vh alone can
+     leave a gap or clip content as it does. */
+  .chat-panel {
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 100vh;
+    max-height: 100dvh;
+  }
+
+  .chat-panel-inner {
+    height: 100%;
+    height: 100dvh;
+    border-radius: 0;
+  }
+
+  .chat-close {
+    padding: 0.5rem 0.625rem;
+  }
+
+  .chat-close-esc {
+    display: none;
+  }
+
+  .chat-close-icon {
+    display: inline;
+    font-size: 1.125rem;
+    line-height: 1;
+  }
+
+  /* Keeps the input row clear of the home-indicator gesture area on
+     notched iPhones when the panel is full-screen. */
+  .chat-input-row {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
+}

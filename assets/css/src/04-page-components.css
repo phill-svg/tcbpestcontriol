@@ -110,6 +110,45 @@
   flex-shrink: 0;
 }
 
+/* Breadcrumb nav */
+
+.breadcrumb-nav {
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--line);
+}
+
+.breadcrumb-nav .container {
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+}
+
+.breadcrumb-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+
+.breadcrumb-list a {
+  color: var(--ink-dim);
+  text-decoration: none;
+  transition: color 0.15s var(--ease);
+}
+
+.breadcrumb-list a:hover {
+  color: var(--accent);
+}
+
+.breadcrumb-sep {
+  color: var(--line);
+}
+
 /* Generic grid-card system (services / why / process / faq / principles) */
 
 .grid-cards {

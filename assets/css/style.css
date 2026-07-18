@@ -7,7 +7,7 @@
    that N (repo-wide, e.g. `sed -i 's/style.css?v=OLD/style.css?v=NEW/g'
    across every *.html file) whenever the built output changes, or
    visitors' browsers will keep using their old cached copy for up to a
-   year regardless of what's actually deployed. Current version: v=16. */
+   year regardless of what's actually deployed. Current version: v=17. */
 
 @font-face {
   font-family: "Inter";
@@ -1480,6 +1480,95 @@ svg {
 .grid-card:hover .card-link,
 .grid-card:hover .card-link * {
   color: var(--accent);
+}
+
+/* Suburb A-Z index (/locations) */
+
+.suburb-index {
+  margin-top: 2.5rem;
+}
+
+.suburb-index-search-wrap {
+  position: relative;
+  max-width: 24rem;
+  margin-bottom: 2rem;
+}
+
+.suburb-index-search-wrap .icon {
+  position: absolute;
+  top: 50%;
+  left: 0.875rem;
+  transform: translateY(-50%);
+  color: var(--ink-faint);
+  pointer-events: none;
+}
+
+.suburb-index-search {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  padding: 0.625rem 0.875rem 0.625rem 2.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--ink);
+}
+
+.suburb-index-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.suburb-index-groups {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.75rem 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .suburb-index-groups {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .suburb-index-groups {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.suburb-index-letter {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0.75rem;
+}
+
+.suburb-index-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.suburb-index-list a {
+  font-size: 0.875rem;
+  color: var(--ink-muted);
+  text-decoration: none;
+  transition: color 0.15s var(--ease);
+}
+
+.suburb-index-list a:hover {
+  color: var(--accent);
+}
+
+.suburb-index-empty {
+  margin-top: 1rem;
+  color: var(--ink-faint);
+  font-size: 0.875rem;
 }
 
 /* Bullet pair grid (local pest pressure lists) */

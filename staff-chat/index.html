@@ -23,7 +23,7 @@
           <label for="staff-username">Username</label>
           <input autocomplete="username" id="staff-username" name="username" required type="text"/>
         </div>
-        <div class="field">
+        <div class="field" data-staff-password-field>
           <label for="staff-password" data-staff-password-label>Password</label>
           <input autocomplete="current-password" id="staff-password" name="password" required type="password"/>
         </div>
@@ -54,6 +54,27 @@
       </div>
     </div>
   </div>
+  <div class="staff-login" data-staff-reset-view hidden>
+    <div class="staff-login-card">
+      <div class="staff-login-accent"></div>
+      <div class="staff-login-body">
+        <img alt="TCB Pest Control" class="staff-login-logo" height="42" src="/assets/images/tcb-pest-control-logo-03284.webp" width="100"/>
+        <h1 class="staff-login-title">Set a new password</h1>
+        <p class="staff-login-subtitle">Choose a new password for your account.</p>
+        <form class="form" data-staff-reset-form>
+          <div class="field">
+            <label for="staff-reset-password">New password</label>
+            <input autocomplete="new-password" id="staff-reset-password" name="password" required type="password"/>
+          </div>
+          <p class="staff-login-hint">Use at least 8 characters.</p>
+          <p class="staff-login-error" data-staff-reset-error hidden></p>
+          <div class="form-footer">
+            <button class="btn btn-primary" data-staff-reset-submit type="submit">Set password &amp; sign in</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
   <div class="staff-dashboard" data-staff-dashboard hidden>
     <div class="staff-dashboard-accent"></div>
     <div class="staff-dashboard-head">
@@ -65,6 +86,7 @@
         <button class="btn staff-logout-btn" data-staff-manage-toggle hidden type="button"><svg aria-hidden="true" class="icon" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg><span>Manage staff</span><span class="staff-team-toggle-badge" data-staff-pending-badge hidden></span></button>
         <button class="btn staff-logout-btn" data-staff-enable-push type="button"><svg aria-hidden="true" class="icon" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg><span>Notifications</span></button>
         <button class="btn staff-logout-btn" data-staff-team-toggle type="button"><svg aria-hidden="true" class="icon" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg><span>Team chat</span><span class="staff-team-toggle-badge" data-staff-team-toggle-badge hidden></span></button>
+        <button class="btn staff-logout-btn" data-staff-email-toggle type="button"><svg aria-hidden="true" class="icon" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><path d="m22 6-10 7L2 6"></path></svg><span>Recovery email</span></button>
         <button class="btn staff-logout-btn" data-staff-logout type="button"><svg aria-hidden="true" class="icon" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" x2="9" y1="12" y2="12"></line></svg><span>Sign out</span></button>
       </div>
     </div>
@@ -81,6 +103,21 @@
           <button class="btn btn-primary chat-send" type="submit">Send</button>
         </form>
       </div>
+    </div>
+    <div class="staff-manage-panel" data-staff-email-panel hidden>
+      <div class="staff-manage-subhead">Your recovery email</div>
+      <p class="staff-manage-hint">Set an email so you can reset your own password with a link if you ever forget it.</p>
+      <form class="form staff-manage-add-form" data-staff-email-form>
+        <div class="field">
+          <label for="staff-recovery-email">Email address</label>
+          <input autocomplete="email" id="staff-recovery-email" name="email" required type="email"/>
+        </div>
+        <p class="staff-manage-error" data-staff-email-error hidden></p>
+        <p class="staff-manage-note" data-staff-email-note hidden></p>
+        <div class="form-footer">
+          <button class="btn btn-primary" type="submit">Save email</button>
+        </div>
+      </form>
     </div>
     <div class="staff-manage-panel" data-staff-manage-panel hidden>
       <div class="staff-manage-subhead">Pending requests</div>
@@ -147,6 +184,6 @@
     </div>
   </div>
 </div>
-<script src="/assets/js/chat-admin.js?v=2" defer></script>
+<script src="/assets/js/chat-admin.js?v=3" defer></script>
 </body>
 </html>

@@ -72,6 +72,25 @@ export default {
 			const id = env.CHAT_HUB.idFromName("global");
 			return env.CHAT_HUB.get(id).fetch(request);
 		}
+		// Self-service email recovery: request a reset link, and consume it.
+		// Both public -- the emailed one-time token is the credential.
+		if (
+			(url.pathname === "/api/staff/forgot" || url.pathname === "/api/staff/reset-with-token") &&
+			request.method === "POST"
+		) {
+			const id = env.CHAT_HUB.idFromName("global");
+			return env.CHAT_HUB.get(id).fetch(request);
+		}
+		// Signed-in staff set their own recovery email. Auth-gated here, with the
+		// verified username attached so the Durable Object never trusts the body.
+		if (url.pathname === "/api/staff/set-email" && request.method === "POST") {
+			const session = await getStaffSession(request, env);
+			if (!session) return new Response("Unauthorized", { status: 401 });
+			const forwardUrl = new URL(request.url);
+			forwardUrl.searchParams.set("username", session.username);
+			const id = env.CHAT_HUB.idFromName("global");
+			return env.CHAT_HUB.get(id).fetch(new Request(forwardUrl, request));
+		}
 		if (url.pathname === "/api/staff/logout" && request.method === "POST") {
 			return new Response(JSON.stringify({ ok: true }), {
 				status: 200,

@@ -27,6 +27,17 @@ document.addEventListener("DOMContentLoaded", function () {
   var newIsAdminCheckbox = document.querySelector("[data-staff-new-is-admin]");
   var signupToggleBtn = document.querySelector("[data-staff-signup-toggle]");
   var resetToggleBtn = document.querySelector("[data-staff-reset-toggle]");
+  var passwordFieldEl = document.querySelector("[data-staff-password-field]");
+  var usernameLabelEl = document.querySelector('label[for="staff-username"]');
+  var resetViewEl = document.querySelector("[data-staff-reset-view]");
+  var resetForm = document.querySelector("[data-staff-reset-form]");
+  var resetErrorEl = document.querySelector("[data-staff-reset-error]");
+  var resetSubmitBtn = document.querySelector("[data-staff-reset-submit]");
+  var emailToggleBtn = document.querySelector("[data-staff-email-toggle]");
+  var emailPanel = document.querySelector("[data-staff-email-panel]");
+  var emailForm = document.querySelector("[data-staff-email-form]");
+  var emailErrorEl = document.querySelector("[data-staff-email-error]");
+  var emailNoteEl = document.querySelector("[data-staff-email-note]");
   var loginSwitchEl = document.querySelector("[data-staff-login-switch]");
   var loginNoteEl = document.querySelector("[data-staff-login-note]");
   var pendingListEl = document.querySelector("[data-staff-pending-list]");
@@ -109,6 +120,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (shellEl) shellEl.classList.add("staff-chat-shell-wide");
     if (manageToggleBtn) manageToggleBtn.hidden = !isAdmin;
     if (managePanel) managePanel.hidden = true;
+    if (emailPanel) emailPanel.hidden = true;
     // Populate the pending-requests badge on entry so an admin sees waiting
     // requests without opening the panel first.
     loadPendingRequests();
@@ -123,6 +135,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (layoutEl) layoutEl.classList.remove("is-thread-open");
     if (managePanel) managePanel.hidden = true;
     if (teamPanel) teamPanel.hidden = true;
+    if (emailPanel) emailPanel.hidden = true;
     if (socket) {
       socket.close();
       socket = null;
@@ -151,6 +164,11 @@ document.addEventListener("DOMContentLoaded", function () {
     resetMode = false;
     if (signupToggleBtn) signupToggleBtn.textContent = "Create an account";
     if (resetToggleBtn) resetToggleBtn.textContent = "Forgot password?";
+    // Undo anything the email-forgot mode may have hidden/relabelled.
+    if (passwordFieldEl) passwordFieldEl.hidden = false;
+    var pwInput = document.getElementById("staff-password");
+    if (pwInput) pwInput.required = true;
+    if (usernameLabelEl) usernameLabelEl.textContent = "Username";
     if (loginSwitchEl) loginSwitchEl.hidden = needed;
     if (loginNoteEl) loginNoteEl.hidden = true;
     if (loginSubtitleEl)
@@ -179,10 +197,10 @@ document.addEventListener("DOMContentLoaded", function () {
     if (passwordInput) passwordInput.setAttribute("autocomplete", on ? "new-password" : "current-password");
   }
 
-  // Flip the sign-in card into "reset a forgotten password" mode. Reuses the
-  // username + password fields and reveals the setup-passcode field (the same
-  // field used during first-admin bootstrap); the passcode authorises the
-  // reset. Mutually exclusive with signup mode.
+  // Flip the sign-in card into "forgot my password" mode: the user enters a
+  // username or email and we email them a one-time reset link. Only an
+  // identifier is needed, so the password (and the setup-passcode) fields are
+  // hidden here. Mutually exclusive with signup mode.
   function setResetMode(on) {
     resetMode = on;
     if (on) {
@@ -192,18 +210,26 @@ document.addEventListener("DOMContentLoaded", function () {
     if (errorEl) errorEl.hidden = true;
     if (loginNoteEl) loginNoteEl.hidden = true;
     if (loginTitleEl) loginTitleEl.textContent = on ? "Reset your password" : "Staff sign in";
-    if (loginSubmitBtn) loginSubmitBtn.textContent = on ? "Reset password" : "Sign in";
+    if (loginSubmitBtn) loginSubmitBtn.textContent = on ? "Send reset link" : "Sign in";
     if (resetToggleBtn) resetToggleBtn.textContent = on ? "Back to sign in" : "Forgot password?";
     if (loginSubtitleEl)
       loginSubtitleEl.textContent = on
-        ? "Enter your username, a new password, and the setup passcode."
+        ? "Enter your username or email and we'll send you a reset link."
         : "Sign in to the team dashboard.";
-    if (loginHintEl) loginHintEl.hidden = !on;
-    if (passcodeField) passcodeField.hidden = !on;
+    if (loginHintEl) loginHintEl.hidden = true;
+    // The setup-passcode field is never used in the email flow.
+    if (passcodeField) passcodeField.hidden = true;
     var passcodeInput = document.getElementById("staff-passcode");
-    if (passcodeInput) passcodeInput.required = on;
+    if (passcodeInput) passcodeInput.required = false;
+    // Hide the password field entirely -- we only collect an identifier here.
+    // A hidden required field would block submit, so drop `required` too.
+    if (passwordFieldEl) passwordFieldEl.hidden = on;
     var passwordInput = document.getElementById("staff-password");
-    if (passwordInput) passwordInput.setAttribute("autocomplete", on ? "new-password" : "current-password");
+    if (passwordInput) {
+      passwordInput.required = !on;
+      passwordInput.setAttribute("autocomplete", "current-password");
+    }
+    if (usernameLabelEl) usernameLabelEl.textContent = on ? "Username or email" : "Username";
   }
 
   // Default card view: form visible, request-sent success hidden.
@@ -213,6 +239,15 @@ document.addEventListener("DOMContentLoaded", function () {
     if (loginTitleEl) loginTitleEl.hidden = false;
     if (loginSubtitleEl) loginSubtitleEl.hidden = false;
     if (loginSwitchEl) loginSwitchEl.hidden = bootstrapMode;
+  }
+
+  // Sets the confirmation-screen heading/body (shared by signup + forgot).
+  function setSuccessText(title, text) {
+    if (!loginSuccessEl) return;
+    var t = loginSuccessEl.querySelector(".staff-login-success-title");
+    var x = loginSuccessEl.querySelector(".staff-login-success-text");
+    if (t) t.textContent = title;
+    if (x) x.textContent = text;
   }
 
   // After a request is lodged: swap the form for a confirmation screen.
@@ -793,21 +828,28 @@ document.addEventListener("DOMContentLoaded", function () {
     var endpoint = bootstrapMode
       ? "/api/staff/bootstrap"
       : resetMode
-      ? "/api/staff/reset-password"
+      ? "/api/staff/forgot"
       : signupMode
       ? "/api/staff/signup"
       : "/api/staff/login";
-    var payload = { username: username, password: password };
-    if (bootstrapMode || resetMode) {
-      var passcodeInput = document.getElementById("staff-passcode");
-      payload.passcode = passcodeInput ? passcodeInput.value : "";
+    var payload;
+    if (resetMode) {
+      // Email-forgot: just an identifier (username or email).
+      payload = { identifier: username };
+    } else {
+      payload = { username: username, password: password };
+      if (bootstrapMode) {
+        var passcodeInput = document.getElementById("staff-passcode");
+        payload.passcode = passcodeInput ? passcodeInput.value : "";
+      }
     }
 
     var wasSignup = signupMode;
+    var wasReset = resetMode;
     var originalLabel = loginSubmitBtn ? loginSubmitBtn.textContent : "";
     if (loginSubmitBtn) {
       loginSubmitBtn.disabled = true;
-      loginSubmitBtn.textContent = bootstrapMode ? "Creating…" : resetMode ? "Resetting…" : wasSignup ? "Sending request…" : "Signing in…";
+      loginSubmitBtn.textContent = bootstrapMode ? "Creating…" : resetMode ? "Sending…" : wasSignup ? "Sending request…" : "Signing in…";
     }
     function restoreSubmit() {
       if (loginSubmitBtn) {
@@ -829,6 +871,20 @@ document.addEventListener("DOMContentLoaded", function () {
         if (wasSignup) {
           // Request lodged -- show the confirmation screen; they can't sign in
           // until an admin approves it.
+          setSuccessText(
+            "Request sent",
+            "An admin will review your account. You'll be able to sign in as soon as it's approved."
+          );
+          showSignupSuccess();
+          return;
+        }
+        if (wasReset) {
+          // Generic confirmation regardless of whether the account exists --
+          // the server never reveals that, to avoid leaking who has an account.
+          setSuccessText(
+            "Check your email",
+            "If that account exists, we've sent a password reset link. It expires in 1 hour."
+          );
           showSignupSuccess();
           return;
         }
@@ -1092,5 +1148,116 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  checkSession();
+  // ---- Email password-reset: landing view when the emailed link is opened ----
+  function getResetToken() {
+    var m = window.location.search.match(/[?&]reset=([^&]+)/);
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+
+  var resetToken = getResetToken();
+
+  function showResetView() {
+    if (loginEl) loginEl.hidden = true;
+    if (dashboardEl) dashboardEl.hidden = true;
+    if (resetViewEl) resetViewEl.hidden = false;
+    var pw = document.getElementById("staff-reset-password");
+    if (pw) {
+      try {
+        pw.focus();
+      } catch (e) {}
+    }
+  }
+
+  if (resetForm) {
+    resetForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      if (resetErrorEl) resetErrorEl.hidden = true;
+      var pw = document.getElementById("staff-reset-password").value;
+      var orig = resetSubmitBtn ? resetSubmitBtn.textContent : "";
+      if (resetSubmitBtn) {
+        resetSubmitBtn.disabled = true;
+        resetSubmitBtn.textContent = "Setting…";
+      }
+      fetch("/api/staff/reset-with-token", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token: resetToken, password: pw }),
+      })
+        .then(jsonResult)
+        .then(function (result) {
+          if (!result.ok) throw new Error((result.data && result.data.error) || "Something went wrong.");
+          // Strip the token from the address bar, then drop into the dashboard.
+          if (window.history && window.history.replaceState) {
+            window.history.replaceState({}, document.title, "/staff-chat");
+          }
+          resetToken = null;
+          if (resetViewEl) resetViewEl.hidden = true;
+          checkSession();
+        })
+        .catch(function (err) {
+          if (resetSubmitBtn) {
+            resetSubmitBtn.disabled = false;
+            resetSubmitBtn.textContent = orig;
+          }
+          if (resetErrorEl) {
+            resetErrorEl.textContent = err.message;
+            resetErrorEl.hidden = false;
+          }
+        });
+    });
+  }
+
+  // ---- Recovery email: a signed-in user sets their own reset address ----
+  if (emailToggleBtn) {
+    emailToggleBtn.addEventListener("click", function () {
+      if (!emailPanel) return;
+      var show = emailPanel.hidden;
+      if (managePanel) managePanel.hidden = true;
+      if (teamPanel) teamPanel.hidden = true;
+      emailPanel.hidden = !show;
+      if (show) {
+        var input = document.getElementById("staff-recovery-email");
+        if (input) {
+          try {
+            input.focus();
+          } catch (e) {}
+        }
+      }
+    });
+  }
+
+  if (emailForm) {
+    emailForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      if (emailErrorEl) emailErrorEl.hidden = true;
+      if (emailNoteEl) emailNoteEl.hidden = true;
+      var email = document.getElementById("staff-recovery-email").value.trim();
+      fetch("/api/staff/set-email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: email }),
+      })
+        .then(jsonResult)
+        .then(function (result) {
+          if (!result.ok) throw new Error((result.data && result.data.error) || "Couldn't save your email.");
+          if (emailNoteEl) {
+            emailNoteEl.textContent = "Saved. You can now reset your password by email if you're ever locked out.";
+            emailNoteEl.hidden = false;
+          }
+        })
+        .catch(function (err) {
+          if (emailErrorEl) {
+            emailErrorEl.textContent = err.message;
+            emailErrorEl.hidden = false;
+          }
+        });
+    });
+  }
+
+  // A reset link (?reset=TOKEN) takes priority over the normal login check.
+  if (resetToken) {
+    showResetView();
+  } else {
+    checkSession();
+  }
 });

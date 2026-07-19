@@ -1,6 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 import { sendPushNotification } from "./push.js";
 import { passcodeMatches, hashPassword, verifyPassword, loginCookieHeader } from "./staff-auth.js";
+import { sendPasswordResetEmail } from "./email.js";
+
+// Password-reset links stay valid for one hour.
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 const HISTORY_LIMIT = 50;
 const CONVERSATION_LIST_LIMIT = 50;
@@ -110,6 +114,24 @@ export class ChatHub extends DurableObject {
 		// NULL username and simply won't be targeted by those (customer chat
 		// notifications are unaffected -- they still push to everyone).
 		this.ensureColumn("push_subscriptions", "username", "TEXT");
+
+		// Recovery email for each staff account (used only for password-reset
+		// links). Nullable -- accounts created before this existed simply have
+		// no email until they set one, and the emailed-reset flow just isn't
+		// available to them until they do.
+		this.ensureColumn("staff_users", "email", "TEXT");
+
+		// One-time, expiring password-reset tokens. Only the SHA-256 hash of the
+		// token is stored, never the token itself -- so a DB read can't be used
+		// to forge a reset link. Consumed (used_at set) on first successful use.
+		sql.exec(`
+			CREATE TABLE IF NOT EXISTS password_reset_tokens (
+				token_hash TEXT PRIMARY KEY,
+				username TEXT NOT NULL,
+				expires_at INTEGER NOT NULL,
+				used_at INTEGER
+			)
+		`);
 	}
 
 	ensureColumn(table, column, type) {
@@ -172,6 +194,20 @@ export class ChatHub extends DurableObject {
 		// bootstrap; see handleResetPassword.
 		if (url.pathname === "/api/staff/reset-password" && request.method === "POST") {
 			return this.handleResetPassword(request);
+		}
+		// Self-service email-based recovery. /forgot emails a one-time link;
+		// /reset-with-token consumes it and sets the new password. Both public
+		// (the token is the credential); see handleForgotPassword / handleResetWithToken.
+		if (url.pathname === "/api/staff/forgot" && request.method === "POST") {
+			return this.handleForgotPassword(request, url);
+		}
+		if (url.pathname === "/api/staff/reset-with-token" && request.method === "POST") {
+			return this.handleResetWithToken(request);
+		}
+		// A signed-in staff member sets their own recovery email. Auth + verified
+		// username are enforced in the Worker (src/index.js) before this is reached.
+		if (url.pathname === "/api/staff/set-email" && request.method === "POST") {
+			return this.handleSetEmail(request, url.searchParams.get("username"));
 		}
 		// Admin-only -- already checked in the Worker before forwarding here,
 		// which also attaches ?actingUser= so the safety checks below (can't
@@ -305,6 +341,119 @@ export class ChatHub extends DurableObject {
 
 		const cookie = await loginCookieHeader(this.env, { username, isAdmin: !!row.is_admin });
 		return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json", "Set-Cookie": cookie } });
+	}
+
+	// Emails a one-time password-reset link. Accepts either a username or an
+	// email address. ALWAYS returns a generic success -- never reveals whether
+	// an account (or email) exists, so this can't be used to enumerate staff.
+	async handleForgotPassword(request, url) {
+		let body;
+		try {
+			body = await request.json();
+		} catch {
+			return jsonError(400, "Invalid JSON");
+		}
+
+		const generic = () =>
+			new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+
+		const identifier = (typeof body.identifier === "string" ? body.identifier : "").trim();
+		if (!identifier) return generic();
+
+		const sql = this.ctx.storage.sql;
+		// Match on username (normalised) or email (case-insensitive).
+		const uname = normalizeUsername(identifier);
+		const emailLc = identifier.toLowerCase();
+		const row = sql
+			.exec(
+				"SELECT username, email FROM staff_users WHERE username = ? OR lower(email) = ? LIMIT 1",
+				uname,
+				emailLc
+			)
+			.toArray()[0];
+
+		// No account, or no email on file -> nothing to send, but still generic.
+		if (!row || !row.email) return generic();
+
+		// Fresh token; store only its hash. Clear any previous unused tokens for
+		// this user so old links stop working once a new one is requested.
+		const token = randomToken();
+		const tokenHash = await sha256Hex(token);
+		sql.exec("DELETE FROM password_reset_tokens WHERE username = ? AND used_at IS NULL", row.username);
+		sql.exec(
+			"INSERT INTO password_reset_tokens (token_hash, username, expires_at, used_at) VALUES (?, ?, ?, NULL)",
+			tokenHash,
+			row.username,
+			Date.now() + RESET_TOKEN_TTL_MS
+		);
+
+		const resetUrl = `${url.origin}/staff-chat?reset=${token}`;
+		try {
+			await sendPasswordResetEmail(this.env, row.email, resetUrl, row.username);
+		} catch (e) {
+			// Don't leak send failures to the caller (still generic), but surface
+			// them in logs so a misconfigured binding is diagnosable.
+			console.error("Password reset email failed:", e && e.message);
+		}
+		return generic();
+	}
+
+	// Consumes a reset token and sets the new password, then signs the user in.
+	async handleResetWithToken(request) {
+		let body;
+		try {
+			body = await request.json();
+		} catch {
+			return jsonError(400, "Invalid JSON");
+		}
+
+		const token = typeof body.token === "string" ? body.token : "";
+		const password = typeof body.password === "string" ? body.password : "";
+		if (!token) return jsonError(400, "Missing reset token");
+		if (password.length < 8) return jsonError(400, "Password must be at least 8 characters");
+
+		const sql = this.ctx.storage.sql;
+		const tokenHash = await sha256Hex(token);
+		const tok = sql
+			.exec("SELECT username, expires_at, used_at FROM password_reset_tokens WHERE token_hash = ?", tokenHash)
+			.toArray()[0];
+		if (!tok || tok.used_at || Date.now() > tok.expires_at) {
+			return jsonError(400, "This reset link is invalid or has expired. Please request a new one.");
+		}
+
+		const user = sql.exec("SELECT is_admin FROM staff_users WHERE username = ?", tok.username).toArray()[0];
+		if (!user) return jsonError(400, "This reset link is invalid or has expired. Please request a new one.");
+
+		const { salt, hash } = await hashPassword(password);
+		sql.exec("UPDATE staff_users SET password_salt = ?, password_hash = ? WHERE username = ?", salt, hash, tok.username);
+		// Burn this token and any other outstanding ones for the account.
+		sql.exec("UPDATE password_reset_tokens SET used_at = ? WHERE token_hash = ?", Date.now(), tokenHash);
+		sql.exec("DELETE FROM password_reset_tokens WHERE username = ? AND used_at IS NULL", tok.username);
+
+		const cookie = await loginCookieHeader(this.env, { username: tok.username, isAdmin: !!user.is_admin });
+		return new Response(JSON.stringify({ ok: true, username: tok.username }), {
+			status: 200,
+			headers: { "content-type": "application/json", "Set-Cookie": cookie },
+		});
+	}
+
+	// A signed-in staff member sets/updates their own recovery email. `username`
+	// is the verified caller attached by the Worker, never trusted from the body.
+	async handleSetEmail(request, username) {
+		if (!username) return jsonError(401, "Not signed in");
+		let body;
+		try {
+			body = await request.json();
+		} catch {
+			return jsonError(400, "Invalid JSON");
+		}
+
+		const email = (typeof body.email === "string" ? body.email : "").trim();
+		// Deliberately light validation -- just enough to catch obvious typos.
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return jsonError(400, "Please enter a valid email address");
+
+		this.ctx.storage.sql.exec("UPDATE staff_users SET email = ? WHERE username = ?", email, username);
+		return new Response(JSON.stringify({ ok: true, email }), { status: 200, headers: { "content-type": "application/json" } });
 	}
 
 	listStaffUsers() {
@@ -1058,4 +1207,17 @@ function normalizeUsername(value) {
 
 function jsonError(status, message) {
 	return new Response(JSON.stringify({ error: message }), { status, headers: { "content-type": "application/json" } });
+}
+
+// A 256-bit URL-safe random token (hex) for password-reset links.
+function randomToken() {
+	const bytes = new Uint8Array(32);
+	crypto.getRandomValues(bytes);
+	return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// SHA-256 hex -- only the hash of a reset token is ever stored.
+async function sha256Hex(input) {
+	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input || ""));
+	return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }

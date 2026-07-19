@@ -14,6 +14,9 @@
       { "name": "CHAT_HUB", "class_name": "ChatHub" }
     ]
   },
+  "send_email": [
+    { "name": "EMAIL", "remote": true }
+  ],
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["ChatHub"] }
   ],

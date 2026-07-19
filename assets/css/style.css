@@ -546,11 +546,16 @@ svg {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.22em;
-  color: var(--accent);
+  color: var(--accent-deep);
 }
 
 .on-dark .section-eyebrow {
   color: rgba(255, 255, 255, 0.7);
+}
+
+/* Keep the eyebrow bright over dark banner imagery (light-bg contrast fix uses --accent-deep) */
+.feature-banner .section-eyebrow {
+  color: var(--accent);
 }
 
 .section-title {
@@ -569,7 +574,7 @@ svg {
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.22em;
-  color: #f00;
+  color: var(--accent-deep);
   text-decoration: none;
   transition: color 0.15s var(--ease);
 }
@@ -1116,7 +1121,7 @@ svg {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.22em;
-  color: var(--ink-faint);
+  color: #65656d;
 }
 
 .footer-col ul {
@@ -1140,7 +1145,7 @@ svg {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.22em;
-  color: var(--accent);
+  color: var(--accent-deep);
 }
 
 .footer-col .accent-link:hover {

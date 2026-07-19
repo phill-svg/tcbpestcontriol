@@ -43,5 +43,20 @@ if (missing.length) {
 
 const combined = files.map((f) => readFileSync(path.join(srcDir, f), "utf8").replace(/\n+$/, "")).join("\n\n") + "\n";
 
-writeFileSync(outFile, combined);
-console.log(`Built assets/css/style.css from ${files.length} files in assets/css/src/`);
+// Deliberately conservative: strips comments and collapses newlines/indentation
+// (where nearly all the size in these hand-formatted source files comes from)
+// but leaves single inline spaces alone. That matters because calc() requires
+// whitespace around its +/- operators (e.g. calc(100vh - 8rem)) -- a
+// more aggressive minifier that strips all whitespace around punctuation
+// would silently produce invalid CSS there.
+function minify(css) {
+	return css
+		.replace(/\/\*[\s\S]*?\*\//g, "")
+		.replace(/[ \t]*\n[ \t]*/g, "")
+		.trim();
+}
+
+const minified = minify(combined);
+
+writeFileSync(outFile, minified);
+console.log(`Built assets/css/style.css from ${files.length} files in assets/css/src/ (${combined.length} -> ${minified.length} bytes)`);

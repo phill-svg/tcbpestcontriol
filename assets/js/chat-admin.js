@@ -240,7 +240,10 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  function renderThreadMessage(message) {
+  // scroll defaults to true -- pass false when batch-rendering (e.g. thread
+  // history) so the caller can scroll once after the whole batch is in the
+  // DOM instead of forcing a synchronous layout reflow after every message.
+  function renderThreadMessage(message, scroll) {
     var row = document.createElement("div");
     row.className = "chat-message " + (message.sender === "staff" ? "chat-message-mine" : "chat-message-theirs");
 
@@ -258,7 +261,7 @@ document.addEventListener("DOMContentLoaded", function () {
     row.appendChild(bubble);
     row.appendChild(meta);
     threadMessagesEl.appendChild(row);
-    threadMessagesEl.scrollTop = threadMessagesEl.scrollHeight;
+    if (scroll !== false) threadMessagesEl.scrollTop = threadMessagesEl.scrollHeight;
   }
 
   function conversationStatus(conversationId) {
@@ -359,7 +362,10 @@ document.addEventListener("DOMContentLoaded", function () {
     updateTeamToggleBadge();
   }
 
-  function renderTeamMessage(message) {
+  // scroll defaults to true -- pass false when batch-rendering (e.g. room
+  // history) so the caller can scroll once after the whole batch is in the
+  // DOM instead of forcing a synchronous layout reflow after every message.
+  function renderTeamMessage(message, scroll) {
     var row = document.createElement("div");
     row.className = "chat-message " + (message.sender === myUsername ? "chat-message-mine" : "chat-message-theirs");
 
@@ -377,7 +383,7 @@ document.addEventListener("DOMContentLoaded", function () {
     row.appendChild(bubble);
     row.appendChild(meta);
     teamMessagesEl.appendChild(row);
-    teamMessagesEl.scrollTop = teamMessagesEl.scrollHeight;
+    if (scroll !== false) teamMessagesEl.scrollTop = teamMessagesEl.scrollHeight;
   }
 
   function openTeamRoom(room, label) {
@@ -453,7 +459,10 @@ document.addEventListener("DOMContentLoaded", function () {
         if (activeConversationId) updateThreadStatusButton(activeConversationId);
       } else if (data.type === "history" && data.conversationId === activeConversationId) {
         threadMessagesEl.innerHTML = "";
-        data.messages.forEach(renderThreadMessage);
+        data.messages.forEach(function (m) {
+          renderThreadMessage(m, false);
+        });
+        threadMessagesEl.scrollTop = threadMessagesEl.scrollHeight;
       } else if (data.type === "message" && data.conversationId === activeConversationId) {
         renderThreadMessage(data.message);
       } else if (data.type === "teamRooms") {
@@ -466,7 +475,10 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       } else if (data.type === "teamHistory" && data.room === activeTeamRoom) {
         teamMessagesEl.innerHTML = "";
-        data.messages.forEach(renderTeamMessage);
+        data.messages.forEach(function (m) {
+          renderTeamMessage(m, false);
+        });
+        teamMessagesEl.scrollTop = teamMessagesEl.scrollHeight;
       } else if (data.type === "teamMessage" && data.room === activeTeamRoom) {
         renderTeamMessage(data.message);
       }

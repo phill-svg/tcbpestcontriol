@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var threadMessagesEl = document.querySelector("[data-staff-thread-messages]");
   var replyForm = document.querySelector("[data-staff-reply-form]");
   var replyInput = document.querySelector("[data-staff-reply-input]");
+  var quickRepliesEl = document.querySelector("[data-staff-quick-replies]");
   var enablePushBtn = document.querySelector("[data-staff-enable-push]");
   var layoutEl = document.querySelector(".staff-chat-layout");
   var threadBackBtn = document.querySelector("[data-staff-thread-back]");
@@ -337,6 +338,86 @@ document.addEventListener("DOMContentLoaded", function () {
     if (scroll !== false) threadMessagesEl.scrollTop = threadMessagesEl.scrollHeight;
   }
 
+  // "Visitor is typing…" indicator inside the open thread. Reuses the shared
+  // .chat-typing dots; auto-hides and is cleared when a message arrives or the
+  // conversation changes.
+  var staffTypingRow = null;
+  var staffTypingTimer = null;
+  function showVisitorTyping() {
+    if (!threadActive || threadActive.hidden) return;
+    if (!staffTypingRow) {
+      staffTypingRow = document.createElement("div");
+      staffTypingRow.className = "chat-message chat-message-theirs chat-typing";
+      var bubble = document.createElement("div");
+      bubble.className = "chat-message-bubble chat-typing-bubble";
+      bubble.setAttribute("aria-label", "Visitor is typing");
+      bubble.innerHTML =
+        '<span class="chat-typing-dot"></span><span class="chat-typing-dot"></span><span class="chat-typing-dot"></span>';
+      staffTypingRow.appendChild(bubble);
+      threadMessagesEl.appendChild(staffTypingRow);
+      threadMessagesEl.scrollTop = threadMessagesEl.scrollHeight;
+    }
+    window.clearTimeout(staffTypingTimer);
+    staffTypingTimer = window.setTimeout(hideVisitorTyping, 4000);
+  }
+  function hideVisitorTyping() {
+    window.clearTimeout(staffTypingTimer);
+    if (staffTypingRow) {
+      staffTypingRow.remove();
+      staffTypingRow = null;
+    }
+  }
+
+  // Soft alert on an incoming visitor message when it isn't already on screen:
+  // a short Web Audio beep plus a tab-title flash while the tab is in the
+  // background. No audio file needed.
+  var audioCtx = null;
+  function playNewMessageSound() {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!audioCtx) audioCtx = new AC();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      var o = audioCtx.createOscillator();
+      var g = audioCtx.createGain();
+      o.connect(g);
+      g.connect(audioCtx.destination);
+      o.type = "sine";
+      o.frequency.value = 660;
+      var t = audioCtx.currentTime;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.14, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+      o.start(t);
+      o.stop(t + 0.3);
+    } catch (e) {}
+  }
+
+  var baseTitle = document.title;
+  var titleFlashing = false;
+  function flashTitle() {
+    if (!document.hidden) return;
+    titleFlashing = true;
+    document.title = "🔴 New message";
+  }
+  function clearTitleFlash() {
+    if (titleFlashing) {
+      document.title = baseTitle;
+      titleFlashing = false;
+    }
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) clearTitleFlash();
+  });
+  window.addEventListener("focus", clearTitleFlash);
+
+  function notifyNewVisitorMessage(conversationId) {
+    // Skip if they're already looking at this exact conversation, tab focused.
+    if (conversationId === activeConversationId && !document.hidden) return;
+    playNewMessageSound();
+    flashTitle();
+  }
+
   function conversationStatus(conversationId) {
     return openList.some(function (c) {
       return c.id === conversationId;
@@ -359,6 +440,7 @@ document.addEventListener("DOMContentLoaded", function () {
     threadPlaceholder.hidden = true;
     threadActive.hidden = false;
     threadMessagesEl.innerHTML = "";
+    hideVisitorTyping();
     if (layoutEl) layoutEl.classList.add("is-thread-open");
 
     var conv = findConversation(conversationId);
@@ -536,8 +618,17 @@ document.addEventListener("DOMContentLoaded", function () {
           renderThreadMessage(m, false);
         });
         threadMessagesEl.scrollTop = threadMessagesEl.scrollHeight;
-      } else if (data.type === "message" && data.conversationId === activeConversationId) {
-        renderThreadMessage(data.message);
+      } else if (data.type === "message") {
+        if (data.conversationId === activeConversationId) {
+          hideVisitorTyping();
+          renderThreadMessage(data.message);
+        }
+        // Alert on new visitor messages (not our own staff replies).
+        if (data.message && data.message.sender === "visitor") {
+          notifyNewVisitorMessage(data.conversationId);
+        }
+      } else if (data.type === "typing" && data.from === "visitor") {
+        if (data.conversationId === activeConversationId) showVisitorTyping();
       } else if (data.type === "teamRooms") {
         teamStaffList = data.staff || [];
         teamUnread = data.unread || {};
@@ -831,6 +922,15 @@ document.addEventListener("DOMContentLoaded", function () {
 
       socket.send(JSON.stringify({ type: "reply", conversationId: activeConversationId, body: body }));
       replyInput.value = "";
+    });
+  }
+
+  if (quickRepliesEl) {
+    quickRepliesEl.addEventListener("click", function (e) {
+      var btn = e.target.closest(".staff-quick-reply");
+      if (!btn || !replyInput) return;
+      replyInput.value = btn.textContent.trim();
+      replyInput.focus();
     });
   }
 

@@ -116,6 +116,39 @@
   margin-bottom: 0.75rem;
 }
 
+/* Canned quick-reply chips above the staff reply box -- a horizontal,
+   scrollable row so it never wraps or pushes the composer around. */
+.staff-quick-replies {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.staff-quick-replies::-webkit-scrollbar {
+  display: none;
+}
+
+.staff-quick-reply {
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+  line-height: 1.2;
+  padding: 0.35rem 0.65rem;
+  border-radius: 1rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s var(--ease), color 0.15s var(--ease), background-color 0.15s var(--ease);
+}
+
+.staff-quick-reply:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .staff-dashboard-head {
   display: flex;
   align-items: center;

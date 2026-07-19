@@ -26,6 +26,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var manageErrorEl = document.querySelector("[data-staff-manage-error]");
   var newIsAdminCheckbox = document.querySelector("[data-staff-new-is-admin]");
   var signupToggleBtn = document.querySelector("[data-staff-signup-toggle]");
+  var resetToggleBtn = document.querySelector("[data-staff-reset-toggle]");
   var loginSwitchEl = document.querySelector("[data-staff-login-switch]");
   var loginNoteEl = document.querySelector("[data-staff-login-note]");
   var pendingListEl = document.querySelector("[data-staff-pending-list]");
@@ -81,6 +82,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var activeConversationId = null;
   var bootstrapMode = false;
   var signupMode = false;
+  var resetMode = false;
   var isAdmin = false;
   var myUsername = null;
   var teamStaffList = [];
@@ -146,7 +148,9 @@ document.addEventListener("DOMContentLoaded", function () {
     // Self-service signup is only offered in normal sign-in mode -- during the
     // one-time first-admin bootstrap there's nothing to request access to yet.
     signupMode = false;
+    resetMode = false;
     if (signupToggleBtn) signupToggleBtn.textContent = "Create an account";
+    if (resetToggleBtn) resetToggleBtn.textContent = "Forgot password?";
     if (loginSwitchEl) loginSwitchEl.hidden = needed;
     if (loginNoteEl) loginNoteEl.hidden = true;
     if (loginSubtitleEl)
@@ -160,6 +164,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Flip the sign-in card between signing in and requesting a new account.
   function setSignupMode(on) {
     signupMode = on;
+    if (on) setResetMode(false, true);
     if (errorEl) errorEl.hidden = true;
     if (loginNoteEl) loginNoteEl.hidden = true;
     if (loginTitleEl) loginTitleEl.textContent = on ? "Request staff access" : "Staff sign in";
@@ -170,6 +175,33 @@ document.addEventListener("DOMContentLoaded", function () {
         ? "Request an account. An admin approves new members before they can sign in."
         : "Sign in to the team dashboard.";
     if (loginHintEl) loginHintEl.hidden = !on;
+    var passwordInput = document.getElementById("staff-password");
+    if (passwordInput) passwordInput.setAttribute("autocomplete", on ? "new-password" : "current-password");
+  }
+
+  // Flip the sign-in card into "reset a forgotten password" mode. Reuses the
+  // username + password fields and reveals the setup-passcode field (the same
+  // field used during first-admin bootstrap); the passcode authorises the
+  // reset. Mutually exclusive with signup mode.
+  function setResetMode(on) {
+    resetMode = on;
+    if (on) {
+      signupMode = false;
+      if (signupToggleBtn) signupToggleBtn.textContent = "Create an account";
+    }
+    if (errorEl) errorEl.hidden = true;
+    if (loginNoteEl) loginNoteEl.hidden = true;
+    if (loginTitleEl) loginTitleEl.textContent = on ? "Reset your password" : "Staff sign in";
+    if (loginSubmitBtn) loginSubmitBtn.textContent = on ? "Reset password" : "Sign in";
+    if (resetToggleBtn) resetToggleBtn.textContent = on ? "Back to sign in" : "Forgot password?";
+    if (loginSubtitleEl)
+      loginSubtitleEl.textContent = on
+        ? "Enter your username, a new password, and the setup passcode."
+        : "Sign in to the team dashboard.";
+    if (loginHintEl) loginHintEl.hidden = !on;
+    if (passcodeField) passcodeField.hidden = !on;
+    var passcodeInput = document.getElementById("staff-passcode");
+    if (passcodeInput) passcodeInput.required = on;
     var passwordInput = document.getElementById("staff-password");
     if (passwordInput) passwordInput.setAttribute("autocomplete", on ? "new-password" : "current-password");
   }
@@ -758,9 +790,15 @@ document.addEventListener("DOMContentLoaded", function () {
 
     var username = document.getElementById("staff-username").value.trim();
     var password = document.getElementById("staff-password").value;
-    var endpoint = bootstrapMode ? "/api/staff/bootstrap" : signupMode ? "/api/staff/signup" : "/api/staff/login";
+    var endpoint = bootstrapMode
+      ? "/api/staff/bootstrap"
+      : resetMode
+      ? "/api/staff/reset-password"
+      : signupMode
+      ? "/api/staff/signup"
+      : "/api/staff/login";
     var payload = { username: username, password: password };
-    if (bootstrapMode) {
+    if (bootstrapMode || resetMode) {
       var passcodeInput = document.getElementById("staff-passcode");
       payload.passcode = passcodeInput ? passcodeInput.value : "";
     }
@@ -769,7 +807,7 @@ document.addEventListener("DOMContentLoaded", function () {
     var originalLabel = loginSubmitBtn ? loginSubmitBtn.textContent : "";
     if (loginSubmitBtn) {
       loginSubmitBtn.disabled = true;
-      loginSubmitBtn.textContent = bootstrapMode ? "Creating…" : wasSignup ? "Sending request…" : "Signing in…";
+      loginSubmitBtn.textContent = bootstrapMode ? "Creating…" : resetMode ? "Resetting…" : wasSignup ? "Sending request…" : "Signing in…";
     }
     function restoreSubmit() {
       if (loginSubmitBtn) {
@@ -808,6 +846,13 @@ document.addEventListener("DOMContentLoaded", function () {
   if (signupToggleBtn) {
     signupToggleBtn.addEventListener("click", function () {
       setSignupMode(!signupMode);
+      focusUsername();
+    });
+  }
+
+  if (resetToggleBtn) {
+    resetToggleBtn.addEventListener("click", function () {
+      setResetMode(!resetMode);
       focusUsername();
     });
   }

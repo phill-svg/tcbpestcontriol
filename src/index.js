@@ -66,6 +66,12 @@ export default {
 			const id = env.CHAT_HUB.idFromName("global");
 			return env.CHAT_HUB.get(id).fetch(request);
 		}
+		// Account recovery: reset a forgotten password using the setup passcode.
+		// Gated on the passcode inside the Durable Object, same as bootstrap.
+		if (url.pathname === "/api/staff/reset-password" && request.method === "POST") {
+			const id = env.CHAT_HUB.idFromName("global");
+			return env.CHAT_HUB.get(id).fetch(request);
+		}
 		if (url.pathname === "/api/staff/logout" && request.method === "POST") {
 			return new Response(JSON.stringify({ ok: true }), {
 				status: 200,

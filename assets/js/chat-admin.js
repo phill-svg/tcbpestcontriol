@@ -24,6 +24,11 @@ document.addEventListener("DOMContentLoaded", function () {
   var addStaffForm = document.querySelector("[data-staff-add-form]");
   var manageErrorEl = document.querySelector("[data-staff-manage-error]");
   var newIsAdminCheckbox = document.querySelector("[data-staff-new-is-admin]");
+  var signupToggleBtn = document.querySelector("[data-staff-signup-toggle]");
+  var loginSwitchEl = document.querySelector("[data-staff-login-switch]");
+  var loginNoteEl = document.querySelector("[data-staff-login-note]");
+  var pendingListEl = document.querySelector("[data-staff-pending-list]");
+  var pendingBadge = document.querySelector("[data-staff-pending-badge]");
   var threadAvatarEl = document.querySelector("[data-staff-thread-avatar]");
   var threadStatusBtn = document.querySelector("[data-staff-thread-status-toggle]");
   var tabButtons = document.querySelectorAll("[data-staff-conv-tab]");
@@ -69,6 +74,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var activeTab = "open";
   var activeConversationId = null;
   var bootstrapMode = false;
+  var signupMode = false;
   var isAdmin = false;
   var myUsername = null;
   var teamStaffList = [];
@@ -95,6 +101,9 @@ document.addEventListener("DOMContentLoaded", function () {
     if (shellEl) shellEl.classList.add("staff-chat-shell-wide");
     if (manageToggleBtn) manageToggleBtn.hidden = !isAdmin;
     if (managePanel) managePanel.hidden = true;
+    // Populate the pending-requests badge on entry so an admin sees waiting
+    // requests without opening the panel first.
+    loadPendingRequests();
     connect();
     checkPushSubscription();
   }
@@ -127,6 +136,24 @@ document.addEventListener("DOMContentLoaded", function () {
     if (passcodeField) passcodeField.hidden = !needed;
     var passcodeInput = document.getElementById("staff-passcode");
     if (passcodeInput) passcodeInput.required = needed;
+    // Self-service signup is only offered in normal sign-in mode -- during the
+    // one-time first-admin bootstrap there's nothing to request access to yet.
+    signupMode = false;
+    if (signupToggleBtn) signupToggleBtn.textContent = "Create an account";
+    if (loginSwitchEl) loginSwitchEl.hidden = needed;
+    if (loginNoteEl) loginNoteEl.hidden = true;
+  }
+
+  // Flip the sign-in card between signing in and requesting a new account.
+  function setSignupMode(on) {
+    signupMode = on;
+    if (errorEl) errorEl.hidden = true;
+    if (loginNoteEl) loginNoteEl.hidden = true;
+    if (loginTitleEl) loginTitleEl.textContent = on ? "Request staff access" : "Staff sign in";
+    if (loginSubmitBtn) loginSubmitBtn.textContent = on ? "Request access" : "Sign in";
+    if (signupToggleBtn) signupToggleBtn.textContent = on ? "Back to sign in" : "Create an account";
+    var passwordInput = document.getElementById("staff-password");
+    if (passwordInput) passwordInput.setAttribute("autocomplete", on ? "new-password" : "current-password");
   }
 
   function checkSession() {
@@ -594,7 +621,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     var username = document.getElementById("staff-username").value.trim();
     var password = document.getElementById("staff-password").value;
-    var endpoint = bootstrapMode ? "/api/staff/bootstrap" : "/api/staff/login";
+    var endpoint = bootstrapMode ? "/api/staff/bootstrap" : signupMode ? "/api/staff/signup" : "/api/staff/login";
     var payload = { username: username, password: password };
     if (bootstrapMode) {
       var passcodeInput = document.getElementById("staff-passcode");
@@ -610,6 +637,15 @@ document.addEventListener("DOMContentLoaded", function () {
       .then(function (result) {
         if (!result.ok) throw new Error((result.data && result.data.error) || "Something went wrong.");
         loginForm.reset();
+        if (signupMode) {
+          // Request lodged -- they can't sign in until an admin approves it.
+          setSignupMode(false);
+          if (loginNoteEl) {
+            loginNoteEl.textContent = "Request sent. You'll be able to sign in once an admin approves your account.";
+            loginNoteEl.hidden = false;
+          }
+          return;
+        }
         // Re-fetch rather than assuming isAdmin here -- the session
         // endpoint is the single source of truth for it.
         checkSession();
@@ -620,12 +656,104 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   });
 
+  if (signupToggleBtn) {
+    signupToggleBtn.addEventListener("click", function () {
+      setSignupMode(!signupMode);
+    });
+  }
+
   if (logoutBtn) {
     logoutBtn.addEventListener("click", function () {
       fetch("/api/staff/logout", { method: "POST" }).then(function () {
         showLogin();
       });
     });
+  }
+
+  function updatePendingBadge(count) {
+    if (!pendingBadge) return;
+    if (count > 0) {
+      pendingBadge.textContent = count;
+      pendingBadge.hidden = false;
+    } else {
+      pendingBadge.hidden = true;
+    }
+  }
+
+  function renderPendingList(requests) {
+    if (!pendingListEl) return;
+    pendingListEl.innerHTML = "";
+    if (!requests.length) {
+      var empty = document.createElement("p");
+      empty.className = "staff-manage-empty";
+      empty.textContent = "No pending requests.";
+      pendingListEl.appendChild(empty);
+      return;
+    }
+    requests.forEach(function (r) {
+      var row = document.createElement("div");
+      row.className = "staff-manage-item";
+
+      var name = document.createElement("span");
+      name.textContent = r.username;
+
+      var actions = document.createElement("div");
+      actions.className = "staff-pending-actions";
+
+      var approveBtn = document.createElement("button");
+      approveBtn.type = "button";
+      approveBtn.className = "staff-pending-approve";
+      approveBtn.textContent = "Approve";
+      approveBtn.addEventListener("click", function () {
+        decideRequest("approve", r.username);
+      });
+
+      var rejectBtn = document.createElement("button");
+      rejectBtn.type = "button";
+      rejectBtn.className = "staff-pending-reject";
+      rejectBtn.textContent = "Reject";
+      rejectBtn.addEventListener("click", function () {
+        decideRequest("reject", r.username);
+      });
+
+      actions.appendChild(approveBtn);
+      actions.appendChild(rejectBtn);
+      row.appendChild(name);
+      row.appendChild(actions);
+      pendingListEl.appendChild(row);
+    });
+  }
+
+  function loadPendingRequests() {
+    if (!isAdmin) return;
+    fetch("/api/staff/signup-requests")
+      .then(function (res) {
+        return res.json();
+      })
+      .then(function (data) {
+        var requests = data.requests || [];
+        renderPendingList(requests);
+        updatePendingBadge(requests.length);
+      })
+      .catch(function () {});
+  }
+
+  function decideRequest(action, username) {
+    if (action === "reject" && !window.confirm('Reject the account request from "' + username + '"?')) return;
+    fetch("/api/staff/signup-requests/" + action, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: username }),
+    })
+      .then(jsonResult)
+      .then(function (result) {
+        if (!result.ok) throw new Error((result.data && result.data.error) || "Couldn't update that request.");
+        loadPendingRequests();
+        loadStaffUsers();
+      })
+      .catch(function (err) {
+        window.alert(err.message);
+      });
   }
 
   if (replyForm) {
@@ -707,6 +835,7 @@ document.addEventListener("DOMContentLoaded", function () {
     manageToggleBtn.addEventListener("click", function () {
       if (managePanel.hidden) {
         loadStaffUsers();
+        loadPendingRequests();
         managePanel.hidden = false;
       } else {
         managePanel.hidden = true;

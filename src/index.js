@@ -61,6 +61,11 @@ export default {
 			const id = env.CHAT_HUB.idFromName("global");
 			return env.CHAT_HUB.get(id).fetch(request);
 		}
+		// Public: request a staff account. Stays pending until an admin approves.
+		if (url.pathname === "/api/staff/signup" && request.method === "POST") {
+			const id = env.CHAT_HUB.idFromName("global");
+			return env.CHAT_HUB.get(id).fetch(request);
+		}
 		if (url.pathname === "/api/staff/logout" && request.method === "POST") {
 			return new Response(JSON.stringify({ ok: true }), {
 				status: 200,
@@ -78,7 +83,7 @@ export default {
 		// here (not trusted from the client) so the Durable Object's safety
 		// checks -- can't remove yourself, can't remove the last admin -- know
 		// who's actually asking.
-		if (url.pathname === "/api/staff/users") {
+		if (url.pathname === "/api/staff/users" || url.pathname.startsWith("/api/staff/signup-requests")) {
 			const session = await getStaffSession(request, env);
 			if (!session || !session.isAdmin) return new Response("Forbidden", { status: 403 });
 			const forwardUrl = new URL(request.url);

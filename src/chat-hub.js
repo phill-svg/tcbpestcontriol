@@ -61,6 +61,19 @@ export class ChatHub extends DurableObject {
 				created_at INTEGER NOT NULL
 			)
 		`);
+		// Self-service signup requests live in their OWN table and only get
+		// promoted into staff_users when an admin approves. Keeping them
+		// separate means the live login path and existing accounts are never
+		// touched by this feature -- a pending person simply isn't a staff
+		// user yet, so there's no way this can lock anyone out.
+		sql.exec(`
+			CREATE TABLE IF NOT EXISTS staff_signup_requests (
+				username TEXT PRIMARY KEY,
+				password_salt TEXT NOT NULL,
+				password_hash TEXT NOT NULL,
+				created_at INTEGER NOT NULL
+			)
+		`);
 		// Staff-to-staff messages -- room is either the fixed string "team"
 		// (one shared channel everyone can see) or "dm:<a>:<b>" with the two
 		// usernames alphabetically sorted, so a DM room id is the same
@@ -147,6 +160,11 @@ export class ChatHub extends DurableObject {
 		if (url.pathname === "/api/staff/login" && request.method === "POST") {
 			return this.handleLogin(request);
 		}
+		// Public: anyone can request a staff account. It stays pending in
+		// staff_signup_requests until an admin approves -- see handleSignup.
+		if (url.pathname === "/api/staff/signup" && request.method === "POST") {
+			return this.handleSignup(request);
+		}
 		// Admin-only -- already checked in the Worker before forwarding here,
 		// which also attaches ?actingUser= so the safety checks below (can't
 		// remove yourself, can't remove the last admin) know who's asking.
@@ -159,6 +177,19 @@ export class ChatHub extends DurableObject {
 			}
 			if (request.method === "POST") return this.handleCreateStaffUser(request);
 			if (request.method === "DELETE") return this.handleRemoveStaffUser(request, url.searchParams.get("actingUser"));
+		}
+		// Admin-only -- gated in the Worker, same as /api/staff/users above.
+		if (url.pathname === "/api/staff/signup-requests" && request.method === "GET") {
+			return new Response(JSON.stringify({ requests: this.listSignupRequests() }), {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			});
+		}
+		if (url.pathname === "/api/staff/signup-requests/approve" && request.method === "POST") {
+			return this.handleApproveSignup(request);
+		}
+		if (url.pathname === "/api/staff/signup-requests/reject" && request.method === "POST") {
+			return this.handleRejectSignup(request);
 		}
 
 		return new Response("Not found", { status: 404 });
@@ -210,7 +241,19 @@ export class ChatHub extends DurableObject {
 		const row = this.ctx.storage.sql
 			.exec("SELECT password_salt, password_hash, is_admin FROM staff_users WHERE username = ?", username)
 			.toArray()[0];
-		if (!row || !(await verifyPassword(password, row.password_salt, row.password_hash))) {
+		if (!row) {
+			// Not an active account -- but if it's a pending signup and the
+			// password is correct, say so rather than a generic failure. Gating
+			// on a correct password means this can't be used to probe usernames.
+			const pending = this.ctx.storage.sql
+				.exec("SELECT password_salt, password_hash FROM staff_signup_requests WHERE username = ?", username)
+				.toArray()[0];
+			if (pending && (await verifyPassword(password, pending.password_salt, pending.password_hash))) {
+				return jsonError(403, "Your account is awaiting admin approval.");
+			}
+			return jsonError(401, "Incorrect username or password");
+		}
+		if (!(await verifyPassword(password, row.password_salt, row.password_hash))) {
 			return jsonError(401, "Incorrect username or password");
 		}
 
@@ -252,6 +295,119 @@ export class ChatHub extends DurableObject {
 		);
 
 		return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+	}
+
+	async handleSignup(request) {
+		let body;
+		try {
+			body = await request.json();
+		} catch {
+			return jsonError(400, "Invalid JSON");
+		}
+
+		const username = normalizeUsername(body.username);
+		const password = typeof body.password === "string" ? body.password : "";
+		if (!username) return jsonError(400, "Username is required");
+		if (password.length < 8) return jsonError(400, "Password must be at least 8 characters");
+
+		const sql = this.ctx.storage.sql;
+		const taken = sql.exec("SELECT username FROM staff_users WHERE username = ?", username).toArray().length > 0;
+		if (taken) return jsonError(409, "That username is already taken");
+		const alreadyRequested = sql.exec("SELECT username FROM staff_signup_requests WHERE username = ?", username).toArray().length > 0;
+		if (alreadyRequested) return jsonError(409, "A request for that username is already awaiting approval");
+
+		const { salt, hash } = await hashPassword(password);
+		sql.exec(
+			"INSERT INTO staff_signup_requests (username, password_salt, password_hash, created_at) VALUES (?, ?, ?, ?)",
+			username,
+			salt,
+			hash,
+			Date.now()
+		);
+
+		// Best-effort nudge; the pending-requests list in the admin panel is the
+		// reliable channel (an admin only gets this if they enabled notifications).
+		await this.notifyAdminsOfSignup(username);
+
+		return new Response(JSON.stringify({ ok: true, pending: true }), { status: 200, headers: { "content-type": "application/json" } });
+	}
+
+	listSignupRequests() {
+		return this.ctx.storage.sql
+			.exec("SELECT username, created_at FROM staff_signup_requests ORDER BY created_at ASC")
+			.toArray()
+			.map((r) => ({ username: r.username, createdAt: r.created_at }));
+	}
+
+	async handleApproveSignup(request) {
+		let body;
+		try {
+			body = await request.json();
+		} catch {
+			return jsonError(400, "Invalid JSON");
+		}
+		const username = normalizeUsername(body.username);
+		if (!username) return jsonError(400, "Username is required");
+
+		const sql = this.ctx.storage.sql;
+		const req = sql
+			.exec("SELECT username, password_salt, password_hash FROM staff_signup_requests WHERE username = ?", username)
+			.toArray()[0];
+		if (!req) return jsonError(404, "No such pending request");
+
+		// Guard against a race where the same username got created directly.
+		const exists = sql.exec("SELECT username FROM staff_users WHERE username = ?", username).toArray().length > 0;
+		if (exists) {
+			sql.exec("DELETE FROM staff_signup_requests WHERE username = ?", username);
+			return jsonError(409, "That username already exists as a staff account");
+		}
+
+		// Approved accounts are always ordinary staff, never admin, and reuse the
+		// password the requester already chose (no reset needed).
+		sql.exec(
+			"INSERT INTO staff_users (username, password_salt, password_hash, is_admin, created_at) VALUES (?, ?, ?, 0, ?)",
+			username,
+			req.password_salt,
+			req.password_hash,
+			Date.now()
+		);
+		sql.exec("DELETE FROM staff_signup_requests WHERE username = ?", username);
+
+		return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+	}
+
+	async handleRejectSignup(request) {
+		let body;
+		try {
+			body = await request.json();
+		} catch {
+			return jsonError(400, "Invalid JSON");
+		}
+		const username = normalizeUsername(body.username);
+		if (!username) return jsonError(400, "Username is required");
+		this.ctx.storage.sql.exec("DELETE FROM staff_signup_requests WHERE username = ?", username);
+		return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+	}
+
+	async notifyAdminsOfSignup(username) {
+		const admins = this.ctx.storage.sql
+			.exec("SELECT username FROM staff_users WHERE is_admin = 1")
+			.toArray()
+			.map((r) => r.username);
+		if (!admins.length) return;
+		const subscriptions = this.getPushSubscriptionsForUsernames(admins);
+		if (!subscriptions.length) return;
+		const payload = {
+			title: "New staff account request",
+			body: `${username} has requested access — approve or reject in the staff dashboard.`,
+			url: "/staff-chat",
+		};
+		await Promise.all(
+			subscriptions.map(async (subscription) => {
+				const result = await sendPushNotification(this.env, subscription, payload);
+				if (result === "gone") this.removePushSubscription(subscription.endpoint);
+			})
+		);
 	}
 
 	async handleRemoveStaffUser(request, actingUser) {

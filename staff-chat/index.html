@@ -7,7 +7,7 @@
 <title>Staff Chat | TCB Pest Control Canberra</title>
 <meta content="noindex,nofollow" name="robots"/>
 <link href="/favicon.ico" rel="icon" type="image/x-icon"/><link href="/assets/favicon/favicon-32x32.png" rel="icon" sizes="32x32" type="image/png"/><link href="/assets/favicon/favicon-16x16.png" rel="icon" sizes="16x16" type="image/png"/><link href="/assets/favicon/apple-touch-icon.png" rel="apple-touch-icon" sizes="180x180"/><link href="/staff-chat.webmanifest" rel="manifest"/>
-<link href="/assets/css/style.css?v=21" rel="stylesheet"/>
+<link href="/assets/css/style.css?v=22" rel="stylesheet"/>
 </head>
 <body class="staff-chat-body">
 <div class="staff-chat-shell">
@@ -35,6 +35,10 @@
           <button class="btn btn-primary" data-staff-login-submit type="submit">Sign in</button>
         </div>
         </form>
+        <p class="staff-login-note" data-staff-login-note hidden></p>
+        <p class="staff-login-switch" data-staff-login-switch hidden>
+          <button class="staff-login-switch-btn" data-staff-signup-toggle type="button">Create an account</button>
+        </p>
       </div>
     </div>
   </div>
@@ -46,7 +50,7 @@
         <h1 class="staff-login-title">Staff chat</h1>
       </div>
       <div class="staff-dashboard-head-actions">
-        <button class="btn staff-logout-btn" data-staff-manage-toggle hidden type="button"><svg aria-hidden="true" class="icon" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg><span>Manage staff</span></button>
+        <button class="btn staff-logout-btn" data-staff-manage-toggle hidden type="button"><svg aria-hidden="true" class="icon" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg><span>Manage staff</span><span class="staff-team-toggle-badge" data-staff-pending-badge hidden></span></button>
         <button class="btn staff-logout-btn" data-staff-enable-push type="button"><svg aria-hidden="true" class="icon" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg><span>Notifications</span></button>
         <button class="btn staff-logout-btn" data-staff-team-toggle type="button"><svg aria-hidden="true" class="icon" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg><span>Team chat</span><span class="staff-team-toggle-badge" data-staff-team-toggle-badge hidden></span></button>
         <button class="btn staff-logout-btn" data-staff-logout type="button"><svg aria-hidden="true" class="icon" fill="none" height="15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="15"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" x2="9" y1="12" y2="12"></line></svg><span>Sign out</span></button>
@@ -67,6 +71,9 @@
       </div>
     </div>
     <div class="staff-manage-panel" data-staff-manage-panel hidden>
+      <div class="staff-manage-subhead">Pending requests</div>
+      <div class="staff-pending-list" data-staff-pending-list></div>
+      <div class="staff-manage-subhead">Staff accounts</div>
       <div class="staff-manage-list" data-staff-manage-list></div>
       <form class="form staff-manage-add-form" data-staff-add-form>
         <div class="field">

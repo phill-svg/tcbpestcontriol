@@ -183,6 +183,95 @@
   color: var(--accent);
 }
 
+/* Account-approval UI: pending-request list, its approve/reject actions,
+   the sign-in <-> request-account switch, and the status note. */
+.staff-manage-subhead {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-faint);
+  margin-bottom: 0.5rem;
+}
+
+.staff-pending-list {
+  margin-bottom: 1.25rem;
+}
+
+.staff-manage-empty {
+  font-size: 0.8125rem;
+  color: var(--ink-dim);
+  padding: 0.25rem 0;
+}
+
+.staff-pending-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.staff-pending-approve,
+.staff-pending-reject {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid var(--line);
+}
+
+.staff-pending-approve {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.staff-pending-approve:hover {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+}
+
+.staff-pending-reject {
+  background: transparent;
+  color: var(--ink-dim);
+}
+
+.staff-pending-reject:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.staff-login-switch {
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.staff-login-switch-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--accent-deep);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.staff-login-switch-btn:hover {
+  color: var(--accent);
+}
+
+.staff-login-note {
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--ink-dim);
+  text-align: center;
+}
+
 .staff-team-toggle-badge {
   flex-shrink: 0;
   min-width: 1.125rem;

@@ -29,6 +29,11 @@ document.addEventListener("DOMContentLoaded", function () {
   var loginNoteEl = document.querySelector("[data-staff-login-note]");
   var pendingListEl = document.querySelector("[data-staff-pending-list]");
   var pendingBadge = document.querySelector("[data-staff-pending-badge]");
+  var loginSubtitleEl = document.querySelector("[data-staff-login-subtitle]");
+  var loginHintEl = document.querySelector("[data-staff-login-hint]");
+  var loginSuccessEl = document.querySelector("[data-staff-login-success]");
+  var successBackBtn = document.querySelector("[data-staff-success-back]");
+  var usernameInput = document.getElementById("staff-username");
   var threadAvatarEl = document.querySelector("[data-staff-thread-avatar]");
   var threadStatusBtn = document.querySelector("[data-staff-thread-status-toggle]");
   var tabButtons = document.querySelectorAll("[data-staff-conv-tab]");
@@ -123,6 +128,7 @@ document.addEventListener("DOMContentLoaded", function () {
     activeTeamRoom = null;
     teamStaffList = [];
     teamUnread = {};
+    focusUsername();
   }
 
   // Toggles the login form between "create the first (admin) account"
@@ -142,6 +148,12 @@ document.addEventListener("DOMContentLoaded", function () {
     if (signupToggleBtn) signupToggleBtn.textContent = "Create an account";
     if (loginSwitchEl) loginSwitchEl.hidden = needed;
     if (loginNoteEl) loginNoteEl.hidden = true;
+    if (loginSubtitleEl)
+      loginSubtitleEl.textContent = needed
+        ? "Set up the first admin account for your team."
+        : "Sign in to the team dashboard.";
+    if (loginHintEl) loginHintEl.hidden = !needed;
+    showLoginForm();
   }
 
   // Flip the sign-in card between signing in and requesting a new account.
@@ -152,8 +164,42 @@ document.addEventListener("DOMContentLoaded", function () {
     if (loginTitleEl) loginTitleEl.textContent = on ? "Request staff access" : "Staff sign in";
     if (loginSubmitBtn) loginSubmitBtn.textContent = on ? "Request access" : "Sign in";
     if (signupToggleBtn) signupToggleBtn.textContent = on ? "Back to sign in" : "Create an account";
+    if (loginSubtitleEl)
+      loginSubtitleEl.textContent = on
+        ? "Request an account. An admin approves new members before they can sign in."
+        : "Sign in to the team dashboard.";
+    if (loginHintEl) loginHintEl.hidden = !on;
     var passwordInput = document.getElementById("staff-password");
     if (passwordInput) passwordInput.setAttribute("autocomplete", on ? "new-password" : "current-password");
+  }
+
+  // Default card view: form visible, request-sent success hidden.
+  function showLoginForm() {
+    if (loginSuccessEl) loginSuccessEl.hidden = true;
+    if (loginForm) loginForm.hidden = false;
+    if (loginTitleEl) loginTitleEl.hidden = false;
+    if (loginSubtitleEl) loginSubtitleEl.hidden = false;
+    if (loginSwitchEl) loginSwitchEl.hidden = bootstrapMode;
+  }
+
+  // After a request is lodged: swap the form for a confirmation screen.
+  function showSignupSuccess() {
+    if (loginForm) loginForm.hidden = true;
+    if (loginSwitchEl) loginSwitchEl.hidden = true;
+    if (loginNoteEl) loginNoteEl.hidden = true;
+    if (loginTitleEl) loginTitleEl.hidden = true;
+    if (loginSubtitleEl) loginSubtitleEl.hidden = true;
+    if (loginHintEl) loginHintEl.hidden = true;
+    if (loginSuccessEl) loginSuccessEl.hidden = false;
+  }
+
+  function focusUsername() {
+    if (!usernameInput) return;
+    // Skip on touch devices -- auto-popping the keyboard on load is jarring.
+    if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) return;
+    try {
+      usernameInput.focus();
+    } catch (e) {}
   }
 
   function checkSession() {
@@ -628,6 +674,19 @@ document.addEventListener("DOMContentLoaded", function () {
       payload.passcode = passcodeInput ? passcodeInput.value : "";
     }
 
+    var wasSignup = signupMode;
+    var originalLabel = loginSubmitBtn ? loginSubmitBtn.textContent : "";
+    if (loginSubmitBtn) {
+      loginSubmitBtn.disabled = true;
+      loginSubmitBtn.textContent = bootstrapMode ? "Creating…" : wasSignup ? "Sending request…" : "Signing in…";
+    }
+    function restoreSubmit() {
+      if (loginSubmitBtn) {
+        loginSubmitBtn.disabled = false;
+        loginSubmitBtn.textContent = originalLabel;
+      }
+    }
+
     fetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -636,14 +695,12 @@ document.addEventListener("DOMContentLoaded", function () {
       .then(jsonResult)
       .then(function (result) {
         if (!result.ok) throw new Error((result.data && result.data.error) || "Something went wrong.");
+        restoreSubmit();
         loginForm.reset();
-        if (signupMode) {
-          // Request lodged -- they can't sign in until an admin approves it.
-          setSignupMode(false);
-          if (loginNoteEl) {
-            loginNoteEl.textContent = "Request sent. You'll be able to sign in once an admin approves your account.";
-            loginNoteEl.hidden = false;
-          }
+        if (wasSignup) {
+          // Request lodged -- show the confirmation screen; they can't sign in
+          // until an admin approves it.
+          showSignupSuccess();
           return;
         }
         // Re-fetch rather than assuming isAdmin here -- the session
@@ -651,6 +708,7 @@ document.addEventListener("DOMContentLoaded", function () {
         checkSession();
       })
       .catch(function (err) {
+        restoreSubmit();
         errorEl.textContent = err.message;
         errorEl.hidden = false;
       });
@@ -659,6 +717,15 @@ document.addEventListener("DOMContentLoaded", function () {
   if (signupToggleBtn) {
     signupToggleBtn.addEventListener("click", function () {
       setSignupMode(!signupMode);
+      focusUsername();
+    });
+  }
+
+  if (successBackBtn) {
+    successBackBtn.addEventListener("click", function () {
+      setSignupMode(false);
+      showLoginForm();
+      focusUsername();
     });
   }
 

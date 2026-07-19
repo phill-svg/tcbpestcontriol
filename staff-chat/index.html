@@ -7,7 +7,7 @@
 <title>Staff Chat | TCB Pest Control Canberra</title>
 <meta content="noindex,nofollow" name="robots"/>
 <link href="/favicon.ico" rel="icon" type="image/x-icon"/><link href="/assets/favicon/favicon-32x32.png" rel="icon" sizes="32x32" type="image/png"/><link href="/assets/favicon/favicon-16x16.png" rel="icon" sizes="16x16" type="image/png"/><link href="/assets/favicon/apple-touch-icon.png" rel="apple-touch-icon" sizes="180x180"/><link href="/staff-chat.webmanifest" rel="manifest"/>
-<link href="/assets/css/style.css?v=23" rel="stylesheet"/>
+<link href="/assets/css/style.css?v=24" rel="stylesheet"/>
 </head>
 <body class="staff-chat-body">
 <div class="staff-chat-shell">
@@ -17,6 +17,7 @@
       <div class="staff-login-body">
         <img alt="TCB Pest Control" class="staff-login-logo" height="42" src="/assets/images/tcb-pest-control-logo-03284.webp" width="100"/>
         <h1 class="staff-login-title" data-staff-login-title>Staff sign in</h1>
+        <p class="staff-login-subtitle" data-staff-login-subtitle>Sign in to the team dashboard.</p>
         <form class="form" data-staff-login-form>
         <div class="field">
           <label for="staff-username">Username</label>
@@ -26,6 +27,7 @@
           <label for="staff-password" data-staff-password-label>Password</label>
           <input autocomplete="current-password" id="staff-password" name="password" required type="password"/>
         </div>
+        <p class="staff-login-hint" data-staff-login-hint hidden>Use at least 8 characters.</p>
         <div class="field" data-staff-passcode-field hidden>
           <label for="staff-passcode">Setup passcode</label>
           <input autocomplete="off" id="staff-passcode" name="passcode" type="password"/>
@@ -39,6 +41,14 @@
         <p class="staff-login-switch" data-staff-login-switch hidden>
           <button class="staff-login-switch-btn" data-staff-signup-toggle type="button">Create an account</button>
         </p>
+        <div class="staff-login-success" data-staff-login-success hidden>
+          <div class="staff-login-success-icon" aria-hidden="true">
+            <svg fill="none" height="26" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="26"><path d="M20 6 9 17l-5-5"></path></svg>
+          </div>
+          <p class="staff-login-success-title">Request sent</p>
+          <p class="staff-login-success-text">An admin will review your account. You'll be able to sign in as soon as it's approved.</p>
+          <button class="btn btn-primary" data-staff-success-back type="button">Back to sign in</button>
+        </div>
       </div>
     </div>
   </div>

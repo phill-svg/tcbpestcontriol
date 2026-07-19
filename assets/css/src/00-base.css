@@ -7,7 +7,7 @@
    that N (repo-wide, e.g. `sed -i 's/style.css?v=OLD/style.css?v=NEW/g'
    across every *.html file) whenever the built output changes, or
    visitors' browsers will keep using their old cached copy for up to a
-   year regardless of what's actually deployed. Current version: v=23. */
+   year regardless of what's actually deployed. Current version: v=24. */
 
 @font-face {
   font-family: "Inter";
@@ -145,6 +145,11 @@ svg {
   transition: background-color 0.15s var(--ease), color 0.15s var(--ease), border-color 0.15s var(--ease);
   cursor: pointer;
   border: 1px solid transparent;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .btn-primary {

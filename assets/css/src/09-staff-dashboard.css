@@ -64,6 +64,58 @@
   margin-top: -0.5rem;
 }
 
+/* Sign-in polish: contextual subtitle, password hint, and the request-sent
+   success state. */
+.staff-login-subtitle {
+  margin-top: -1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--ink-dim);
+  text-align: center;
+}
+
+.staff-login-hint {
+  width: 100%;
+  margin-top: -0.5rem;
+  margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+
+.staff-login-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.4rem;
+}
+
+.staff-login-success-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0.5rem;
+  border-radius: 50%;
+  background: rgba(229, 37, 26, 0.1);
+  color: var(--accent);
+}
+
+.staff-login-success-title {
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.staff-login-success-text {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  margin-bottom: 0.75rem;
+}
+
 .staff-dashboard-head {
   display: flex;
   align-items: center;

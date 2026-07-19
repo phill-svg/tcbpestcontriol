@@ -21,6 +21,11 @@ document.addEventListener("DOMContentLoaded", function () {
   var reconnectDelay = 1000;
   var hasOpened = false;
   var lastFocused = null;
+  var subtitleEl = panel.querySelector(".chat-header-subtitle");
+  var typingRow = null;
+  var typingTimer = null;
+  var pendingQueue = [];
+  var lastTypingSent = 0;
 
   function getConversationId() {
     if (conversationId) return conversationId;
@@ -90,6 +95,40 @@ document.addEventListener("DOMContentLoaded", function () {
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
+  // The header subtitle doubles as a live connection status once the visitor
+  // is in the chat: "Online" / "Connecting…" / "Reconnecting…".
+  function setConnectionStatus(text) {
+    if (subtitleEl) subtitleEl.textContent = text;
+  }
+
+  // A "TCB is typing…" bubble shown while a staff member is composing a reply.
+  // Purely visual and ephemeral; auto-hides if no further signal arrives.
+  function showTyping() {
+    clearHint();
+    if (!typingRow) {
+      typingRow = document.createElement("div");
+      typingRow.className = "chat-message chat-message-theirs chat-typing";
+      var bubble = document.createElement("div");
+      bubble.className = "chat-message-bubble chat-typing-bubble";
+      bubble.setAttribute("aria-label", "TCB is typing");
+      bubble.innerHTML =
+        '<span class="chat-typing-dot"></span><span class="chat-typing-dot"></span><span class="chat-typing-dot"></span>';
+      typingRow.appendChild(bubble);
+      messagesEl.appendChild(typingRow);
+      scrollToBottom();
+    }
+    window.clearTimeout(typingTimer);
+    typingTimer = window.setTimeout(hideTyping, 4000);
+  }
+
+  function hideTyping() {
+    window.clearTimeout(typingTimer);
+    if (typingRow) {
+      typingRow.remove();
+      typingRow = null;
+    }
+  }
+
   // scroll defaults to true -- pass false when batch-rendering (e.g. chat
   // history) so the caller can scroll once after the whole batch is in the
   // DOM instead of forcing a synchronous layout reflow after every message.
@@ -131,10 +170,13 @@ document.addEventListener("DOMContentLoaded", function () {
       encodeURIComponent(visitorEmail || "");
     if (lastSeenId) url += "&since=" + lastSeenId;
 
+    setConnectionStatus("Connecting…");
     socket = new WebSocket(url);
 
     socket.addEventListener("open", function () {
       reconnectDelay = 1000;
+      setConnectionStatus("Online");
+      flushQueue();
     });
 
     socket.addEventListener("message", function (event) {
@@ -150,12 +192,17 @@ document.addEventListener("DOMContentLoaded", function () {
         });
         scrollToBottom();
       } else if (data.type === "message") {
+        hideTyping();
         renderMessage(data.message);
+      } else if (data.type === "typing" && data.from === "staff") {
+        showTyping();
       }
     });
 
     socket.addEventListener("close", function () {
       socket = null;
+      hideTyping();
+      if (hasOpened) setConnectionStatus("Reconnecting…");
       window.setTimeout(function () {
         reconnectDelay = Math.min(reconnectDelay * 2, 10000);
         if (hasOpened) connect();
@@ -173,6 +220,11 @@ document.addEventListener("DOMContentLoaded", function () {
     intakeEl.hidden = true;
     messagesEl.hidden = false;
     form.hidden = false;
+    // Warm up the empty state with the visitor's first name.
+    var hint = messagesEl.querySelector(".chat-hint");
+    if (hint && visitorName) {
+      hint.textContent = "Hi " + visitorName.split(" ")[0] + " 👋 Send us a message and we'll reply here as soon as we can.";
+    }
     if (!hasOpened) {
       hasOpened = true;
       connect();
@@ -223,14 +275,66 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  // The visitor's own message, rendered immediately with a delivery status
+  // that reads "Sending…" until the socket actually accepts it, then flips to
+  // a timestamp. Returns the meta element so the status can be updated.
+  function renderOwnMessage(body) {
+    clearHint();
+    var row = document.createElement("div");
+    row.className = "chat-message chat-message-mine";
+    var bubble = document.createElement("div");
+    bubble.className = "chat-message-bubble";
+    bubble.textContent = body;
+    var meta = document.createElement("div");
+    meta.className = "chat-message-meta";
+    meta.textContent = "Sending…";
+    row.appendChild(bubble);
+    row.appendChild(meta);
+    messagesEl.appendChild(row);
+    scrollToBottom();
+    return meta;
+  }
+
+  function markSent(meta) {
+    if (meta) meta.textContent = formatTimestamp(Date.now());
+  }
+
+  // Drain anything queued while the socket was down. Called on every (re)open,
+  // so a message typed mid-reconnect is delivered rather than silently lost.
+  function flushQueue() {
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    var queued = pendingQueue;
+    pendingQueue = [];
+    queued.forEach(function (item) {
+      socket.send(JSON.stringify({ type: "message", body: item.body }));
+      markSent(item.meta);
+    });
+  }
+
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     var body = input.value.trim();
-    if (!body || !socket || socket.readyState !== WebSocket.OPEN) return;
-
-    socket.send(JSON.stringify({ type: "message", body: body }));
-    renderMessage({ sender: "visitor", body: body, createdAt: Date.now() }, false);
+    if (!body) return;
     input.value = "";
+
+    var meta = renderOwnMessage(body);
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "message", body: body }));
+      markSent(meta);
+    } else {
+      // Offline / reconnecting -- hold it and send when the socket reopens.
+      pendingQueue.push({ body: body, meta: meta });
+      if (!socket && hasOpened) connect();
+    }
+  });
+
+  // Let staff see "typing…" too (throttled). Harmless if no dashboard is open.
+  input.addEventListener("input", function () {
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    var now = Date.now();
+    if (now - lastTypingSent < 2000) return;
+    lastTypingSent = now;
+    socket.send(JSON.stringify({ type: "typing" }));
   });
 
   input.addEventListener("blur", resetViewportZoom);

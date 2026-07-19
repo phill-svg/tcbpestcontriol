@@ -891,6 +891,11 @@ export class ChatHub extends DurableObject {
 	}
 
 	handleVisitorMessage(ws, attachment, data) {
+		// Ephemeral typing signal -- relayed to any staff watching, never stored.
+		if (data.type === "typing") {
+			this.broadcastToStaff({ type: "typing", conversationId: attachment.conversationId, from: "visitor" });
+			return;
+		}
 		if (data.type !== "message" || typeof data.body !== "string") return;
 
 		const body = data.body.trim().slice(0, MAX_MESSAGE_LENGTH);
@@ -914,6 +919,12 @@ export class ChatHub extends DurableObject {
 	}
 
 	handleStaffMessage(ws, attachment, data) {
+		// Ephemeral typing signal -- relayed to the visitor on this conversation,
+		// never stored.
+		if (data.type === "typing" && typeof data.conversationId === "string") {
+			this.broadcastToConversation(data.conversationId, { type: "typing", from: "staff" });
+			return;
+		}
 		if (data.type === "loadConversation" && typeof data.conversationId === "string") {
 			this.markReadByStaff(data.conversationId);
 			ws.send(JSON.stringify({ type: "history", conversationId: data.conversationId, messages: this.getMessages(data.conversationId, 0) }));

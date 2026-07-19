@@ -769,6 +769,16 @@ document.addEventListener("DOMContentLoaded", function () {
 
   if (replyInput) {
     replyInput.addEventListener("blur", resetViewportZoom);
+    // Let the visitor see "typing…" -- throttled to at most once every 2s so
+    // we're not sending a signal on every keystroke.
+    var lastTypingSent = 0;
+    replyInput.addEventListener("input", function () {
+      if (!activeConversationId || !socket || socket.readyState !== WebSocket.OPEN) return;
+      var now = Date.now();
+      if (now - lastTypingSent < 2000) return;
+      lastTypingSent = now;
+      socket.send(JSON.stringify({ type: "typing", conversationId: activeConversationId }));
+    });
   }
 
   // Mobile only (see the max-width: 700px rules in style.css) -- desktop

@@ -38,6 +38,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var emailForm = document.querySelector("[data-staff-email-form]");
   var emailErrorEl = document.querySelector("[data-staff-email-error]");
   var emailNoteEl = document.querySelector("[data-staff-email-note]");
+  var signupEmailFieldEl = document.querySelector("[data-staff-email-field]");
   var loginSwitchEl = document.querySelector("[data-staff-login-switch]");
   var loginNoteEl = document.querySelector("[data-staff-login-note]");
   var pendingListEl = document.querySelector("[data-staff-pending-list]");
@@ -169,6 +170,9 @@ document.addEventListener("DOMContentLoaded", function () {
     var pwInput = document.getElementById("staff-password");
     if (pwInput) pwInput.required = true;
     if (usernameLabelEl) usernameLabelEl.textContent = "Username";
+    if (signupEmailFieldEl) signupEmailFieldEl.hidden = true;
+    var suEmail = document.getElementById("staff-signup-email");
+    if (suEmail) suEmail.required = false;
     if (loginSwitchEl) loginSwitchEl.hidden = needed;
     if (loginNoteEl) loginNoteEl.hidden = true;
     if (loginSubtitleEl)
@@ -193,6 +197,10 @@ document.addEventListener("DOMContentLoaded", function () {
         ? "Request an account. An admin approves new members before they can sign in."
         : "Sign in to the team dashboard.";
     if (loginHintEl) loginHintEl.hidden = !on;
+    // Signup collects a recovery email so approved accounts can reset by email.
+    if (signupEmailFieldEl) signupEmailFieldEl.hidden = !on;
+    var signupEmailInput = document.getElementById("staff-signup-email");
+    if (signupEmailInput) signupEmailInput.required = on;
     var passwordInput = document.getElementById("staff-password");
     if (passwordInput) passwordInput.setAttribute("autocomplete", on ? "new-password" : "current-password");
   }
@@ -230,6 +238,10 @@ document.addEventListener("DOMContentLoaded", function () {
       passwordInput.setAttribute("autocomplete", "current-password");
     }
     if (usernameLabelEl) usernameLabelEl.textContent = on ? "Username or email" : "Username";
+    // The signup-only email field is never part of the forgot flow.
+    if (signupEmailFieldEl) signupEmailFieldEl.hidden = true;
+    var sEmailInput = document.getElementById("staff-signup-email");
+    if (sEmailInput) sEmailInput.required = false;
   }
 
   // Default card view: form visible, request-sent success hidden.
@@ -842,6 +854,10 @@ document.addEventListener("DOMContentLoaded", function () {
         var passcodeInput = document.getElementById("staff-passcode");
         payload.passcode = passcodeInput ? passcodeInput.value : "";
       }
+      if (signupMode) {
+        var signupEmailInput = document.getElementById("staff-signup-email");
+        payload.email = signupEmailInput ? signupEmailInput.value.trim() : "";
+      }
     }
 
     var wasSignup = signupMode;
@@ -955,6 +971,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
       var name = document.createElement("span");
       name.textContent = r.username;
+      if (r.email) {
+        var em = document.createElement("small");
+        em.className = "staff-manage-item-email";
+        em.style.display = "block";
+        em.style.opacity = "0.7";
+        em.textContent = r.email;
+        name.appendChild(em);
+      }
 
       var actions = document.createElement("div");
       actions.className = "staff-pending-actions";

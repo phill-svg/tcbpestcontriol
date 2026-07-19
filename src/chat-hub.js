@@ -120,6 +120,9 @@ export class ChatHub extends DurableObject {
 		// no email until they set one, and the emailed-reset flow just isn't
 		// available to them until they do.
 		this.ensureColumn("staff_users", "email", "TEXT");
+		// Recovery email captured at self-signup, carried over to staff_users on
+		// approval so an approved account can use email password reset from day one.
+		this.ensureColumn("staff_signup_requests", "email", "TEXT");
 
 		// One-time, expiring password-reset tokens. Only the SHA-256 hash of the
 		// token is stored, never the token itself -- so a DB read can't be used
@@ -502,7 +505,9 @@ export class ChatHub extends DurableObject {
 
 		const username = normalizeUsername(body.username);
 		const password = typeof body.password === "string" ? body.password : "";
+		const email = (typeof body.email === "string" ? body.email : "").trim();
 		if (!username) return jsonError(400, "Username is required");
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return jsonError(400, "Please enter a valid email address");
 		if (password.length < 8) return jsonError(400, "Password must be at least 8 characters");
 
 		const sql = this.ctx.storage.sql;
@@ -513,10 +518,11 @@ export class ChatHub extends DurableObject {
 
 		const { salt, hash } = await hashPassword(password);
 		sql.exec(
-			"INSERT INTO staff_signup_requests (username, password_salt, password_hash, created_at) VALUES (?, ?, ?, ?)",
+			"INSERT INTO staff_signup_requests (username, password_salt, password_hash, email, created_at) VALUES (?, ?, ?, ?, ?)",
 			username,
 			salt,
 			hash,
+			email,
 			Date.now()
 		);
 
@@ -529,9 +535,9 @@ export class ChatHub extends DurableObject {
 
 	listSignupRequests() {
 		return this.ctx.storage.sql
-			.exec("SELECT username, created_at FROM staff_signup_requests ORDER BY created_at ASC")
+			.exec("SELECT username, email, created_at FROM staff_signup_requests ORDER BY created_at ASC")
 			.toArray()
-			.map((r) => ({ username: r.username, createdAt: r.created_at }));
+			.map((r) => ({ username: r.username, email: r.email || null, createdAt: r.created_at }));
 	}
 
 	async handleApproveSignup(request) {
@@ -546,7 +552,7 @@ export class ChatHub extends DurableObject {
 
 		const sql = this.ctx.storage.sql;
 		const req = sql
-			.exec("SELECT username, password_salt, password_hash FROM staff_signup_requests WHERE username = ?", username)
+			.exec("SELECT username, password_salt, password_hash, email FROM staff_signup_requests WHERE username = ?", username)
 			.toArray()[0];
 		if (!req) return jsonError(404, "No such pending request");
 
@@ -558,12 +564,13 @@ export class ChatHub extends DurableObject {
 		}
 
 		// Approved accounts are always ordinary staff, never admin, and reuse the
-		// password the requester already chose (no reset needed).
+		// password + recovery email the requester already provided (no reset needed).
 		sql.exec(
-			"INSERT INTO staff_users (username, password_salt, password_hash, is_admin, created_at) VALUES (?, ?, ?, 0, ?)",
+			"INSERT INTO staff_users (username, password_salt, password_hash, email, is_admin, created_at) VALUES (?, ?, ?, ?, 0, ?)",
 			username,
 			req.password_salt,
 			req.password_hash,
+			req.email || null,
 			Date.now()
 		);
 		sql.exec("DELETE FROM staff_signup_requests WHERE username = ?", username);

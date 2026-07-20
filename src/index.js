@@ -67,12 +67,6 @@ export default {
 			const id = env.CHAT_HUB.idFromName("global");
 			return env.CHAT_HUB.get(id).fetch(request);
 		}
-		// Account recovery: reset a forgotten password using the setup passcode.
-		// Gated on the passcode inside the Durable Object, same as bootstrap.
-		if (url.pathname === "/api/staff/reset-password" && request.method === "POST") {
-			const id = env.CHAT_HUB.idFromName("global");
-			return env.CHAT_HUB.get(id).fetch(request);
-		}
 		// Forgot-password: the Durable Object creates the one-time token and
 		// hands back the recipient + link via `_send`; the Worker performs the
 		// actual email send here (the send_email binding is only reliably

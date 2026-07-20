@@ -191,14 +191,6 @@ export class ChatHub extends DurableObject {
 		if (url.pathname === "/api/staff/signup" && request.method === "POST") {
 			return this.handleSignup(request);
 		}
-		// Account recovery: reset an existing account's password using the
-		// shared setup passcode (env.ADMIN_PASSCODE). This is the only way back
-		// in for someone who's forgotten their password and can't reach an admin
-		// -- there's no email/token flow. Gated on the passcode exactly like
-		// bootstrap; see handleResetPassword.
-		if (url.pathname === "/api/staff/reset-password" && request.method === "POST") {
-			return this.handleResetPassword(request);
-		}
 		// Self-service email-based recovery. /forgot emails a one-time link;
 		// /reset-with-token consumes it and sets the new password. Both public
 		// (the token is the credential); see handleForgotPassword / handleResetWithToken.
@@ -304,44 +296,6 @@ export class ChatHub extends DurableObject {
 		if (!(await verifyPassword(password, row.password_salt, row.password_hash))) {
 			return jsonError(401, "Incorrect username or password");
 		}
-
-		const cookie = await loginCookieHeader(this.env, { username, isAdmin: !!row.is_admin });
-		return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json", "Set-Cookie": cookie } });
-	}
-
-	// Resets an existing account's password. Gated purely on the shared setup
-	// passcode -- deliberately: it's the recovery path for someone locked out
-	// with no working login and no admin to help. Anyone holding the passcode
-	// can reset any account (including admin), so the passcode is effectively a
-	// master key; that's the accepted trade for a self-contained recovery flow.
-	// On success the caller is signed straight in as the reset account.
-	async handleResetPassword(request) {
-		let body;
-		try {
-			body = await request.json();
-		} catch {
-			return jsonError(400, "Invalid JSON");
-		}
-
-		if (!(await passcodeMatches(this.env, body.passcode))) return jsonError(401, "Incorrect setup passcode");
-
-		const username = normalizeUsername(body.username);
-		const password = typeof body.password === "string" ? body.password : "";
-		if (!username) return jsonError(400, "Username is required");
-		if (password.length < 8) return jsonError(400, "Password must be at least 8 characters");
-
-		const row = this.ctx.storage.sql
-			.exec("SELECT is_admin FROM staff_users WHERE username = ?", username)
-			.toArray()[0];
-		if (!row) return jsonError(404, "No staff account with that username");
-
-		const { salt, hash } = await hashPassword(password);
-		this.ctx.storage.sql.exec(
-			"UPDATE staff_users SET password_salt = ?, password_hash = ? WHERE username = ?",
-			salt,
-			hash,
-			username
-		);
 
 		const cookie = await loginCookieHeader(this.env, { username, isAdmin: !!row.is_admin });
 		return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json", "Set-Cookie": cookie } });

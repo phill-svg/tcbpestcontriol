@@ -106,8 +106,32 @@ document.addEventListener("DOMContentLoaded", function () {
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
+  // True during business hours: Mon–Sat 8am–5pm Canberra time (Australia/Sydney,
+  // DST-aware). Mirrors the server's after-hours auto-reply window.
+  function isBusinessHours() {
+    try {
+      var parts = new Intl.DateTimeFormat("en-AU", {
+        timeZone: "Australia/Sydney",
+        weekday: "short",
+        hour: "2-digit",
+        hour12: false,
+      }).formatToParts(new Date());
+      var wd = "";
+      var h = 0;
+      parts.forEach(function (p) {
+        if (p.type === "weekday") wd = p.value;
+        if (p.type === "hour") h = parseInt(p.value, 10);
+      });
+      if (h === 24) h = 0;
+      var openDay = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(wd) !== -1;
+      return openDay && h >= 8 && h < 17;
+    } catch (e) {
+      return true;
+    }
+  }
+
   // The header subtitle doubles as a live connection status once the visitor
-  // is in the chat: "Online" / "Connecting…" / "Reconnecting…".
+  // is in the chat: "Online" / "Away" / "Connecting…" / "Reconnecting…".
   function setConnectionStatus(text) {
     if (subtitleEl) subtitleEl.textContent = text;
   }
@@ -190,7 +214,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
     socket.addEventListener("open", function () {
       reconnectDelay = 1000;
-      setConnectionStatus("Online");
+      // Only say "Online" during business hours (Mon–Sat 8am–5pm Canberra) --
+      // outside those, no one's actively watching, so reflect that instead of
+      // implying a live agent is waiting.
+      setConnectionStatus(isBusinessHours() ? "Online" : "Away · we'll reply soon");
       flushQueue();
     });
 

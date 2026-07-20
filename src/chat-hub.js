@@ -15,10 +15,10 @@ const MAX_MESSAGE_LENGTH = 2000;
 // Durable Object alarm below, not a live timer (this DO can hibernate).
 const AUTO_CLOSE_AFTER_MS = 10 * 60 * 1000;
 
-// After-hours auto-reply: business hours are Mon-Fri 8am-5pm Canberra time
-// (Australia/Sydney tz, DST-aware). Outside those, a visitor message triggers
-// one automated reply, then stays quiet for a cooldown so a back-and-forth
-// after hours doesn't get spammed.
+// After-hours auto-reply: business hours are Mon-Sat 8am-5pm Canberra time
+// (Australia/Sydney tz, DST-aware); Sunday is closed. Outside those, a visitor
+// message triggers one automated reply, then stays quiet for a cooldown so a
+// back-and-forth after hours doesn't get spammed.
 const BUSINESS_OPEN_HOUR = 8;
 const BUSINESS_CLOSE_HOUR = 17;
 const BUSINESS_TIMEZONE = "Australia/Sydney";
@@ -1102,8 +1102,8 @@ export class ChatHub extends DurableObject {
 		}
 	}
 
-	// True if `now` falls within Mon-Fri BUSINESS_OPEN_HOUR..BUSINESS_CLOSE_HOUR
-	// in Canberra local time (DST-aware via the IANA timezone).
+	// True if `now` falls within Mon-Sat BUSINESS_OPEN_HOUR..BUSINESS_CLOSE_HOUR
+	// in Canberra local time (DST-aware via the IANA timezone); Sunday is closed.
 	isWithinBusinessHours(now) {
 		const parts = new Intl.DateTimeFormat("en-AU", {
 			timeZone: BUSINESS_TIMEZONE,
@@ -1114,8 +1114,8 @@ export class ChatHub extends DurableObject {
 		const weekday = parts.find((p) => p.type === "weekday")?.value;
 		let hour = parseInt(parts.find((p) => p.type === "hour")?.value, 10);
 		if (hour === 24) hour = 0; // some engines render midnight as "24"
-		const isWeekday = ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(weekday);
-		return isWeekday && hour >= BUSINESS_OPEN_HOUR && hour < BUSINESS_CLOSE_HOUR;
+		const isOpenDay = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].includes(weekday);
+		return isOpenDay && hour >= BUSINESS_OPEN_HOUR && hour < BUSINESS_CLOSE_HOUR;
 	}
 
 	// Sends the after-hours auto-reply at most once per cooldown per conversation.

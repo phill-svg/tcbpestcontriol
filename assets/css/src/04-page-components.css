@@ -286,6 +286,29 @@
   color: var(--accent);
 }
 
+/* On phones the hairline-divided grid collapses into a flat stack of look-alike
+   blocks. Give each one real card shape -- separated, bordered, rounded -- so
+   the page reads as structured cards instead of a wall of text. Placed after the
+   base .grid-card rules so these win by source order within the media query. */
+@media (max-width: 767px) {
+  .grid-cards {
+    gap: 0.875rem;
+    background: transparent;
+  }
+  .grid-card {
+    padding: 1.5rem;
+    border: 1px solid var(--line);
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+  .bg-soft .grid-card {
+    background: var(--bg-elevated);
+  }
+  .grid-card-photo {
+    margin: -1.5rem -1.5rem 0;
+  }
+}
+
 /* Suburb A-Z index (/locations) */
 
 .suburb-index {

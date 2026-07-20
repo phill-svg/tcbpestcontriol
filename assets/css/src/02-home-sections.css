@@ -8,6 +8,17 @@
   padding-block: 6rem;
 }
 
+/* Tighter vertical rhythm on phones -- 6rem gaps read as sparse/empty on a
+   narrow single-column layout. */
+@media (max-width: 767px) {
+  .section .container {
+    padding-block: 3.25rem;
+  }
+  .section-head {
+    margin-bottom: 2rem;
+  }
+}
+
 .section.bg-soft {
   background: var(--bg-soft);
 }

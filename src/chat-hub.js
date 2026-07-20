@@ -1,8 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 import { sendPushNotification } from "./push.js";
 import { passcodeMatches, hashPassword, verifyPassword, loginCookieHeader } from "./staff-auth.js";
+import { createServiceM8Lead } from "./servicem8.js";
 // Note: the actual reset email is sent by the Worker (src/index.js), not here --
 // the send_email binding is only reliably available in the Worker request context.
+// (ServiceM8 is a plain fetch to an external API, which works fine here in the DO.)
 
 // Password-reset links stay valid for one hour.
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
@@ -118,6 +120,11 @@ export class ChatHub extends DurableObject {
 		// existing table, so they need an explicit, idempotent ALTER.
 		this.ensureColumn("conversations", "visitor_name", "TEXT");
 		this.ensureColumn("conversations", "visitor_email", "TEXT");
+		// Lead details for the staff dashboard + ServiceM8 hand-off.
+		this.ensureColumn("conversations", "visitor_phone", "TEXT");
+		this.ensureColumn("conversations", "visitor_page", "TEXT");
+		// UUID of the ServiceM8 job created from this conversation (dedup guard).
+		this.ensureColumn("conversations", "servicem8_job_uuid", "TEXT");
 		this.ensureColumn("messages", "sender_name", "TEXT");
 		this.ensureColumn("conversations", "last_visitor_message_at", "INTEGER");
 		// When we last sent an after-hours auto-reply on a conversation (cooldown).
@@ -217,6 +224,10 @@ export class ChatHub extends DurableObject {
 		// username are enforced in the Worker (src/index.js) before this is reached.
 		if (url.pathname === "/api/staff/set-email" && request.method === "POST") {
 			return this.handleSetEmail(request, url.searchParams.get("username"));
+		}
+		// Push a chat lead into ServiceM8 as a Quote job. Auth-gated in the Worker.
+		if (url.pathname === "/api/staff/servicem8/create-job" && request.method === "POST") {
+			return this.handleCreateServiceM8Job(request);
 		}
 		// Admin-only -- already checked in the Worker before forwarding here,
 		// which also attaches ?actingUser= so the safety checks below (can't
@@ -438,6 +449,91 @@ export class ChatHub extends DurableObject {
 		return new Response(JSON.stringify({ ok: true, email }), { status: 200, headers: { "content-type": "application/json" } });
 	}
 
+	// Create (or reuse) a ServiceM8 Quote job from a conversation's lead details.
+	// Dedups both the customer and the job -- see src/servicem8.js.
+	async handleCreateServiceM8Job(request) {
+		let body;
+		try {
+			body = await request.json();
+		} catch {
+			return jsonError(400, "Invalid JSON");
+		}
+		const conversationId = typeof body.conversationId === "string" ? body.conversationId : "";
+		const force = !!body.force;
+		if (!conversationId) return jsonError(400, "Missing conversationId");
+
+		const sql = this.ctx.storage.sql;
+		const conv = sql
+			.exec(
+				"SELECT visitor_name, visitor_email, visitor_phone, visitor_page, servicem8_job_uuid FROM conversations WHERE id = ?",
+				conversationId
+			)
+			.toArray()[0];
+		if (!conv) return jsonError(404, "Conversation not found");
+
+		// Already sent from this chat -> just hand back the existing job (no dup).
+		if (conv.servicem8_job_uuid) {
+			return new Response(
+				JSON.stringify({ ok: true, alreadySent: true, jobUuid: conv.servicem8_job_uuid, jobUrl: `https://go.servicem8.com/#job/${conv.servicem8_job_uuid}` }),
+				{ status: 200, headers: { "content-type": "application/json" } }
+			);
+		}
+
+		// Build a short transcript for the job description.
+		const msgs = sql
+			.exec("SELECT sender, body FROM messages WHERE conversation_id = ? ORDER BY id ASC LIMIT 30", conversationId)
+			.toArray();
+		const transcript = msgs
+			.map((m) => `${m.sender === "staff" ? "TCB" : conv.visitor_name || "Customer"}: ${m.body}`)
+			.join("\n");
+		const description =
+			`Website chat enquiry` +
+			(conv.visitor_page ? ` (from ${conv.visitor_page})` : "") +
+			`.\n\n` +
+			(transcript || "No messages.");
+
+		let result;
+		try {
+			result = await createServiceM8Lead(
+				this.env,
+				{
+					name: conv.visitor_name,
+					email: conv.visitor_email,
+					phone: conv.visitor_phone,
+					description,
+				},
+				{ force }
+			);
+		} catch (e) {
+			console.error("ServiceM8 create failed:", e && (e.stack || e.message));
+			return jsonError(502, "Couldn't reach ServiceM8. Please try again.");
+		}
+
+		// An existing open Quote (not forced) -> tell the client so staff can
+		// choose to open it or create another; do NOT record it as this chat's job.
+		if (result.duplicate) {
+			return new Response(
+				JSON.stringify({
+					ok: true,
+					duplicate: true,
+					jobUuid: result.jobUuid,
+					jobUrl: result.jobUrl,
+					generatedJobId: result.generatedJobId,
+					reusedCustomer: result.reusedCustomer,
+				}),
+				{ status: 200, headers: { "content-type": "application/json" } }
+			);
+		}
+
+		// Created -> record it against the conversation so it can't be duplicated.
+		sql.exec("UPDATE conversations SET servicem8_job_uuid = ? WHERE id = ?", result.jobUuid, conversationId);
+		this.broadcastToStaff({ type: "conversations", ...this.getConversationLists() });
+		return new Response(
+			JSON.stringify({ ok: true, created: true, jobUuid: result.jobUuid, jobUrl: result.jobUrl, reusedCustomer: result.reusedCustomer }),
+			{ status: 200, headers: { "content-type": "application/json" } }
+		);
+	}
+
 	listStaffUsers() {
 		return this.ctx.storage.sql
 			.exec("SELECT username, is_admin, created_at FROM staff_users ORDER BY created_at ASC")
@@ -657,13 +753,15 @@ export class ChatHub extends DurableObject {
 		const since = Number(url.searchParams.get("since")) || 0;
 		const visitorName = (url.searchParams.get("name") || "").trim().slice(0, 200);
 		const visitorEmail = (url.searchParams.get("email") || "").trim().slice(0, 200);
+		const visitorPhone = (url.searchParams.get("phone") || "").trim().slice(0, 60);
+		const visitorPage = (url.searchParams.get("page") || "").trim().slice(0, 300);
 		if (!visitorName || !visitorEmail) return new Response("Name and email required", { status: 400 });
 
 		const { 0: client, 1: server } = new WebSocketPair();
 		this.ctx.acceptWebSocket(server);
 		server.serializeAttachment({ role: "visitor", conversationId });
 
-		this.ensureConversation(conversationId, visitorName, visitorEmail);
+		this.ensureConversation(conversationId, visitorName, visitorEmail, visitorPhone, visitorPage);
 		server.send(JSON.stringify({ type: "history", messages: this.getMessages(conversationId, since) }));
 
 		return new Response(null, { status: 101, webSocket: client });
@@ -682,27 +780,31 @@ export class ChatHub extends DurableObject {
 		return new Response(null, { status: 101, webSocket: client });
 	}
 
-	ensureConversation(conversationId, visitorName, visitorEmail) {
+	ensureConversation(conversationId, visitorName, visitorEmail, visitorPhone, visitorPage) {
 		const sql = this.ctx.storage.sql;
 		const exists = sql.exec("SELECT id FROM conversations WHERE id = ?", conversationId).toArray().length > 0;
 		if (!exists) {
 			const now = Date.now();
 			sql.exec(
-				"INSERT INTO conversations (id, created_at, last_message_at, status, unread_by_staff, visitor_name, visitor_email) VALUES (?, ?, ?, 'open', 0, ?, ?)",
+				"INSERT INTO conversations (id, created_at, last_message_at, status, unread_by_staff, visitor_name, visitor_email, visitor_phone, visitor_page) VALUES (?, ?, ?, 'open', 0, ?, ?, ?, ?)",
 				conversationId,
 				now,
 				now,
 				visitorName || null,
-				visitorEmail || null
+				visitorEmail || null,
+				visitorPhone || null,
+				visitorPage || null
 			);
-		} else if (visitorName || visitorEmail) {
+		} else if (visitorName || visitorEmail || visitorPhone || visitorPage) {
 			// Keep it current if the visitor re-enters their details later (e.g.
 			// localStorage got cleared) -- COALESCE so an empty value here never
 			// wipes out one already on file.
 			sql.exec(
-				"UPDATE conversations SET visitor_name = COALESCE(?, visitor_name), visitor_email = COALESCE(?, visitor_email) WHERE id = ?",
+				"UPDATE conversations SET visitor_name = COALESCE(?, visitor_name), visitor_email = COALESCE(?, visitor_email), visitor_phone = COALESCE(?, visitor_phone), visitor_page = COALESCE(?, visitor_page) WHERE id = ?",
 				visitorName || null,
 				visitorEmail || null,
+				visitorPhone || null,
+				visitorPage || null,
 				conversationId
 			);
 		}
@@ -727,6 +829,7 @@ export class ChatHub extends DurableObject {
 			.exec(
 				`SELECT
 					c.id, c.created_at, c.last_message_at, c.unread_by_staff, c.visitor_name, c.visitor_email,
+					c.visitor_phone, c.visitor_page, c.servicem8_job_uuid,
 					(SELECT body FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS last_body,
 					(SELECT sender FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS last_sender
 				FROM conversations c
@@ -744,6 +847,9 @@ export class ChatHub extends DurableObject {
 			unreadByStaff: r.unread_by_staff,
 			visitorName: r.visitor_name,
 			visitorEmail: r.visitor_email,
+			visitorPhone: r.visitor_phone,
+			visitorPage: r.visitor_page,
+			servicem8JobUuid: r.servicem8_job_uuid,
 			lastBody: r.last_body,
 			lastSender: r.last_sender,
 		}));

@@ -50,6 +50,11 @@ document.addEventListener("DOMContentLoaded", function () {
   var usernameInput = document.getElementById("staff-username");
   var threadAvatarEl = document.querySelector("[data-staff-thread-avatar]");
   var threadStatusBtn = document.querySelector("[data-staff-thread-status-toggle]");
+  var leadEl = document.querySelector("[data-staff-lead]");
+  var leadDetailsEl = document.querySelector("[data-staff-lead-details]");
+  var sm8Btn = document.querySelector("[data-staff-sm8-btn]");
+  var sm8Label = document.querySelector("[data-staff-sm8-label]");
+  var sm8Note = document.querySelector("[data-staff-sm8-note]");
   var tabButtons = document.querySelectorAll("[data-staff-conv-tab]");
   var teamToggleBtn = document.querySelector("[data-staff-team-toggle]");
   var teamToggleBadge = document.querySelector("[data-staff-team-toggle-badge]");
@@ -527,6 +532,7 @@ document.addEventListener("DOMContentLoaded", function () {
       threadVisitorEl.textContent = conv ? [conv.visitorName, conv.visitorEmail].filter(Boolean).join(" · ") : "";
     }
     if (threadAvatarEl) paintAvatar(threadAvatarEl, conv ? conv.visitorName : "");
+    renderLeadPanel(conv);
     updateThreadStatusButton(conversationId);
 
     if (socket && socket.readyState === WebSocket.OPEN) {
@@ -539,6 +545,127 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!activeConversationId || !socket || socket.readyState !== WebSocket.OPEN) return;
       var newStatus = threadStatusBtn.dataset.status === "open" ? "closed" : "open";
       socket.send(JSON.stringify({ type: "setConversationStatus", conversationId: activeConversationId, status: newStatus }));
+    });
+  }
+
+  // ---- Lead panel + "Send to ServiceM8" ----
+  var SITE_ORIGIN = "https://www.tcbpestcontrolcanberra.com.au";
+  var sm8Force = false;
+
+  function leadRow(label, value, href, newTab) {
+    var row = document.createElement("div");
+    row.className = "staff-lead-row";
+    var l = document.createElement("span");
+    l.className = "staff-lead-label";
+    l.textContent = label;
+    row.appendChild(l);
+    var v;
+    if (href) {
+      v = document.createElement("a");
+      v.href = href;
+      if (newTab) {
+        v.target = "_blank";
+        v.rel = "noopener";
+      }
+    } else {
+      v = document.createElement("span");
+    }
+    v.className = "staff-lead-value";
+    v.textContent = value;
+    row.appendChild(v);
+    return row;
+  }
+
+  function renderLeadPanel(conv) {
+    if (!leadEl) return;
+    if (!conv) {
+      leadEl.hidden = true;
+      return;
+    }
+    leadEl.hidden = false;
+    if (leadDetailsEl) {
+      leadDetailsEl.innerHTML = "";
+      if (conv.visitorEmail) leadDetailsEl.appendChild(leadRow("Email", conv.visitorEmail, "mailto:" + conv.visitorEmail, false));
+      if (conv.visitorPhone) leadDetailsEl.appendChild(leadRow("Phone", conv.visitorPhone, "tel:" + conv.visitorPhone.replace(/\s+/g, ""), false));
+      if (conv.visitorPage) leadDetailsEl.appendChild(leadRow("Page", conv.visitorPage, SITE_ORIGIN + conv.visitorPage, true));
+    }
+    setSm8State(conv);
+  }
+
+  function setSm8State(conv) {
+    sm8Force = false;
+    if (!sm8Btn) return;
+    sm8Btn.disabled = false;
+    if (sm8Note) sm8Note.hidden = true;
+    if (conv && conv.servicem8JobUuid) {
+      if (sm8Label) sm8Label.textContent = "Sent to ServiceM8 ✓";
+      sm8Btn.classList.add("is-sent");
+      if (sm8Note) {
+        sm8Note.hidden = false;
+        sm8Note.innerHTML =
+          '<a href="https://go.servicem8.com/#job/' + conv.servicem8JobUuid + '" target="_blank" rel="noopener">Open job in ServiceM8</a>';
+      }
+    } else {
+      if (sm8Label) sm8Label.textContent = "Send to ServiceM8";
+      sm8Btn.classList.remove("is-sent");
+    }
+  }
+
+  function sendToServiceM8(conversationId, force) {
+    if (!sm8Btn) return;
+    sm8Btn.disabled = true;
+    if (sm8Label) sm8Label.textContent = "Sending…";
+    if (sm8Note) sm8Note.hidden = true;
+    fetch("/api/staff/servicem8/create-job", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ conversationId: conversationId, force: !!force }),
+    })
+      .then(jsonResult)
+      .then(function (r) {
+        if (!r.ok) throw new Error((r.data && r.data.error) || "Couldn't create the job.");
+        var d = r.data || {};
+        if (d.duplicate) {
+          // Existing open quote -- let staff open it or deliberately make another.
+          sm8Btn.disabled = false;
+          sm8Force = true;
+          if (sm8Label) sm8Label.textContent = "Create another anyway";
+          if (sm8Note) {
+            sm8Note.hidden = false;
+            sm8Note.innerHTML =
+              'This customer already has an open quote. <a href="' +
+              d.jobUrl +
+              '" target="_blank" rel="noopener">Open it</a>, or click again to create another.';
+          }
+          return;
+        }
+        sm8Btn.classList.add("is-sent");
+        sm8Btn.disabled = false;
+        sm8Force = false;
+        if (sm8Label) sm8Label.textContent = "Sent to ServiceM8 ✓";
+        if (sm8Note) {
+          sm8Note.hidden = false;
+          sm8Note.innerHTML =
+            '<a href="' +
+            d.jobUrl +
+            '" target="_blank" rel="noopener">Open job in ServiceM8</a>' +
+            (d.reusedCustomer ? " · existing customer reused" : "");
+        }
+      })
+      .catch(function (err) {
+        sm8Btn.disabled = false;
+        if (sm8Label) sm8Label.textContent = "Send to ServiceM8";
+        if (sm8Note) {
+          sm8Note.hidden = false;
+          sm8Note.textContent = err.message;
+        }
+      });
+  }
+
+  if (sm8Btn) {
+    sm8Btn.addEventListener("click", function () {
+      if (!activeConversationId || sm8Btn.disabled) return;
+      sendToServiceM8(activeConversationId, sm8Force);
     });
   }
 

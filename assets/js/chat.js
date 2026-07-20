@@ -13,9 +13,17 @@ document.addEventListener("DOMContentLoaded", function () {
   var STORAGE_KEY = "tcb_chat_cid";
   var NAME_KEY = "tcb_chat_name";
   var EMAIL_KEY = "tcb_chat_email";
+  var PHONE_KEY = "tcb_chat_phone";
   var conversationId = null;
   var visitorName = null;
   var visitorEmail = null;
+  var visitorPhone = null;
+  // The page the visitor was on when they opened the chat -- sent to staff so
+  // they know what the enquiry is about (e.g. /termite-treatment).
+  var visitorPage = null;
+  try {
+    visitorPage = window.location.pathname + window.location.search;
+  } catch (e) {}
   var lastSeenId = 0;
   var socket = null;
   var reconnectDelay = 1000;
@@ -48,15 +56,18 @@ document.addEventListener("DOMContentLoaded", function () {
     try {
       visitorName = window.localStorage.getItem(NAME_KEY);
       visitorEmail = window.localStorage.getItem(EMAIL_KEY);
+      visitorPhone = window.localStorage.getItem(PHONE_KEY);
     } catch (e) {}
   }
 
-  function saveVisitorInfo(name, email) {
+  function saveVisitorInfo(name, email, phone) {
     visitorName = name;
     visitorEmail = email;
+    visitorPhone = phone;
     try {
       window.localStorage.setItem(NAME_KEY, name);
       window.localStorage.setItem(EMAIL_KEY, email);
+      window.localStorage.setItem(PHONE_KEY, phone);
     } catch (e) {}
   }
 
@@ -167,7 +178,11 @@ document.addEventListener("DOMContentLoaded", function () {
       "&name=" +
       encodeURIComponent(visitorName || "") +
       "&email=" +
-      encodeURIComponent(visitorEmail || "");
+      encodeURIComponent(visitorEmail || "") +
+      "&phone=" +
+      encodeURIComponent(visitorPhone || "") +
+      "&page=" +
+      encodeURIComponent(visitorPage || "");
     if (lastSeenId) url += "&since=" + lastSeenId;
 
     setConnectionStatus("Connecting…");
@@ -268,9 +283,11 @@ document.addEventListener("DOMContentLoaded", function () {
       e.preventDefault();
       var name = document.getElementById("chat-name").value.trim();
       var email = document.getElementById("chat-email").value.trim();
+      var phoneEl = document.getElementById("chat-phone");
+      var phone = phoneEl ? phoneEl.value.trim() : "";
       if (!name || !email) return;
 
-      saveVisitorInfo(name, email);
+      saveVisitorInfo(name, email, phone);
       showChat();
     });
   }

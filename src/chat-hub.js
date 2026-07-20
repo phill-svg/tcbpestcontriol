@@ -1,7 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 import { sendPushNotification } from "./push.js";
 import { passcodeMatches, hashPassword, verifyPassword, loginCookieHeader } from "./staff-auth.js";
-import { sendPasswordResetEmail } from "./email.js";
+// Note: the actual reset email is sent by the Worker (src/index.js), not here --
+// the send_email binding is only reliably available in the Worker request context.
 
 // Password-reset links stay valid for one hour.
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
@@ -357,11 +358,22 @@ export class ChatHub extends DurableObject {
 			return jsonError(400, "Invalid JSON");
 		}
 
-		const generic = () =>
-			new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+		// Always responds { ok: true } to the client (no account enumeration).
+		// When a link should actually be sent, `_send` carries the details back
+		// to the Worker, which performs the send -- the send_email binding is
+		// only reliably available in the Worker's request context, not here in
+		// the Durable Object.
+		const generic = (send) =>
+			new Response(JSON.stringify(send ? { ok: true, _send: send } : { ok: true }), {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			});
 
 		const identifier = (typeof body.identifier === "string" ? body.identifier : "").trim();
-		if (!identifier) return generic();
+		if (!identifier) {
+			console.log("forgot: empty identifier");
+			return generic();
+		}
 
 		const sql = this.ctx.storage.sql;
 		// Match on username (normalised) or email (case-insensitive).
@@ -375,8 +387,14 @@ export class ChatHub extends DurableObject {
 			)
 			.toArray()[0];
 
-		// No account, or no email on file -> nothing to send, but still generic.
-		if (!row || !row.email) return generic();
+		if (!row) {
+			console.log("forgot: no account matches", JSON.stringify(identifier));
+			return generic();
+		}
+		if (!row.email) {
+			console.log("forgot: account", row.username, "has no email on file");
+			return generic();
+		}
 
 		// Fresh token; store only its hash. Clear any previous unused tokens for
 		// this user so old links stop working once a new one is requested.
@@ -391,14 +409,8 @@ export class ChatHub extends DurableObject {
 		);
 
 		const resetUrl = `${url.origin}/staff-chat?reset=${token}`;
-		try {
-			await sendPasswordResetEmail(this.env, row.email, resetUrl, row.username);
-		} catch (e) {
-			// Don't leak send failures to the caller (still generic), but surface
-			// them in logs so a misconfigured binding is diagnosable.
-			console.error("Password reset email failed:", e && e.message);
-		}
-		return generic();
+		console.log("forgot: queued reset email to", row.email, "for", row.username);
+		return generic({ to: row.email, resetUrl, username: row.username });
 	}
 
 	// Consumes a reset token and sets the new password, then signs the user in.

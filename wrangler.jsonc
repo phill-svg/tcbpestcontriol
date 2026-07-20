@@ -17,6 +17,9 @@
   "send_email": [
     { "name": "EMAIL", "remote": true }
   ],
+  "observability": {
+    "enabled": true
+  },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["ChatHub"] }
   ],

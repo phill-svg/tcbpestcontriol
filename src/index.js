@@ -1,8 +1,9 @@
 export { ChatHub } from "./chat-hub.js";
 import { logoutCookieHeader, getStaffSession } from "./staff-auth.js";
+import { sendPasswordResetEmail } from "./email.js";
 
 export default {
-	async fetch(request, env) {
+	async fetch(request, env, ctx) {
 		const url = new URL(request.url);
 
 		// Canonicalise the bare apex domain to www.
@@ -72,12 +73,29 @@ export default {
 			const id = env.CHAT_HUB.idFromName("global");
 			return env.CHAT_HUB.get(id).fetch(request);
 		}
-		// Self-service email recovery: request a reset link, and consume it.
-		// Both public -- the emailed one-time token is the credential.
-		if (
-			(url.pathname === "/api/staff/forgot" || url.pathname === "/api/staff/reset-with-token") &&
-			request.method === "POST"
-		) {
+		// Forgot-password: the Durable Object creates the one-time token and
+		// hands back the recipient + link via `_send`; the Worker performs the
+		// actual email send here (the send_email binding is only reliably
+		// available in this request context, not inside the DO). Always returns
+		// a generic { ok: true } so accounts can't be enumerated.
+		if (url.pathname === "/api/staff/forgot" && request.method === "POST") {
+			const id = env.CHAT_HUB.idFromName("global");
+			const doResp = await env.CHAT_HUB.get(id).fetch(request);
+			let data = {};
+			try {
+				data = await doResp.json();
+			} catch {}
+			if (data && data._send && data._send.to) {
+				const sending = sendPasswordResetEmail(env, data._send.to, data._send.resetUrl, data._send.username).catch(
+					(e) => console.error("Password reset email send failed:", e && (e.stack || e.message))
+				);
+				if (ctx && ctx.waitUntil) ctx.waitUntil(sending);
+				else await sending;
+			}
+			return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+		}
+		// Consume a reset token (sets the new password). Handled entirely in the DO.
+		if (url.pathname === "/api/staff/reset-with-token" && request.method === "POST") {
 			const id = env.CHAT_HUB.idFromName("global");
 			return env.CHAT_HUB.get(id).fetch(request);
 		}

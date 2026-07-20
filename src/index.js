@@ -276,11 +276,18 @@ async function handleBooking(request, env, ctx) {
 	}
 
 	// Fire the office notification + customer confirmation without blocking the
-	// response (allSettled so one failing send never affects the other).
+	// response (allSettled so one failing send never affects the other). Log the
+	// outcome of each so a send failure is diagnosable.
 	const notify = Promise.allSettled([
 		sendBookingNotification(env, booking, jobUrl),
 		sendBookingConfirmation(env, booking),
-	]);
+	]).then((results) => {
+		const labels = ["office notification", "customer confirmation"];
+		results.forEach((r, i) => {
+			if (r.status === "rejected") console.error(`Booking ${labels[i]} email FAILED:`, r.reason && (r.reason.stack || r.reason.message));
+			else console.log(`Booking ${labels[i]} email sent`);
+		});
+	});
 	if (ctx && ctx.waitUntil) ctx.waitUntil(notify);
 	else await notify;
 

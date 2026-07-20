@@ -16,6 +16,18 @@
   gap: 3rem;
 }
 
+/* On phones, pair the link columns two-across instead of one long stack.
+   The brand block stays full width across the top. */
+@media (max-width: 767px) {
+  .footer-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem 1.5rem;
+  }
+  .footer-brand {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (min-width: 768px) {
   .footer-grid {
     grid-template-columns: repeat(12, 1fr);

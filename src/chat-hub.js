@@ -15,6 +15,17 @@ const MAX_MESSAGE_LENGTH = 2000;
 // Durable Object alarm below, not a live timer (this DO can hibernate).
 const AUTO_CLOSE_AFTER_MS = 10 * 60 * 1000;
 
+// After-hours auto-reply: business hours are Mon-Fri 8am-5pm Canberra time
+// (Australia/Sydney tz, DST-aware). Outside those, a visitor message triggers
+// one automated reply, then stays quiet for a cooldown so a back-and-forth
+// after hours doesn't get spammed.
+const BUSINESS_OPEN_HOUR = 8;
+const BUSINESS_CLOSE_HOUR = 17;
+const BUSINESS_TIMEZONE = "Australia/Sydney";
+const AFTER_HOURS_COOLDOWN_MS = 4 * 60 * 60 * 1000;
+const AFTER_HOURS_MESSAGE =
+	"Thanks for reaching out to TCB Pest Control! We're currently closed, but we've got your message and will reply as soon as we're back. For anything urgent, call us on 02 6105 9771.";
+
 // Single global instance (env.CHAT_HUB.idFromName("global")) holds every
 // conversation's messages and live WebSocket connections. Traffic for this
 // site is low enough that sharding by conversation isn't worth the added
@@ -109,6 +120,8 @@ export class ChatHub extends DurableObject {
 		this.ensureColumn("conversations", "visitor_email", "TEXT");
 		this.ensureColumn("messages", "sender_name", "TEXT");
 		this.ensureColumn("conversations", "last_visitor_message_at", "INTEGER");
+		// When we last sent an after-hours auto-reply on a conversation (cooldown).
+		this.ensureColumn("conversations", "last_auto_reply_at", "INTEGER");
 		// Which staff member a push subscription belongs to -- lets team/DM
 		// notifications target the right device(s) instead of every staff
 		// device. Subscriptions created before this column existed have a
@@ -1083,7 +1096,43 @@ export class ChatHub extends DurableObject {
 		// it live, a phone buzz would just be noise.
 		if (!this.hasConnectedStaff()) {
 			this.ctx.waitUntil(this.notifyStaffOfNewMessage(attachment.conversationId, body));
+			// No staff watching -- if it's outside business hours, reassure the
+			// visitor with a one-off automated reply.
+			this.maybeSendAfterHoursReply(attachment.conversationId);
 		}
+	}
+
+	// True if `now` falls within Mon-Fri BUSINESS_OPEN_HOUR..BUSINESS_CLOSE_HOUR
+	// in Canberra local time (DST-aware via the IANA timezone).
+	isWithinBusinessHours(now) {
+		const parts = new Intl.DateTimeFormat("en-AU", {
+			timeZone: BUSINESS_TIMEZONE,
+			weekday: "short",
+			hour: "2-digit",
+			hour12: false,
+		}).formatToParts(new Date(now));
+		const weekday = parts.find((p) => p.type === "weekday")?.value;
+		let hour = parseInt(parts.find((p) => p.type === "hour")?.value, 10);
+		if (hour === 24) hour = 0; // some engines render midnight as "24"
+		const isWeekday = ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(weekday);
+		return isWeekday && hour >= BUSINESS_OPEN_HOUR && hour < BUSINESS_CLOSE_HOUR;
+	}
+
+	// Sends the after-hours auto-reply at most once per cooldown per conversation.
+	maybeSendAfterHoursReply(conversationId) {
+		const now = Date.now();
+		if (this.isWithinBusinessHours(now)) return;
+
+		const sql = this.ctx.storage.sql;
+		const row = sql.exec("SELECT last_auto_reply_at FROM conversations WHERE id = ?", conversationId).toArray()[0];
+		const last = row && row.last_auto_reply_at ? row.last_auto_reply_at : 0;
+		if (now - last < AFTER_HOURS_COOLDOWN_MS) return;
+
+		const msg = this.insertMessage(conversationId, "staff", AFTER_HOURS_MESSAGE, "TCB Pest Control");
+		sql.exec("UPDATE conversations SET last_auto_reply_at = ? WHERE id = ?", now, conversationId);
+		this.broadcastToConversation(conversationId, { type: "message", message: msg });
+		this.broadcastToStaff({ type: "message", conversationId, message: msg });
+		this.broadcastToStaff({ type: "conversations", ...this.getConversationLists() });
 	}
 
 	handleStaffMessage(ws, attachment, data) {

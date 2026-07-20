@@ -474,7 +474,7 @@ export class ChatHub extends DurableObject {
 		// Already sent from this chat -> just hand back the existing job (no dup).
 		if (conv.servicem8_job_uuid) {
 			return new Response(
-				JSON.stringify({ ok: true, alreadySent: true, jobUuid: conv.servicem8_job_uuid, jobUrl: `https://go.servicem8.com/#job/${conv.servicem8_job_uuid}` }),
+				JSON.stringify({ ok: true, alreadySent: true, jobUuid: conv.servicem8_job_uuid, jobUrl: `https://go.servicem8.com/openjob/${conv.servicem8_job_uuid}` }),
 				{ status: 200, headers: { "content-type": "application/json" } }
 			);
 		}

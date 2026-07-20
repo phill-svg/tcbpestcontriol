@@ -29,7 +29,8 @@ function normPhone(p) {
 }
 
 function jobUrl(uuid) {
-	return "https://go.servicem8.com/#job/" + uuid;
+	// Deep-link that opens the job directly for a logged-in ServiceM8 user.
+	return "https://go.servicem8.com/openjob/" + uuid;
 }
 
 async function sm8Get(env, pathAndQuery) {

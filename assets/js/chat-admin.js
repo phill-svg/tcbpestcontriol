@@ -603,7 +603,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (sm8Note) {
         sm8Note.hidden = false;
         sm8Note.innerHTML =
-          '<a href="https://go.servicem8.com/#job/' + conv.servicem8JobUuid + '" target="_blank" rel="noopener">Open job in ServiceM8</a>';
+          '<a href="https://go.servicem8.com/openjob/' + conv.servicem8JobUuid + '" target="_blank" rel="noopener">Open job in ServiceM8</a>';
       }
     } else {
       if (sm8Label) sm8Label.textContent = "Send to ServiceM8";

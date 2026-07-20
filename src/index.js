@@ -1,6 +1,7 @@
 export { ChatHub } from "./chat-hub.js";
 import { logoutCookieHeader, getStaffSession } from "./staff-auth.js";
 import { sendPasswordResetEmail } from "./email.js";
+import { createServiceM8Lead } from "./servicem8.js";
 
 export default {
 	async fetch(request, env, ctx) {
@@ -158,6 +159,13 @@ export default {
 			return env.CHAT_HUB.get(id).fetch(new Request(forwardUrl, request));
 		}
 
+		// Public online-booking form (/book) -> creates a ServiceM8 Quote job.
+		// Protected by a honeypot + strict validation (Turnstile can be layered on
+		// later by setting TURNSTILE_SECRET and adding the widget to the form).
+		if (url.pathname === "/api/booking" && request.method === "POST") {
+			return handleBooking(request, env, ctx);
+		}
+
 		const response = await fetchAsset(request, url, env);
 
 		// Force every served HTML page's canonical tag to self-reference the
@@ -210,6 +218,85 @@ export default {
 // their index.html directly, first. Only paths that already look like a
 // literal file (have an extension) or don't match any index.html fall back
 // to an exact-match lookup.
+// Handle a public booking-form submission: validate, (optionally) verify
+// Turnstile, then create a ServiceM8 Quote job. Customer dedup is handled in
+// createServiceM8Lead; force:true so a genuine new booking always creates a job.
+async function handleBooking(request, env, ctx) {
+	let body;
+	try {
+		body = await request.json();
+	} catch {
+		return jsonError(400, "Invalid request.");
+	}
+
+	// Honeypot: real users never fill this hidden field. Silently accept + drop.
+	if (body.company) return okJson({ ok: true });
+
+	const name = String(body.name || "").trim();
+	const email = String(body.email || "").trim();
+	const phone = String(body.phone || "").trim();
+	const address = String(body.address || "").trim();
+	const service = String(body.service || "").trim();
+	const date = String(body.date || "").trim();
+	const time = String(body.time || "").trim();
+	const message = String(body.message || "").trim();
+
+	if (!name || name.length > 120) return jsonError(400, "Please enter your name.");
+	if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return jsonError(400, "Please enter a valid email address.");
+	if (phone.replace(/\D/g, "").length < 6) return jsonError(400, "Please enter a valid phone number.");
+	if (!address) return jsonError(400, "Please enter the service address.");
+	if (!service) return jsonError(400, "Please choose a service.");
+	if (message.length > 2000) return jsonError(400, "Message is too long.");
+
+	// Optional Turnstile -- only enforced once TURNSTILE_SECRET is configured.
+	if (env.TURNSTILE_SECRET) {
+		const ok = await verifyTurnstile(env, body.turnstileToken, request);
+		if (!ok) return jsonError(400, "Verification failed. Please try again.");
+	}
+
+	const description = [
+		"Online booking request (website /book form)",
+		`Service: ${service}`,
+		date || time ? `Preferred: ${[date, time].filter(Boolean).join(" ")}` : "",
+		"",
+		message || "(no additional notes)",
+	]
+		.filter((l) => l !== "")
+		.join("\n");
+
+	try {
+		await createServiceM8Lead(env, { name, email, phone, address, description }, { force: true });
+	} catch (e) {
+		console.error("Booking -> ServiceM8 failed:", e && (e.stack || e.message));
+		return jsonError(502, "We couldn't submit your booking just now. Please call us on 02 6105 9771.");
+	}
+	return okJson({ ok: true });
+}
+
+async function verifyTurnstile(env, token, request) {
+	if (!token) return false;
+	const form = new FormData();
+	form.append("secret", env.TURNSTILE_SECRET);
+	form.append("response", token);
+	const ip = request.headers.get("CF-Connecting-IP");
+	if (ip) form.append("remoteip", ip);
+	try {
+		const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body: form });
+		const d = await r.json();
+		return !!d.success;
+	} catch {
+		return false;
+	}
+}
+
+function okJson(obj) {
+	return new Response(JSON.stringify(obj), { status: 200, headers: { "content-type": "application/json" } });
+}
+
+function jsonError(status, message) {
+	return new Response(JSON.stringify({ error: message }), { status, headers: { "content-type": "application/json" } });
+}
+
 async function fetchAsset(request, url, env) {
 	const lastSegment = url.pathname.split("/").pop();
 	const looksLikeDirectory = url.pathname === "/" || !lastSegment.includes(".");

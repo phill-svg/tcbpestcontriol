@@ -33,9 +33,12 @@ export async function sendPasswordResetEmail(env, toEmail, resetUrl, username) {
 		`<p style="margin-top:24px">&mdash; TCB Pest Control</p>` +
 		`</div>`;
 
+	// The send_email binding requires plain string addresses (unlike the REST
+	// API, which also accepts {address,name} objects and arrays). Passing an
+	// object here throws "Incorrect type for the 'email' field on 'EmailAddress'".
 	return env.EMAIL.send({
-		from: { address: FROM_ADDRESS, name: FROM_NAME },
-		to: [toEmail],
+		from: FROM_ADDRESS,
+		to: toEmail,
 		reply_to: REPLY_TO,
 		subject,
 		text,

@@ -1,11 +1,31 @@
-/* Staff chat admin */
+/* Staff chat admin
+   ------------------------------------------------------------------
+   Two modes share this file:
+   - SIGN-IN: a centered, elevated card on a soft radial-gradient page.
+   - DASHBOARD (once .staff-dashboard is un-hidden + shell gets
+     .staff-chat-shell-wide, both toggled in assets/js/chat-admin.js):
+     a FULL-VIEWPORT app shell — fixed header, everything else scrolls
+     inside its own region. No floating card, edge to edge, on every
+     screen size (not just mobile).
+   Local design tokens for this surface: */
+.staff-chat-shell {
+  --r-card: 0.875rem;
+  --r-ctl: 0.5rem;
+  --r-pill: 999px;
+  --shadow-card: 0 24px 60px rgba(17, 17, 20, 0.14);
+  --shadow-soft: 0 1px 2px rgba(17, 17, 20, 0.06);
+  --accent-tint: rgba(229, 37, 26, 0.07);
+  --accent-tint-soft: rgba(229, 37, 26, 0.045);
+}
 
 .staff-chat-body {
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse 60rem 40rem at 50% -10%, rgba(229, 37, 26, 0.08), transparent), var(--bg-soft);
+  background:
+    radial-gradient(ellipse 60rem 40rem at 50% -10%, var(--accent-tint), transparent),
+    var(--bg-soft);
   padding: 1.5rem;
 }
 
@@ -19,12 +39,50 @@
   max-width: 64rem;
 }
 
-.staff-login-card,
+/* ---- FULL-PAGE dashboard (all viewports) --------------------------
+   As soon as the dashboard is showing, the page stops being a centered
+   card and becomes a full-height app: header pinned, panes scroll. */
+.staff-chat-body:has(.staff-dashboard:not([hidden])) {
+  padding: 0;
+  align-items: stretch;
+  justify-content: stretch;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg-elevated);
+}
+
+.staff-chat-body:has(.staff-dashboard:not([hidden])) .staff-chat-shell,
+.staff-chat-shell-wide {
+  max-width: 100%;
+}
+
+.staff-chat-shell-wide {
+  height: 100%;
+}
+
+/* ---- Cards -------------------------------------------------------- */
+.staff-login-card {
+  background: var(--bg-elevated);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
 .staff-dashboard {
   background: var(--bg-elevated);
-  border-radius: 0.75rem;
-  box-shadow: 0 20px 60px rgba(17, 17, 20, 0.16);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
+}
+
+/* Once live, the dashboard fills the shell and drops its card chrome. */
+.staff-dashboard:not([hidden]) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .staff-login-accent,
@@ -34,8 +92,14 @@
   background: linear-gradient(90deg, var(--accent), var(--accent-deep));
 }
 
+/* The full-page dashboard doesn't need the decorative top stripe. */
+.staff-dashboard:not([hidden]) .staff-dashboard-accent {
+  display: none;
+}
+
+/* ---- Sign-in ------------------------------------------------------ */
 .staff-login-body {
-  padding: 2.25rem 2rem 2rem;
+  padding: 2.5rem 2rem 2rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -49,8 +113,9 @@
 
 .staff-login-title {
   font-family: var(--font-display);
-  font-size: 1.25rem;
+  font-size: 1.3125rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
   margin-bottom: 1.25rem;
 }
 
@@ -64,8 +129,6 @@
   margin-top: -0.5rem;
 }
 
-/* Sign-in polish: contextual subtitle, password hint, and the request-sent
-   success state. */
 .staff-login-subtitle {
   margin-top: -1rem;
   margin-bottom: 1.5rem;
@@ -99,7 +162,7 @@
   height: 3rem;
   margin-bottom: 0.5rem;
   border-radius: 50%;
-  background: rgba(229, 37, 26, 0.1);
+  background: var(--accent-tint);
   color: var(--accent);
 }
 
@@ -114,218 +177,6 @@
   line-height: 1.5;
   color: var(--ink-dim);
   margin-bottom: 0.75rem;
-}
-
-/* Canned quick-reply chips above the staff reply box -- a horizontal,
-   scrollable row so it never wraps or pushes the composer around. */
-.staff-quick-replies {
-  display: flex;
-  gap: 0.4rem;
-  padding: 0.5rem 0.75rem 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.staff-quick-replies::-webkit-scrollbar {
-  display: none;
-}
-
-.staff-quick-reply {
-  flex-shrink: 0;
-  border: 1px solid var(--line);
-  background: var(--bg);
-  color: var(--ink-muted);
-  font-size: 0.75rem;
-  line-height: 1.2;
-  padding: 0.35rem 0.65rem;
-  border-radius: 1rem;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: border-color 0.15s var(--ease), color 0.15s var(--ease), background-color 0.15s var(--ease);
-}
-
-.staff-quick-reply:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.staff-dashboard-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg-elevated);
-}
-
-.staff-dashboard-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-}
-
-.staff-dashboard-brand .staff-login-title {
-  margin-bottom: 0;
-}
-
-.staff-dashboard-logo {
-  height: 1.75rem;
-  width: auto;
-}
-
-.staff-dashboard-head-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.staff-logout-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  border-color: var(--line);
-  color: var(--ink-dim);
-  padding: 0.5rem 0.875rem;
-}
-
-.staff-logout-btn[hidden] {
-  display: none;
-}
-
-.staff-logout-btn .icon {
-  flex-shrink: 0;
-}
-
-.staff-logout-btn[disabled] {
-  color: var(--ink-faint);
-  cursor: default;
-}
-
-.staff-logout-btn[disabled]:hover {
-  border-color: var(--line);
-  color: var(--ink-faint);
-}
-
-.staff-logout-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.staff-manage-panel {
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg-soft);
-}
-
-.staff-manage-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1.25rem;
-}
-
-.staff-manage-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.625rem 0.75rem;
-  background: var(--bg-elevated);
-  border-radius: var(--radius-sm);
-  font-size: 0.875rem;
-}
-
-.staff-manage-remove {
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--ink-dim);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.staff-manage-remove:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.staff-manage-admin-check {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-  color: var(--ink-dim);
-  margin-top: -0.5rem;
-}
-
-.staff-manage-error {
-  font-size: 0.8125rem;
-  color: var(--accent);
-}
-
-/* Account-approval UI: pending-request list, its approve/reject actions,
-   the sign-in <-> request-account switch, and the status note. */
-.staff-manage-subhead {
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--ink-faint);
-  margin-bottom: 0.5rem;
-}
-
-.staff-pending-list {
-  margin-bottom: 1.25rem;
-}
-
-.staff-manage-empty {
-  font-size: 0.8125rem;
-  color: var(--ink-dim);
-  padding: 0.25rem 0;
-}
-
-.staff-pending-actions {
-  display: flex;
-  gap: 0.5rem;
-  flex-shrink: 0;
-}
-
-.staff-pending-approve,
-.staff-pending-reject {
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 0.25rem 0.6rem;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  border: 1px solid var(--line);
-}
-
-.staff-pending-approve {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #ffffff;
-}
-
-.staff-pending-approve:hover {
-  background: var(--accent-deep);
-  border-color: var(--accent-deep);
-}
-
-.staff-pending-reject {
-  background: transparent;
-  color: var(--ink-dim);
-}
-
-.staff-pending-reject:hover {
-  border-color: var(--accent);
-  color: var(--accent);
 }
 
 .staff-login-switch {
@@ -357,12 +208,230 @@
   text-align: center;
 }
 
-.staff-team-toggle-badge {
+/* ---- App header --------------------------------------------------- */
+.staff-dashboard-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-shrink: 0;
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-soft);
+  z-index: 2;
+}
+
+.staff-dashboard-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.staff-dashboard-brand .staff-login-title {
+  margin-bottom: 0;
+  font-size: 1.0625rem;
+  white-space: nowrap;
+}
+
+.staff-dashboard-logo {
+  height: 1.75rem;
+  width: auto;
+}
+
+.staff-dashboard-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+/* Header actions = quiet ghost buttons that fill softly on hover. */
+.staff-logout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-dim);
+  border-radius: var(--r-ctl);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  transition: background-color 0.15s var(--ease), color 0.15s var(--ease),
+    border-color 0.15s var(--ease);
+}
+
+.staff-logout-btn[hidden] {
+  display: none;
+}
+
+.staff-logout-btn .icon {
+  flex-shrink: 0;
+}
+
+.staff-logout-btn[disabled] {
+  color: var(--ink-faint);
+  cursor: default;
+}
+
+.staff-logout-btn[disabled]:hover {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-faint);
+}
+
+.staff-logout-btn:hover {
+  background: var(--bg-soft);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+/* Sign-out gets a subtle red-on-hover treatment to set it apart. */
+.staff-logout-btn[data-staff-logout]:hover {
+  background: var(--accent-tint);
+  border-color: transparent;
+  color: var(--accent-deep);
+}
+
+/* ---- Slide-down panels (manage / team / email) -------------------- */
+.staff-manage-panel,
+.staff-team-panel {
+  flex-shrink: 0;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-soft);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.staff-manage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.staff-manage-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0.875rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--r-ctl);
+  font-size: 0.875rem;
+}
+
+.staff-manage-remove {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.3rem 0.55rem;
+  border-radius: var(--r-ctl);
+  cursor: pointer;
+}
+
+.staff-manage-remove:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.staff-manage-admin-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--ink-dim);
+  margin-top: -0.5rem;
+}
+
+.staff-manage-error {
+  font-size: 0.8125rem;
+  color: var(--accent);
+}
+
+.staff-manage-subhead {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-faint);
+  margin-bottom: 0.5rem;
+}
+
+.staff-pending-list {
+  margin-bottom: 1.25rem;
+}
+
+.staff-manage-empty {
+  font-size: 0.8125rem;
+  color: var(--ink-dim);
+  padding: 0.25rem 0;
+}
+
+.staff-pending-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.staff-pending-approve,
+.staff-pending-reject {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.3rem 0.65rem;
+  border-radius: var(--r-ctl);
+  cursor: pointer;
+  border: 1px solid var(--line);
+}
+
+.staff-pending-approve {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.staff-pending-approve:hover {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+}
+
+.staff-pending-reject {
+  background: transparent;
+  color: var(--ink-dim);
+}
+
+.staff-pending-reject:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.staff-manage-hint {
+  font-size: 0.8125rem;
+  color: var(--ink-dim);
+  margin-bottom: 0.75rem;
+}
+
+.staff-manage-note {
+  font-size: 0.8125rem;
+  color: var(--ink-dim);
+}
+
+/* ---- Team chat panel --------------------------------------------- */
+.staff-team-toggle-badge,
+.staff-team-room-badge {
   flex-shrink: 0;
   min-width: 1.125rem;
   height: 1.125rem;
   padding: 0 0.3rem;
-  border-radius: 1rem;
+  border-radius: var(--r-pill);
   background: var(--accent);
   color: #fff;
   font-family: var(--font-mono);
@@ -370,12 +439,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.staff-team-panel {
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg-soft);
 }
 
 .staff-team-rooms {
@@ -395,35 +458,28 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.625rem 0.75rem;
+  padding: 0.75rem 0.875rem;
   background: var(--bg-elevated);
-  border: none;
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--r-ctl);
   font-family: var(--font-sans);
   font-size: 0.875rem;
   color: var(--ink);
   cursor: pointer;
   text-align: left;
-  transition: background-color 0.15s var(--ease);
+  transition: border-color 0.15s var(--ease), background-color 0.15s var(--ease);
 }
 
 .staff-team-room-item:hover {
-  background: var(--panel);
+  border-color: var(--accent);
+  background: var(--bg-elevated);
 }
 
-.staff-team-room-badge {
-  flex-shrink: 0;
-  min-width: 1.25rem;
-  height: 1.25rem;
-  padding: 0 0.375rem;
-  border-radius: 1rem;
-  background: var(--accent);
-  color: #fff;
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.staff-team-room-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .staff-team-thread {
@@ -453,19 +509,20 @@
 .staff-team-messages {
   max-height: 18rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--r-ctl);
   background: var(--bg-elevated);
   margin-bottom: 0.75rem;
 }
 
+/* ---- Main layout: conversation list + thread --------------------- */
 .staff-chat-layout {
   display: flex;
-  min-height: 28rem;
-  max-height: 70vh;
+  flex: 1;
+  min-height: 0;
 }
 
 .staff-conv-pane {
-  width: 16rem;
+  width: 20rem;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -474,9 +531,12 @@
   background: var(--bg-soft);
 }
 
+/* Open / Closed as a soft segmented control. */
 .staff-conv-tabs {
   display: flex;
+  gap: 0.25rem;
   flex-shrink: 0;
+  padding: 0.5rem;
   border-bottom: 1px solid var(--line);
 }
 
@@ -488,36 +548,39 @@
   font-family: var(--font-sans);
   font-size: 0.8125rem;
   font-weight: 600;
-  padding: 0.625rem 0.5rem;
+  padding: 0.5rem 0.5rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.375rem;
-  border-bottom: 2px solid transparent;
-  transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
+  border-radius: var(--r-ctl);
+  transition: color 0.15s var(--ease), background-color 0.15s var(--ease);
 }
 
 .staff-conv-tab:hover {
   color: var(--ink);
+  background: rgba(17, 17, 20, 0.03);
 }
 
 .staff-conv-tab.is-active {
   color: var(--accent);
-  border-bottom-color: var(--accent);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-soft);
 }
 
 .staff-conv-tab-count {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   color: var(--ink-faint);
-  background: var(--bg-elevated);
-  border-radius: 1rem;
-  padding: 0.0625rem 0.375rem;
+  background: var(--bg-soft);
+  border-radius: var(--r-pill);
+  padding: 0.0625rem 0.4rem;
 }
 
 .staff-conv-tab.is-active .staff-conv-tab-count {
   color: var(--accent);
+  background: var(--accent-tint);
 }
 
 .staff-conv-list {
@@ -528,12 +591,12 @@
 
 .staff-conv-empty {
   height: 100%;
-  padding: 1.5rem;
+  padding: 2rem 1.5rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.625rem;
+  gap: 0.75rem;
   text-align: center;
   font-size: 0.875rem;
   color: var(--ink-faint);
@@ -541,7 +604,7 @@
 
 .staff-conv-empty .icon {
   color: var(--ink-faint);
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .staff-conv-item {
@@ -550,26 +613,26 @@
   gap: 0.75rem;
   width: 100%;
   text-align: left;
-  padding: 0.875rem 1rem;
+  padding: 0.8125rem 1rem;
   border: none;
   border-left: 3px solid transparent;
   border-bottom: 1px solid var(--line);
   background: transparent;
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: background-color 0.15s var(--ease), border-color 0.15s var(--ease);
+  transition: background-color 0.12s var(--ease), border-color 0.12s var(--ease);
 }
 
 .staff-conv-item.is-unread {
-  background: rgba(229, 37, 26, 0.04);
+  background: var(--accent-tint-soft);
 }
 
-.staff-conv-item:hover,
-.staff-conv-item.is-active {
+.staff-conv-item:hover {
   background: var(--bg-elevated);
 }
 
 .staff-conv-item.is-active {
+  background: var(--bg-elevated);
   border-left-color: var(--accent);
 }
 
@@ -578,13 +641,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.5rem;
+  height: 2.5rem;
   border-radius: 50%;
   color: #fff;
   font-family: var(--font-display);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 600;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.15);
 }
 
 .staff-conv-item-body {
@@ -639,23 +703,25 @@
   font-weight: 600;
 }
 
+/* ---- Thread ------------------------------------------------------- */
 .staff-thread {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  background: var(--bg-elevated);
 }
 
 .staff-thread-placeholder {
   height: 100%;
-  padding: 1.5rem;
+  padding: 2rem 1.5rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.75rem;
+  gap: 0.875rem;
   text-align: center;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   color: var(--ink-faint);
 }
 
@@ -665,15 +731,17 @@
 
 .staff-thread-placeholder .icon {
   color: var(--ink-faint);
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 .staff-thread-head {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.75rem 1rem;
+  flex-shrink: 0;
+  padding: 0.875rem 1.25rem;
   border-bottom: 1px solid var(--line);
+  background: var(--bg-elevated);
 }
 
 .staff-thread-avatar {
@@ -681,20 +749,22 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.875rem;
-  height: 1.875rem;
+  width: 2.125rem;
+  height: 2.125rem;
   border-radius: 50%;
   color: #fff;
   font-family: var(--font-display);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.15);
 }
 
 .staff-thread-visitor {
   flex: 1;
   min-width: 0;
-  font-size: 0.8125rem;
-  color: var(--ink-dim);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -703,15 +773,16 @@
 .staff-thread-status-btn {
   flex-shrink: 0;
   border: 1px solid var(--line);
-  background: transparent;
+  background: var(--bg-soft);
   color: var(--ink-dim);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 0.25rem 0.625rem;
-  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--r-pill);
   cursor: pointer;
+  transition: border-color 0.15s var(--ease), color 0.15s var(--ease);
 }
 
 .staff-thread-status-btn:hover {
@@ -719,10 +790,7 @@
   color: var(--accent);
 }
 
-/* The back button itself is mobile-only (see the max-width: 700px block
-   below) -- desktop shows both panes side by side, so there's nothing to
-   "go back" from. The head bar stays visible on desktop too, though, since
-   the visitor name/email label above is useful there regardless. */
+/* Back button is mobile-only (single-pane view); hidden on desktop. */
 .staff-thread-back {
   display: none;
   border: none;
@@ -741,135 +809,6 @@
   color: var(--accent);
 }
 
-/* Below this width, the side-by-side list+thread layout has no room to
-   breathe, so it switches to a single full-screen pane at a time --
-   list first, tap a conversation to take over the screen with the
-   thread, "Conversations" to go back. Toggled via the is-thread-open
-   class on .staff-chat-layout (assets/js/chat-admin.js). */
-@media (max-width: 700px) {
-  /* Only fix the shell to the viewport height once the dashboard itself is
-     showing -- the sign-in card should stay a normal centered, padded card
-     that can scroll like any other page. Once signed in, this becomes a
-     fixed-height app shell instead: the header (and any open panel) stays
-     put, and only the conversation list / thread messages scroll inside
-     their own regions -- otherwise the whole page scrolled as one long
-     column, and reaching Sign out/Notifications from partway down a long
-     thread meant scrolling all the way back to the top. */
-  .staff-chat-body:has(.staff-dashboard:not([hidden])) {
-    padding: 0;
-    align-items: stretch;
-    height: 100vh;
-    height: 100dvh;
-    overflow: hidden;
-  }
-
-  .staff-chat-shell,
-  .staff-chat-shell-wide {
-    max-width: 100%;
-  }
-
-  .staff-dashboard {
-    border-radius: 0;
-    box-shadow: none;
-  }
-
-  .staff-dashboard:not([hidden]) {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .staff-dashboard-head {
-    flex-shrink: 0;
-    gap: 0.5rem;
-    padding: 0.6875rem 0.875rem;
-  }
-
-  .staff-dashboard-brand .staff-login-title {
-    font-size: 1rem;
-  }
-
-  /* One tidy, thumb-friendly row of icon-only actions. Labels (plain spans)
-     are hidden; the unread badges (classed spans) stay. If they don't all
-     fit, the row scrolls horizontally rather than wrapping into a messy pile. */
-  .staff-dashboard-head-actions {
-    gap: 0.375rem;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .staff-dashboard-head-actions::-webkit-scrollbar {
-    display: none;
-  }
-
-  .staff-dashboard-head-actions .staff-logout-btn {
-    flex-shrink: 0;
-    padding: 0;
-    width: 2.5rem;
-    height: 2.5rem;
-    justify-content: center;
-  }
-
-  .staff-dashboard-head-actions .staff-logout-btn span:not([class]) {
-    display: none;
-  }
-
-  .staff-team-panel,
-  .staff-manage-panel {
-    flex-shrink: 0;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    max-height: 55vh;
-    max-height: 55dvh;
-  }
-
-  .staff-chat-layout {
-    flex: 1;
-    min-height: 0;
-    max-height: none;
-  }
-
-  .staff-conv-pane {
-    width: 100%;
-    border-right: none;
-  }
-
-  /* Roomier list rows + smooth momentum scrolling on touch. */
-  .staff-conv-item {
-    padding: 1rem;
-  }
-
-  .staff-conv-list,
-  .staff-thread-messages,
-  .staff-team-messages {
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .staff-thread-back {
-    display: inline-flex;
-  }
-
-  .staff-chat-layout:not(.is-thread-open) .staff-thread {
-    display: none;
-  }
-
-  .staff-chat-layout.is-thread-open .staff-conv-pane {
-    display: none;
-  }
-
-  /* Composer sits above the home indicator; 16px input prevents iOS zoom. */
-  .staff-thread .chat-input-row,
-  .staff-team-thread .chat-input-row {
-    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
-  }
-
-  .staff-thread .chat-input,
-  .staff-team-thread .chat-input {
-    font-size: 16px;
-  }
-}
-
 .staff-thread-active {
   flex: 1;
   min-width: 0;
@@ -886,15 +825,51 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  background: var(--bg-elevated);
 }
 
-/* Lead panel + Send-to-ServiceM8 (above the thread messages) */
+/* ---- Canned quick-reply chips ------------------------------------ */
+.staff-quick-replies {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.625rem 1rem 0.25rem;
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.staff-quick-replies::-webkit-scrollbar {
+  display: none;
+}
+
+.staff-quick-reply {
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+  line-height: 1.2;
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s var(--ease), color 0.15s var(--ease),
+    background-color 0.15s var(--ease);
+}
+
+.staff-quick-reply:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--bg-elevated);
+}
+
+/* ---- Lead panel + Send-to-ServiceM8 ------------------------------ */
 .staff-lead {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
-  padding: 0.75rem 1rem;
+  padding: 0.875rem 1.25rem;
   border-bottom: 1px solid var(--line);
   background: var(--bg-soft);
 }
@@ -906,13 +881,13 @@
 .staff-lead-details {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.375rem 1.25rem;
+  gap: 0.375rem 1.5rem;
 }
 
 .staff-lead-row {
   display: flex;
   align-items: baseline;
-  gap: 0.4rem;
+  gap: 0.45rem;
   min-width: 0;
   font-size: 0.8125rem;
 }
@@ -954,8 +929,9 @@ a.staff-lead-value:hover {
   border-color: var(--accent);
   background: var(--accent);
   color: #ffffff;
-  padding: 0.4375rem 0.875rem;
+  padding: 0.5rem 0.9rem;
   font-size: 0.75rem;
+  border-radius: var(--r-ctl);
 }
 
 .staff-lead-sm8-btn:hover {
@@ -986,4 +962,107 @@ a.staff-lead-value:hover {
 
 .staff-lead-sm8-note a {
   color: var(--accent-deep);
+}
+
+/* ---- Composer ---------------------------------------------------- */
+.staff-thread .chat-input-row,
+.staff-team-thread .chat-input-row {
+  flex-shrink: 0;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--line);
+  background: var(--bg-elevated);
+}
+
+/* ==================================================================
+   MOBILE  (<= 700px): one full-screen pane at a time. The list fills
+   the screen; tapping a conversation slides the thread over it, and
+   "Conversations" (the back button) returns. Toggled via
+   .is-thread-open on .staff-chat-layout (assets/js/chat-admin.js).
+   ================================================================== */
+@media (max-width: 700px) {
+  .staff-chat-shell,
+  .staff-chat-shell-wide {
+    max-width: 100%;
+  }
+
+  .staff-dashboard-head {
+    gap: 0.5rem;
+    padding: 0.6875rem 0.875rem;
+  }
+
+  .staff-dashboard-brand .staff-login-title {
+    font-size: 1rem;
+  }
+
+  /* One tidy, thumb-friendly row of icon-only actions; labels (plain
+     spans) hide, unread badges (classed spans) stay. Scrolls sideways
+     rather than wrapping if they don't all fit. */
+  .staff-dashboard-head-actions {
+    gap: 0.375rem;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .staff-dashboard-head-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .staff-dashboard-head-actions .staff-logout-btn {
+    flex-shrink: 0;
+    padding: 0;
+    width: 2.75rem;
+    height: 2.75rem;
+    justify-content: center;
+  }
+
+  .staff-dashboard-head-actions .staff-logout-btn span:not([class]) {
+    display: none;
+  }
+
+  .staff-team-panel,
+  .staff-manage-panel {
+    max-height: 55vh;
+    max-height: 55dvh;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .staff-conv-pane {
+    width: 100%;
+    border-right: none;
+  }
+
+  /* Roomier list rows + momentum scrolling on touch. */
+  .staff-conv-item {
+    padding: 1rem;
+  }
+
+  .staff-conv-list,
+  .staff-thread-messages,
+  .staff-team-messages {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .staff-thread-back {
+    display: inline-flex;
+  }
+
+  .staff-chat-layout:not(.is-thread-open) .staff-thread {
+    display: none;
+  }
+
+  .staff-chat-layout.is-thread-open .staff-conv-pane {
+    display: none;
+  }
+
+  /* Composer clears the home indicator; 16px input avoids iOS zoom. */
+  .staff-thread .chat-input-row,
+  .staff-team-thread .chat-input-row {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
+
+  .staff-thread .chat-input,
+  .staff-team-thread .chat-input {
+    font-size: 16px;
+  }
 }

@@ -66,6 +66,8 @@ document.addEventListener("DOMContentLoaded", function () {
   var teamBackBtn = document.querySelector("[data-staff-team-back]");
   var teamReplyForm = document.querySelector("[data-staff-team-reply-form]");
   var teamReplyInput = document.querySelector("[data-staff-team-reply-input]");
+  var tabNavButtons = document.querySelectorAll("[data-staff-tab]");
+  var chatTabBadge = document.querySelector("[data-staff-chat-badge]");
   if (!loginEl || !dashboardEl || !loginForm) return;
 
   var AVATAR_COLORS = ["#2563eb", "#059669", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
@@ -105,6 +107,11 @@ document.addEventListener("DOMContentLoaded", function () {
   var teamStaffList = [];
   var teamUnread = {};
   var activeTeamRoom = null;
+  // Which top-level dashboard section is showing (customer chat / team /
+  // manage / email). Distinct from activeTab above, which is the Open/Closed
+  // conversation filter inside the customer-chat section.
+  var activeSection = "chat";
+  var chatUnread = 0;
 
   function findConversation(conversationId) {
     var all = openList.concat(closedList);
@@ -125,8 +132,9 @@ document.addEventListener("DOMContentLoaded", function () {
     dashboardEl.hidden = false;
     if (shellEl) shellEl.classList.add("staff-chat-shell-wide");
     if (manageToggleBtn) manageToggleBtn.hidden = !isAdmin;
-    if (managePanel) managePanel.hidden = true;
-    if (emailPanel) emailPanel.hidden = true;
+    // Show the customer-chat section by default; hides the other panels.
+    chatUnread = 0;
+    selectSection("chat");
     // Populate the pending-requests badge on entry so an admin sees waiting
     // requests without opening the panel first.
     loadPendingRequests();
@@ -151,6 +159,68 @@ document.addEventListener("DOMContentLoaded", function () {
     teamStaffList = [];
     teamUnread = {};
     focusUsername();
+  }
+
+  // ---- Top-level section tabs --------------------------------------
+  // The dashboard shows exactly ONE section at a time. Customer chat is the
+  // default. Header buttons carrying data-staff-tab act as tabs; Notifications
+  // and Sign out sit outside this group and stay plain actions.
+  var sectionEls = {
+    chat: layoutEl,
+    team: teamPanel,
+    manage: managePanel,
+    email: emailPanel,
+  };
+
+  function updateChatTabBadge() {
+    if (!chatTabBadge) return;
+    chatTabBadge.textContent = chatUnread;
+    chatTabBadge.hidden = chatUnread === 0;
+  }
+
+  function selectSection(name) {
+    if (!sectionEls[name]) name = "chat";
+    activeSection = name;
+    Object.keys(sectionEls).forEach(function (key) {
+      var el = sectionEls[key];
+      if (!el) return;
+      var on = key === name;
+      el.hidden = !on;
+      el.classList.toggle("staff-section-active", on);
+    });
+    for (var i = 0; i < tabNavButtons.length; i++) {
+      var btn = tabNavButtons[i];
+      var on = btn.getAttribute("data-staff-tab") === name;
+      btn.classList.toggle("is-active", on);
+      if (on) {
+        btn.setAttribute("aria-current", "true");
+      } else {
+        btn.removeAttribute("aria-current");
+      }
+    }
+    // Section-specific work when it becomes visible.
+    if (name === "chat") {
+      chatUnread = 0;
+      updateChatTabBadge();
+    } else if (name === "team") {
+      renderTeamRooms();
+    } else if (name === "manage") {
+      loadStaffUsers();
+      loadPendingRequests();
+    } else if (name === "email") {
+      var input = document.getElementById("staff-recovery-email");
+      if (input) {
+        try {
+          input.focus();
+        } catch (e) {}
+      }
+    }
+  }
+
+  for (var tabIdx = 0; tabIdx < tabNavButtons.length; tabIdx++) {
+    tabNavButtons[tabIdx].addEventListener("click", function () {
+      selectSection(this.getAttribute("data-staff-tab"));
+    });
   }
 
   // Toggles the login form between "create the first (admin) account"
@@ -496,6 +566,13 @@ document.addEventListener("DOMContentLoaded", function () {
   window.addEventListener("focus", clearTitleFlash);
 
   function notifyNewVisitorMessage(conversationId) {
+    // Badge the Customer chat tab when a visitor writes in while staff are
+    // viewing another section, so a live customer isn't missed behind a
+    // hidden tab. Counted before the focus check below so it's always exact.
+    if (activeSection !== "chat") {
+      chatUnread++;
+      updateChatTabBadge();
+    }
     // Skip if they're already looking at this exact conversation, tab focused.
     if (conversationId === activeConversationId && !document.hidden) return;
     playNewMessageSound();
@@ -765,17 +842,8 @@ document.addEventListener("DOMContentLoaded", function () {
     renderTeamRooms();
   }
 
-  if (teamToggleBtn) {
-    teamToggleBtn.addEventListener("click", function () {
-      if (!teamPanel) return;
-      if (teamPanel.hidden) {
-        teamPanel.hidden = false;
-        renderTeamRooms();
-      } else {
-        teamPanel.hidden = true;
-      }
-    });
-  }
+  // Team chat is opened via its header tab (see selectSection); the tab's
+  // click handler calls renderTeamRooms when the section becomes visible.
 
   if (teamBackBtn) {
     teamBackBtn.addEventListener("click", closeTeamRoom);
@@ -1260,17 +1328,8 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   }
 
-  if (manageToggleBtn) {
-    manageToggleBtn.addEventListener("click", function () {
-      if (managePanel.hidden) {
-        loadStaffUsers();
-        loadPendingRequests();
-        managePanel.hidden = false;
-      } else {
-        managePanel.hidden = true;
-      }
-    });
-  }
+  // Manage staff is opened via its header tab (see selectSection), which
+  // loads the staff + pending lists when the section becomes visible.
 
   if (addStaffForm) {
     addStaffForm.addEventListener("submit", function (e) {
@@ -1359,23 +1418,8 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // ---- Recovery email: a signed-in user sets their own reset address ----
-  if (emailToggleBtn) {
-    emailToggleBtn.addEventListener("click", function () {
-      if (!emailPanel) return;
-      var show = emailPanel.hidden;
-      if (managePanel) managePanel.hidden = true;
-      if (teamPanel) teamPanel.hidden = true;
-      emailPanel.hidden = !show;
-      if (show) {
-        var input = document.getElementById("staff-recovery-email");
-        if (input) {
-          try {
-            input.focus();
-          } catch (e) {}
-        }
-      }
-    });
-  }
+  // Opened via its header tab (see selectSection), which focuses the input
+  // when the section becomes visible.
 
   if (emailForm) {
     emailForm.addEventListener("submit", function (e) {

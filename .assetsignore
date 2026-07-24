@@ -2,3 +2,5 @@
 **/.wrangler
 **/node_modules
 **/.DS_Store
+_blog-template.html
+BLOG-GUIDE.md

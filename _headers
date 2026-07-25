@@ -1,6 +1,6 @@
 /
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
-  Link: </llms.txt>; rel="describedby"
+  Link: </llms.txt>; rel="describedby", </.well-known/api-catalog>; rel="api-catalog"
 
 /.well-known/api-catalog
   Content-Type: application/linkset+json

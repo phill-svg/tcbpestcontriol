@@ -71,6 +71,14 @@ html.search-open {
   flex-shrink: 0;
 }
 
+/* .search-input itself is borderless (it sits inline with an icon and the
+   close button), so the visible focus indicator goes on the row instead --
+   it had none at all before, which failed WCAG 2.4.7. */
+.search-field:focus-within {
+  border-bottom-color: var(--accent);
+  box-shadow: inset 0 -2px 0 0 var(--accent);
+}
+
 .search-field svg {
   color: var(--ink-faint);
   flex-shrink: 0;

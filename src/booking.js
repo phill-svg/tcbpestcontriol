@@ -1,0 +1,64 @@
+// Shared booking-enquiry logic used by both the public /api/booking HTTP
+// endpoint (src/index.js's handleBooking) and the submit_booking_enquiry MCP
+// tool (src/mcp.js) -- one place for field validation and the
+// ServiceM8-lead-plus-notification-email pipeline, so the two entry points
+// can never drift apart.
+import { createServiceM8Lead } from "./servicem8.js";
+import { sendBookingNotification, sendBookingConfirmation } from "./email.js";
+
+export function validateBookingFields(f) {
+	const errors = [];
+	if (!f.name || f.name.length > 120) errors.push("Please enter your name.");
+	if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) errors.push("Please enter a valid email address.");
+	if (f.phone.replace(/\D/g, "").length < 6) errors.push("Please enter a valid phone number.");
+	if (!f.address) errors.push("Please enter the service address.");
+	if (!f.service) errors.push("Please choose a service.");
+	if (f.message.length > 2000) errors.push("Message is too long.");
+	return errors;
+}
+
+// f = { name, email, phone, address, service, date, time, message } -- all
+// already trimmed strings. sourceLabel is prepended to the ServiceM8 job
+// description so staff can tell at a glance where the enquiry came from
+// (the web form vs. an AI agent via MCP).
+//
+// Never throws: a ServiceM8 API failure is caught and logged so the caller
+// still gets a clean response, and the office notification email (sent
+// regardless) captures the raw enquiry for manual entry.
+export async function createBookingAndNotify(env, ctx, f, sourceLabel) {
+	const description = [
+		sourceLabel,
+		`Service: ${f.service}`,
+		f.date || f.time ? `Preferred: ${[f.date, f.time].filter(Boolean).join(" ")}` : "",
+		"",
+		f.message || "(no additional notes)",
+	]
+		.filter((l) => l !== "")
+		.join("\n");
+
+	const booking = { name: f.name, email: f.email, phone: f.phone, address: f.address, service: f.service, date: f.date, time: f.time, message: f.message };
+	let jobUrl = null;
+	try {
+		const result = await createServiceM8Lead(env, { name: f.name, email: f.email, phone: f.phone, address: f.address, description }, { force: true });
+		jobUrl = result && result.jobUrl;
+	} catch (e) {
+		// Don't fail the enquiry on a ServiceM8 hiccup -- the office notification
+		// below still captures the lead (flagged for manual entry).
+		console.error("Booking -> ServiceM8 failed:", e && (e.stack || e.message));
+	}
+
+	// Fire the office notification + customer confirmation without blocking the
+	// response (allSettled so one failing send never affects the other). Log the
+	// outcome of each so a send failure is diagnosable.
+	const notify = Promise.allSettled([sendBookingNotification(env, booking, jobUrl), sendBookingConfirmation(env, booking)]).then((results) => {
+		const labels = ["office notification", "customer confirmation"];
+		results.forEach((r, i) => {
+			if (r.status === "rejected") console.error(`Booking ${labels[i]} email FAILED:`, r.reason && (r.reason.stack || r.reason.message));
+			else console.log(`Booking ${labels[i]} email sent`);
+		});
+	});
+	if (ctx && ctx.waitUntil) ctx.waitUntil(notify);
+	else await notify;
+
+	return { jobUrl };
+}

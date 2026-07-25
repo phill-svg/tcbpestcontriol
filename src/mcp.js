@@ -7,9 +7,18 @@
 //
 // Lets an AI agent ask "does TCB cover suburb X?" or "what does a general
 // pest visit cost?" and get a direct answer instead of having to guess from
-// crawled page text. Scoped deliberately to static, low-risk data (suburb
-// coverage, the services list, published starting prices) -- nothing here
-// touches live systems like ServiceM8 availability.
+// crawled page text. Three of the four tools are static, read-only lookups
+// against data already published elsewhere on the site.
+//
+// The fourth, submit_booking_enquiry, is different: it's a write action that
+// creates a real customer + Quote job in ServiceM8 and sends real emails,
+// via the same shared pipeline the /book form itself uses (src/booking.js).
+// There's no live-availability/calendar system to query here -- ServiceM8
+// doesn't expose one cleanly, and the site itself doesn't offer self-service
+// slot picking even to a human visitor. This tool mirrors the actual
+// process instead: submit an enquiry, staff follow up to confirm timing.
+
+import { validateBookingFields, createBookingAndNotify } from "./booking.js";
 
 const PROTOCOL_VERSION = "2025-03-26";
 const SERVER_INFO = { name: "tcb-pest-control", version: "1.0.0" };
@@ -82,6 +91,25 @@ const TOOLS = [
 			properties: { service: { type: "string", description: "Optional service name to filter to, e.g. 'termite inspection'. Omit to get all published starting prices." } },
 		},
 	},
+	{
+		name: "submit_booking_enquiry",
+		description:
+			"Submit a real pest control booking enquiry to TCB Pest Control -- creates an actual customer and Quote job in TCB's live system, exactly like the /book form on the website. TCB staff follow up by phone or email to confirm timing and provide a written quote before any work begins; this does not book a specific time slot. Only call this when the person has clearly asked to book or request a quote, using their real contact details -- never invent contact details.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				name: { type: "string", description: "Full name" },
+				email: { type: "string", description: "Email address" },
+				phone: { type: "string", description: "Phone number" },
+				address: { type: "string", description: "Service address" },
+				service: { type: "string", description: "Which service is needed, e.g. 'General Pest Control' or 'Termite Inspection'" },
+				date: { type: "string", description: "Optional preferred date" },
+				time: { type: "string", description: "Optional preferred time" },
+				message: { type: "string", description: "Optional additional notes" },
+			},
+			required: ["name", "email", "phone", "address", "service"],
+		},
+	},
 ];
 
 function normalize(s) {
@@ -137,10 +165,41 @@ function toolGetServicePricing(args) {
 	);
 }
 
-function callTool(name, args) {
+async function toolSubmitBookingEnquiry(args, env, ctx) {
+	const f = {
+		name: String(args?.name || "").trim(),
+		email: String(args?.email || "").trim(),
+		phone: String(args?.phone || "").trim(),
+		address: String(args?.address || "").trim(),
+		service: String(args?.service || "").trim(),
+		date: String(args?.date || "").trim(),
+		time: String(args?.time || "").trim(),
+		message: String(args?.message || "").trim(),
+	};
+
+	const errors = validateBookingFields(f);
+	if (errors.length) return textResult(errors.join(" "), true);
+
+	if (!env || !env.SERVICEM8_API_KEY) {
+		return textResult(`Booking submission isn't available right now. Please call 02 6105 9771 or submit the form directly at ${SITE}/book.`, true);
+	}
+
+	try {
+		await createBookingAndNotify(env, ctx, f, "Booking enquiry submitted via MCP (AI agent)");
+	} catch (e) {
+		return textResult(`Something went wrong submitting that enquiry. Please call 02 6105 9771 or use ${SITE}/book directly.`, true);
+	}
+
+	return textResult(
+		`Thanks${f.name ? ", " + f.name : ""} -- your enquiry for ${f.service} has been received. TCB Pest Control will contact you (${f.email || f.phone}) to confirm timing and provide a written quote before any work begins.`
+	);
+}
+
+async function callTool(name, args, env, ctx) {
 	if (name === "check_suburb_coverage") return toolCheckSuburbCoverage(args);
 	if (name === "list_services") return toolListServices();
 	if (name === "get_service_pricing") return toolGetServicePricing(args);
+	if (name === "submit_booking_enquiry") return toolSubmitBookingEnquiry(args, env, ctx);
 	return null;
 }
 
@@ -160,7 +219,7 @@ const CORS_HEADERS = {
 // Handles one JSON-RPC message (never a batch entry that's already been
 // unwrapped) and returns either a response object or null for notifications
 // (which get no response at all).
-function handleMessage(msg) {
+async function handleMessage(msg, env, ctx) {
 	if (!msg || typeof msg !== "object" || Array.isArray(msg) || msg.jsonrpc !== "2.0") {
 		return rpcError(msg && typeof msg === "object" ? msg.id ?? null : null, -32600, "Invalid Request");
 	}
@@ -183,14 +242,14 @@ function handleMessage(msg) {
 	if (method === "tools/call") {
 		const toolName = params && params.name;
 		const args = (params && params.arguments) || {};
-		const result = callTool(toolName, args);
+		const result = await callTool(toolName, args, env, ctx);
 		if (isNotification) return null;
 		return result ? rpcResult(id, result) : rpcError(id, -32602, `Unknown tool: ${toolName}`);
 	}
 	return isNotification ? null : rpcError(id, -32601, `Method not found: ${method}`);
 }
 
-export async function handleMcp(request) {
+export async function handleMcp(request, env, ctx) {
 	if (request.method === "OPTIONS") {
 		return new Response(null, { status: 204, headers: CORS_HEADERS });
 	}
@@ -213,7 +272,7 @@ export async function handleMcp(request) {
 
 	const isBatch = Array.isArray(body);
 	const messages = isBatch ? body : [body];
-	const responses = messages.map(handleMessage).filter((r) => r !== null);
+	const responses = (await Promise.all(messages.map((m) => handleMessage(m, env, ctx)))).filter((r) => r !== null);
 
 	if (responses.length === 0) {
 		// Every message was a notification -- per the MCP/JSON-RPC spec, no body.

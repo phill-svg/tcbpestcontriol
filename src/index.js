@@ -1,7 +1,7 @@
 export { ChatHub } from "./chat-hub.js";
 import { logoutCookieHeader, getStaffSession } from "./staff-auth.js";
-import { sendPasswordResetEmail, sendBookingNotification, sendBookingConfirmation } from "./email.js";
-import { createServiceM8Lead } from "./servicem8.js";
+import { sendPasswordResetEmail } from "./email.js";
+import { validateBookingFields, createBookingAndNotify } from "./booking.js";
 import { handleMcp } from "./mcp.js";
 
 export default {
@@ -171,7 +171,7 @@ export default {
 		// suburb coverage, the services list and published starting prices
 		// directly instead of guessing from crawled page text. See src/mcp.js.
 		if (url.pathname === "/mcp") {
-			return handleMcp(request);
+			return handleMcp(request, env, ctx);
 		}
 
 		const response = await fetchAsset(request, url, env);
@@ -247,8 +247,8 @@ function withAgentDiscoveryLinks(response) {
 // literal file (have an extension) or don't match any index.html fall back
 // to an exact-match lookup.
 // Handle a public booking-form submission: validate, (optionally) verify
-// Turnstile, then create a ServiceM8 Quote job. Customer dedup is handled in
-// createServiceM8Lead; force:true so a genuine new booking always creates a job.
+// Turnstile, then hand off to the shared booking pipeline in src/booking.js
+// (also used by the submit_booking_enquiry MCP tool in src/mcp.js).
 async function handleBooking(request, env, ctx) {
 	let body;
 	try {
@@ -269,12 +269,9 @@ async function handleBooking(request, env, ctx) {
 	const time = String(body.time || "").trim();
 	const message = String(body.message || "").trim();
 
-	if (!name || name.length > 120) return jsonError(400, "Please enter your name.");
-	if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return jsonError(400, "Please enter a valid email address.");
-	if (phone.replace(/\D/g, "").length < 6) return jsonError(400, "Please enter a valid phone number.");
-	if (!address) return jsonError(400, "Please enter the service address.");
-	if (!service) return jsonError(400, "Please choose a service.");
-	if (message.length > 2000) return jsonError(400, "Message is too long.");
+	const fields = { name, email, phone, address, service, date, time, message };
+	const errors = validateBookingFields(fields);
+	if (errors.length) return jsonError(400, errors[0]);
 
 	// Optional Turnstile -- only enforced once TURNSTILE_SECRET is configured.
 	if (env.TURNSTILE_SECRET) {
@@ -282,42 +279,7 @@ async function handleBooking(request, env, ctx) {
 		if (!ok) return jsonError(400, "Verification failed. Please try again.");
 	}
 
-	const description = [
-		"Online booking request (website /book form)",
-		`Service: ${service}`,
-		date || time ? `Preferred: ${[date, time].filter(Boolean).join(" ")}` : "",
-		"",
-		message || "(no additional notes)",
-	]
-		.filter((l) => l !== "")
-		.join("\n");
-
-	const booking = { name, email, phone, address, service, date, time, message };
-	let jobUrl = null;
-	try {
-		const result = await createServiceM8Lead(env, { name, email, phone, address, description }, { force: true });
-		jobUrl = result && result.jobUrl;
-	} catch (e) {
-		// Don't fail the booking on a ServiceM8 hiccup -- the office notification
-		// below still captures the lead (flagged for manual entry).
-		console.error("Booking -> ServiceM8 failed:", e && (e.stack || e.message));
-	}
-
-	// Fire the office notification + customer confirmation without blocking the
-	// response (allSettled so one failing send never affects the other). Log the
-	// outcome of each so a send failure is diagnosable.
-	const notify = Promise.allSettled([
-		sendBookingNotification(env, booking, jobUrl),
-		sendBookingConfirmation(env, booking),
-	]).then((results) => {
-		const labels = ["office notification", "customer confirmation"];
-		results.forEach((r, i) => {
-			if (r.status === "rejected") console.error(`Booking ${labels[i]} email FAILED:`, r.reason && (r.reason.stack || r.reason.message));
-			else console.log(`Booking ${labels[i]} email sent`);
-		});
-	});
-	if (ctx && ctx.waitUntil) ctx.waitUntil(notify);
-	else await notify;
+	await createBookingAndNotify(env, ctx, fields, "Online booking request (website /book form)");
 
 	return okJson({ ok: true });
 }

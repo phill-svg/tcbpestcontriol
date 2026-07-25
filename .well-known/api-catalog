@@ -24,6 +24,11 @@
           "href": "https://www.tcbpestcontrolcanberra.com.au/mcp",
           "type": "application/json",
           "title": "MCP server (Streamable HTTP, POST only): check_suburb_coverage, list_services, get_service_pricing and submit_booking_enquiry tools"
+        },
+        {
+          "href": "https://www.tcbpestcontrolcanberra.com.au/index.json",
+          "type": "application/json",
+          "title": "Typed JSON index of every service, location and key page"
         }
       ]
     }

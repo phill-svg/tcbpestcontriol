@@ -3,6 +3,8 @@ import { logoutCookieHeader, getStaffSession } from "./staff-auth.js";
 import { sendPasswordResetEmail } from "./email.js";
 import { validateBookingFields, createBookingAndNotify } from "./booking.js";
 import { handleMcp } from "./mcp.js";
+import { handleIndexJson } from "./index-json.js";
+import { renderMarkdown } from "./markdown.js";
 
 export default {
 	async fetch(request, env, ctx) {
@@ -172,6 +174,26 @@ export default {
 		// directly instead of guessing from crawled page text. See src/mcp.js.
 		if (url.pathname === "/mcp") {
 			return handleMcp(request, env, ctx);
+		}
+
+		// Typed JSON index of the whole site (services, locations, pricing,
+		// pages, MCP info) for agents that want a structured manifest instead
+		// of crawling HTML. See src/index-json.js.
+		if (url.pathname === "/index.json") {
+			return handleIndexJson();
+		}
+
+		// Per-page Markdown for agents that prefer plain text over HTML, e.g.
+		// "/spider-control.md" renders "/spider-control" as Markdown. See
+		// src/markdown.js. Falls through to a normal 404 if the source page
+		// doesn't exist.
+		if (url.pathname.endsWith(".md")) {
+			const sourceUrl = new URL(url.pathname.slice(0, -3) || "/", url);
+			const htmlResponse = await fetchAsset(request, sourceUrl, env);
+			if (htmlResponse.status === 200 && (htmlResponse.headers.get("content-type") || "").includes("text/html")) {
+				return renderMarkdown(htmlResponse, sourceUrl);
+			}
+			return new Response("Not found", { status: 404 });
 		}
 
 		const response = await fetchAsset(request, url, env);

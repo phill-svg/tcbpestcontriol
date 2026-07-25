@@ -62,7 +62,7 @@ Every ACT suburb and surrounding NSW town has its own dedicated page at `/locati
 
 ## For AI agents (MCP)
 
-- [MCP server](/mcp): Model Context Protocol endpoint (Streamable HTTP, POST only, stateless — call `initialize` then `tools/list`). Three tools: `check_suburb_coverage` (is a given suburb serviced, and its page URL), `list_services` (every service with description and URL), `get_service_pricing` (published starting prices only — General Pest Control, Termite Inspection and Rodent Control; every other service is quoted for free, and the tool says so rather than guessing a number).
+- [MCP server](/mcp): Model Context Protocol endpoint (Streamable HTTP, POST only, stateless — call `initialize` then `tools/list`). Four tools: `check_suburb_coverage` (is a given suburb serviced, and its page URL), `list_services` (every service with description and URL), `get_service_pricing` (published starting prices only — General Pest Control, Termite Inspection and Rodent Control; every other service is quoted for free, and the tool says so rather than guessing a number), and `submit_booking_enquiry` (creates a real customer and Quote job in TCB's live system, exactly like the `/book` form — staff follow up to confirm timing; there is no self-service time-slot booking).
 
 ## Contact
 

@@ -84,7 +84,7 @@
   gap: 0.75rem;
   padding: 0.875rem 1rem;
   background: linear-gradient(135deg, var(--accent), var(--accent-deep));
-  color: #ffffff;
+  color: var(--ink-on-accent);
 }
 
 .chat-header-brand {
@@ -103,7 +103,7 @@
   height: 2rem;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.2);
-  color: #ffffff;
+  color: var(--ink-on-accent);
 }
 
 .chat-header-text {
@@ -116,7 +116,7 @@
   font-family: var(--font-display);
   font-size: 0.875rem;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--ink-on-accent);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -145,7 +145,7 @@
 }
 
 .chat-close:hover {
-  color: #ffffff;
+  color: var(--ink-on-accent);
   background: rgba(255, 255, 255, 0.18);
 }
 

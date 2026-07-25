@@ -180,7 +180,7 @@ svg {
 .btn-primary {
   border-color: var(--accent);
   background: var(--accent);
-  color: #ffffff;
+  color: var(--ink-on-accent);
   padding: 0.5rem 1rem;
 }
 
@@ -195,8 +195,8 @@ svg {
 }
 
 .btn-white {
-  border-color: #ffffff;
-  background: #ffffff;
+  border-color: var(--bg-elevated);
+  background: var(--bg-elevated);
   color: var(--accent);
   padding: 1rem 1.5rem;
   justify-content: space-between;
@@ -204,20 +204,20 @@ svg {
 
 .btn-white:hover {
   background: transparent;
-  color: #ffffff;
+  color: var(--ink-on-accent);
 }
 
 .btn-outline-white {
   border-color: rgba(255, 255, 255, 0.4);
   background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
+  color: var(--ink-on-accent);
   padding: 1rem 1.5rem;
   justify-content: space-between;
 }
 
 .btn-outline-white:hover {
-  border-color: #ffffff;
-  background: #ffffff;
+  border-color: var(--bg-elevated);
+  background: var(--bg-elevated);
   color: var(--accent);
 }
 
@@ -258,5 +258,5 @@ svg {
 }
 
 .link-mono:hover {
-  color: #ffffff;
+  color: var(--ink-on-accent);
 }

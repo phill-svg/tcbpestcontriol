@@ -119,7 +119,7 @@
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.22em;
-  color: #65656d;
+  color: var(--ink-dim);
 }
 
 .footer-col ul {

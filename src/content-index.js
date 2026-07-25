@@ -26,7 +26,7 @@ export const SERVICES = [
 	{ name: "Termite Treatment & Inspection", url: "/termite-treatment", description: "Termite inspections, barriers and treatment." },
 	{ name: "Pre-Purchase Inspections", url: "/pre-purchase-inspection", description: "AS 4349.3 timber pest inspections for property purchases." },
 	{ name: "Rodent Control", url: "/rodent-control", description: "Rat and mouse baiting and proofing." },
-	{ name: "Ant Control", url: "/pest-control-for-ants", description: "Ant treatment for homes and businesses." },
+	{ name: "Ant Control", url: "/ant-control", description: "Ant treatment for homes and businesses." },
 	{ name: "Spider Control", url: "/spider-control", description: "Spider treatment including redbacks and funnel-webs." },
 	{ name: "Bee Control", url: "/bees", description: "Bee removal and hive relocation; wasp nest removal." },
 	{ name: "Cockroach Control", url: "/cockroach-control", description: "German and American cockroach treatment." },

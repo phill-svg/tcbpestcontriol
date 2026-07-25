@@ -6,10 +6,25 @@
 import { createServiceM8Lead } from "./servicem8.js";
 import { sendBookingNotification, sendBookingConfirmation } from "./email.js";
 
+// Deliberately not a single regex like /^[^\s@]+@[^\s@]+\.[^\s@]+$/ -- since
+// "." is a valid member of [^\s@], the two variable-length groups either
+// side of the literal "." overlap and can match the same characters in many
+// different ways, which is a classic catastrophic-backtracking (ReDoS)
+// shape on attacker-controlled input (flagged by CodeQL). The regex here
+// only enforces "no @ or whitespace either side of a single @", which is
+// unambiguous and linear-time; the "has a dot in the domain" check is a
+// second, plain string check instead of being folded into the same regex.
+function isValidEmail(email) {
+	if (!/^[^\s@]+@[^\s@]+$/.test(email)) return false;
+	const domain = email.slice(email.indexOf("@") + 1);
+	const dot = domain.indexOf(".");
+	return dot > 0 && dot < domain.length - 1;
+}
+
 export function validateBookingFields(f) {
 	const errors = [];
 	if (!f.name || f.name.length > 120) errors.push("Please enter your name.");
-	if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) errors.push("Please enter a valid email address.");
+	if (!isValidEmail(f.email)) errors.push("Please enter a valid email address.");
 	if (f.phone.replace(/\D/g, "").length < 6) errors.push("Please enter a valid phone number.");
 	if (!f.address) errors.push("Please enter the service address.");
 	if (!f.service) errors.push("Please choose a service.");

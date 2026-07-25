@@ -59,6 +59,8 @@ Every ACT suburb and surrounding NSW town has its own dedicated page at `/locati
 - [Preparation Guides](/preparation): Downloadable PDF guides for preparing a property before a treatment visit.
 - [Blog](/blog): Articles on pest identification, prevention and treatment.
 - [Sitemap](/sitemap.xml): Complete list of every page on the site.
+- [Structured site index](/index.json): typed JSON manifest of every service, location, key page and the MCP endpoint -- for agents that want structured data instead of crawling HTML.
+- Any page is also available as clean Markdown by appending `.md` to its URL, e.g. `/spider-control.md`.
 
 ## For AI agents (MCP)
 

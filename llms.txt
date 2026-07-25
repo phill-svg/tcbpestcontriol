@@ -60,6 +60,10 @@ Every ACT suburb and surrounding NSW town has its own dedicated page at `/locati
 - [Blog](/blog): Articles on pest identification, prevention and treatment.
 - [Sitemap](/sitemap.xml): Complete list of every page on the site.
 
+## For AI agents (MCP)
+
+- [MCP server](/mcp): Model Context Protocol endpoint (Streamable HTTP, POST only, stateless — call `initialize` then `tools/list`). Three tools: `check_suburb_coverage` (is a given suburb serviced, and its page URL), `list_services` (every service with description and URL), `get_service_pricing` (published starting prices only — General Pest Control, Termite Inspection and Rodent Control; every other service is quoted for free, and the tool says so rather than guessing a number).
+
 ## Contact
 
 - [Contact](/contact)

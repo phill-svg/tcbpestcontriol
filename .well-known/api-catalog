@@ -19,6 +19,11 @@
           "href": "https://www.tcbpestcontrolcanberra.com.au/feed.xml",
           "type": "application/rss+xml",
           "title": "Blog RSS feed"
+        },
+        {
+          "href": "https://www.tcbpestcontrolcanberra.com.au/mcp",
+          "type": "application/json",
+          "title": "MCP server (Streamable HTTP, POST only): check_suburb_coverage, list_services and get_service_pricing tools"
         }
       ]
     }

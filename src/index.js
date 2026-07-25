@@ -2,6 +2,7 @@ export { ChatHub } from "./chat-hub.js";
 import { logoutCookieHeader, getStaffSession } from "./staff-auth.js";
 import { sendPasswordResetEmail, sendBookingNotification, sendBookingConfirmation } from "./email.js";
 import { createServiceM8Lead } from "./servicem8.js";
+import { handleMcp } from "./mcp.js";
 
 export default {
 	async fetch(request, env, ctx) {
@@ -164,6 +165,13 @@ export default {
 		// later by setting TURNSTILE_SECRET and adding the widget to the form).
 		if (url.pathname === "/api/booking" && request.method === "POST") {
 			return handleBooking(request, env, ctx);
+		}
+
+		// Public MCP (Model Context Protocol) server -- lets AI agents query
+		// suburb coverage, the services list and published starting prices
+		// directly instead of guessing from crawled page text. See src/mcp.js.
+		if (url.pathname === "/mcp") {
+			return handleMcp(request);
 		}
 
 		const response = await fetchAsset(request, url, env);

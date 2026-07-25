@@ -220,8 +220,18 @@ export default {
 						if (!isStaffPage) el.before(SEARCH_TRIGGER_HTML, { html: true });
 					},
 				})
+				.on("main", {
+					element(el) {
+						// Skip-link target -- every page's content sits in a single
+						// <main>, so this alone gets every page covered.
+						el.setAttribute("id", "main-content");
+					},
+				})
 				.on("body", {
 					element(el) {
+						// Skip-to-content link: applies everywhere (including the staff
+						// dashboard), unlike the visitor search/chat widgets below.
+						el.prepend(SKIP_LINK_HTML, { html: true });
 						if (!isStaffPage) {
 							el.append(SEARCH_OVERLAY_HTML, { html: true });
 							el.append(CHAT_WIDGET_HTML, { html: true });
@@ -344,6 +354,12 @@ async function fetchAsset(request, url, env) {
 
 	return env.ASSETS.fetch(request);
 }
+
+// Off-screen until focused (see .skip-link in assets/css/src/00-base.css) --
+// lets keyboard and screen-reader users jump past the header nav instead of
+// tabbing through it on every single page. Targets the id="main-content"
+// the "main" HTMLRewriter handler above sets on every page's <main>.
+const SKIP_LINK_HTML = `<a class="skip-link" href="#main-content">Skip to main content</a>`;
 
 // Injected into every page's header, right before the phone/CTA group, via
 // HTMLRewriter -- same "fix it once at the edge" approach used above for

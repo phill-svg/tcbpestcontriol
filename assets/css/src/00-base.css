@@ -7,7 +7,7 @@
    that N (repo-wide, e.g. `sed -i 's/style.css?v=OLD/style.css?v=NEW/g'
    across every *.html file) whenever the built output changes, or
    visitors' browsers will keep using their old cached copy for up to a
-   year regardless of what's actually deployed. Current version: v=25. */
+   year regardless of what's actually deployed. Current version: v=34. */
 
 @font-face {
   font-family: "Inter";
@@ -50,7 +50,7 @@
   --ink: #111114;
   --ink-muted: #3f3f46;
   --ink-dim: #5a5a62;
-  --ink-faint: #8a8a92;
+  --ink-faint: #6c6c74; /* WCAG AA (4.5:1) at the small sizes it's used at (breadcrumbs, footer line, step labels) -- #8a8a92 only reached ~3.4:1 */
   --ink-on-accent: #ffffff;
   --accent: #e5251a;
   --accent-deep: #c41613;
@@ -99,6 +99,31 @@ ul {
 
 svg {
   display: block;
+}
+
+/* Skip link: off-screen until focused, so keyboard/screen-reader users can
+   jump past the header nav instead of tabbing through it on every page.
+   Injected via HTMLRewriter in src/index.js (withAgentDiscoveryLinks'
+   sibling), same technique as the search trigger and chat widget. */
+.skip-link {
+  position: absolute;
+  top: -3rem;
+  left: 0.5rem;
+  z-index: 200;
+  background: var(--accent);
+  color: var(--ink-on-accent);
+  padding: 0.75rem 1.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  transition: top 0.15s var(--ease);
+}
+
+.skip-link:focus {
+  top: 0;
 }
 
 /* The [hidden] attribute must always win. Without this, class rules that set

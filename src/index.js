@@ -179,7 +179,7 @@ export default {
 			// The staff admin dashboard gets its own UI instead of the visitor
 			// chat bubble -- see the /staff-chat build in a later stage.
 			const isStaffPage = url.pathname === "/staff-chat" || url.pathname.startsWith("/staff-chat/");
-			return new HTMLRewriter()
+			const rewritten = new HTMLRewriter()
 				.on('link[rel="canonical"]', {
 					element(el) {
 						el.setAttribute("href", canonicalUrl);
@@ -199,11 +199,31 @@ export default {
 					},
 				})
 				.transform(response);
+			return withAgentDiscoveryLinks(rewritten);
 		}
 
 		return response;
 	},
 };
+
+// Advertises machine-readable resources for AI agents/crawlers per RFC 8288
+// (Link headers) and RFC 9727 (the "api-catalog" relation): llms.txt as a
+// site description, and .well-known/api-catalog as the discovery entrypoint
+// listing it alongside the sitemap and blog feed.
+//
+// This is set here, in code, rather than left to the _headers file's "/"
+// rule: fetchAsset() below rewrites "/" to "/index.html" before calling
+// env.ASSETS.fetch(), so the request _headers actually sees for the homepage
+// never matches a rule keyed on the exact path "/". Any pre-existing Link
+// header is dropped first so the two sources can never combine into
+// duplicates.
+function withAgentDiscoveryLinks(response) {
+	const headers = new Headers(response.headers);
+	headers.delete("Link");
+	headers.append("Link", '</.well-known/api-catalog>; rel="api-catalog"');
+	headers.append("Link", '</llms.txt>; rel="describedby"');
+	return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
 
 // html_handling is "none", so in principle the assets binding should only
 // serve exact matches. In practice, calling env.ASSETS.fetch() directly on a

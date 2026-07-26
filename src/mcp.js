@@ -24,7 +24,9 @@ import { SITE, SUBURBS, SERVICES, PRICING } from "./content-index.js";
 const PROTOCOL_VERSION = "2025-03-26";
 const SERVER_INFO = { name: "tcb-pest-control", version: "1.0.0" };
 
-const TOOLS = [
+// Exported so scripts/build-ai-catalog.js can generate the published MCP server
+// card from the same definitions the live server serves, rather than restating them.
+export const TOOLS = [
 	{
 		name: "check_suburb_coverage",
 		description:

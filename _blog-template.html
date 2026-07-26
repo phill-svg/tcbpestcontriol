@@ -30,33 +30,39 @@
 <html lang="en-AU">
 <head>
 <meta charset="utf-8"/>
-<script src="https://app.argrow.ai/api/s/g_c5hQeg_B7haDW1fDhu3eAC8N3WzX3E.js" async></script>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-P3FB9505V3"></script>
+<!-- Deferred: chat widget, GTM/gtag and Meta Pixel load after window 'load' so they don't compete with the hero text for the main thread during initial render -->
 <script>
+window.addEventListener("load", function () {
+  var argrowScript = document.createElement("script");
+  argrowScript.src = "https://app.argrow.ai/api/s/g_c5hQeg_B7haDW1fDhu3eAC8N3WzX3E.js";
+  argrowScript.async = true;
+  document.body.appendChild(argrowScript);
+
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
+  window.gtag = gtag;
+  gtag("js", new Date());
+  gtag("config", "G-P3FB9505V3");
+  var gtagScript = document.createElement("script");
+  gtagScript.async = true;
+  gtagScript.src = "https://www.googletagmanager.com/gtag/js?id=G-P3FB9505V3";
+  document.head.appendChild(gtagScript);
 
-  gtag('config', 'G-P3FB9505V3');
-</script>
-<!-- Meta Pixel Code -->
-<script>
-!function(f,b,e,v,n,t,s)
-{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-n.queue=[];t=b.createElement(e);t.async=!0;
-t.src=v;s=b.getElementsByTagName(e)[0];
-s.parentNode.insertBefore(t,s)}(window, document,'script',
-'https://connect.facebook.net/en_US/fbevents.js');
-fbq('init', '1363820809022895');
-fbq('track', 'PageView');
+  !function(f,b,e,v,n,t,s)
+  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version="2.0";
+  n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];
+  s.parentNode.insertBefore(t,s)}(window, document,"script",
+  "https://connect.facebook.net/en_US/fbevents.js");
+  fbq("init", "1363820809022895");
+  fbq("track", "PageView");
+});
 </script>
 <noscript><img alt="" height="1" width="1" style="display:none"
 src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 /></noscript>
-<!-- End Meta Pixel Code -->
 
 <link href="/favicon.ico" rel="icon" type="image/x-icon"/><link href="/assets/favicon/favicon-32x32.png" rel="icon" sizes="32x32" type="image/png"/><link href="/assets/favicon/favicon-16x16.png" rel="icon" sizes="16x16" type="image/png"/><link href="/assets/favicon/apple-touch-icon.png" rel="apple-touch-icon" sizes="180x180"/><link href="/site.webmanifest" rel="manifest"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>

@@ -1,0 +1,22 @@
+{
+  "specVersion": "1.0",
+  "host": {
+    "displayName": "TCB Pest Control Canberra",
+    "identifier": "did:web:www.tcbpestcontrolcanberra.com.au"
+  },
+  "entries": [
+    {
+      "identifier": "urn:air:www.tcbpestcontrolcanberra.com.au:mcp:tcb-pest-control",
+      "displayName": "TCB Pest Control Canberra MCP server",
+      "type": "application/mcp-server-card+json",
+      "url": "https://www.tcbpestcontrolcanberra.com.au/.well-known/mcp-server-card.json",
+      "description": "Check whether a Canberra/ACT or Queanbeyan-region suburb is serviced, list pest control services, get published starting prices, and submit a booking enquiry.",
+      "capabilities": [
+        "check_suburb_coverage",
+        "list_services",
+        "get_service_pricing",
+        "submit_booking_enquiry"
+      ]
+    }
+  ]
+}

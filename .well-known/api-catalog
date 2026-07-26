@@ -29,6 +29,11 @@
           "href": "https://www.tcbpestcontrolcanberra.com.au/index.json",
           "type": "application/json",
           "title": "Typed JSON index of every service, location and key page"
+        },
+        {
+          "href": "https://www.tcbpestcontrolcanberra.com.au/.well-known/ai-catalog.json",
+          "type": "application/json",
+          "title": "Agentic Resource Discovery (ARD) AI Catalog manifest"
         }
       ]
     }

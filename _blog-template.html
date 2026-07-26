@@ -30,9 +30,16 @@
 <html lang="en-AU">
 <head>
 <meta charset="utf-8"/><link as="font" crossorigin href="/assets/fonts/inter-var.woff2" rel="preload" type="font/woff2"/><link as="font" crossorigin href="/assets/fonts/space-grotesk.woff2" rel="preload" type="font/woff2"/>
-<!-- Deferred: chat widget, GTM/gtag and Meta Pixel load after window 'load' so they don't compete with the hero text for the main thread during initial render -->
+<!-- Deferred: chat widget, GTM/gtag and Meta Pixel load on first user interaction (or after a timeout, whichever comes first) so they don't compete with page content for the main thread during initial render -->
 <script>
-window.addEventListener("load", function () {
+(function () {
+  var ran = false;
+  var events = ["scroll", "keydown", "mousemove", "touchstart", "pointerdown"];
+  function run() {
+    if (ran) return;
+    ran = true;
+    events.forEach(function (ev) { window.removeEventListener(ev, run); });
+    clearTimeout(timer);
   var argrowScript = document.createElement("script");
   argrowScript.src = "https://app.argrow.ai/api/s/g_c5hQeg_B7haDW1fDhu3eAC8N3WzX3E.js";
   argrowScript.async = true;
@@ -58,7 +65,10 @@ window.addEventListener("load", function () {
   "https://connect.facebook.net/en_US/fbevents.js");
   fbq("init", "1363820809022895");
   fbq("track", "PageView");
-});
+  }
+  events.forEach(function (ev) { window.addEventListener(ev, run, { passive: true, once: true }); });
+  var timer = setTimeout(run, 5000);
+})();
 </script>
 <noscript><img alt="" height="1" width="1" style="display:none"
 src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"

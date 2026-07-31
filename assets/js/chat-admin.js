@@ -357,28 +357,55 @@ document.addEventListener("DOMContentLoaded", function () {
     } catch (e) {}
   }
 
+  var sessionRetries = 0;
+  var SESSION_MAX_RETRIES = 4;
+
+  // "Couldn't reach the server" is not the same thing as "signed out", and
+  // conflating the two is what made the staff chat feel like it logged you
+  // out at random on a phone -- an iPhone waking from sleep or moving between
+  // wifi and mobile data fails this fetch routinely, and the old catch-all
+  // sent the user straight back to the sign-in form with a session that was
+  // still perfectly valid. Retry a few times first, and never tear down a
+  // dashboard that's already up.
   function checkSession() {
     fetch("/api/staff/session")
       .then(function (res) {
+        if (!res.ok) throw new Error("Session check failed (" + res.status + ")");
         return res.json();
       })
       .then(function (data) {
+        sessionRetries = 0;
         if (data.authenticated) {
           isAdmin = !!data.isAdmin;
           myUsername = data.username;
           showDashboard();
-        } else {
-          return fetch("/api/staff/bootstrap-check")
-            .then(function (res) {
-              return res.json();
-            })
-            .then(function (bootstrap) {
-              setupLoginForm(!!bootstrap.needed);
-              showLogin();
-            });
+          return;
         }
+        return fetch("/api/staff/bootstrap-check")
+          .then(function (res) {
+            return res.json();
+          })
+          .then(function (bootstrap) {
+            setupLoginForm(!!bootstrap.needed);
+            showLogin();
+          });
       })
       .catch(function () {
+        // Already signed in and looking at the dashboard: leave it be. The
+        // WebSocket has its own reconnect loop, and the session is far more
+        // likely fine than not.
+        if (!dashboardEl.hidden) return;
+
+        if (sessionRetries < SESSION_MAX_RETRIES) {
+          var delay = 1000 * Math.pow(2, sessionRetries);
+          sessionRetries++;
+          window.setTimeout(checkSession, delay);
+          return;
+        }
+
+        // Genuinely can't reach the server after several tries -- fall back to
+        // the sign-in form so there's something on screen to act on.
+        sessionRetries = 0;
         setupLoginForm(false);
         showLogin();
       });
@@ -942,78 +969,192 @@ document.addEventListener("DOMContentLoaded", function () {
     return outputArray;
   }
 
-  function setPushButtonState(subscribed) {
-    if (!enablePushBtn) return;
-    var label = enablePushBtn.querySelector("span");
-    if (subscribed) {
-      if (label) label.textContent = "Notifications on";
-      enablePushBtn.disabled = true;
-    } else {
-      if (label) label.textContent = "Enable notifications";
-      enablePushBtn.disabled = false;
-    }
+  // iPhone/iPad only expose the Notification API -- and therefore Web Push at
+  // all -- to a web app that's been added to the Home Screen and launched from
+  // that icon. In an ordinary Safari tab `PushManager` still exists, so the old
+  // "serviceWorker + PushManager" check passed, the button rendered as normal,
+  // and tapping it threw on `Notification.requestPermission` with nothing shown
+  // to the user. Detect the real capability, and say what to do about it.
+  function isIosDevice() {
+    return (
+      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      // iPadOS 13+ reports itself as a Mac; the touch points give it away.
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+    );
   }
 
-  // Silent check on dashboard load -- never prompts for permission, just
-  // reflects whether this browser is already subscribed.
+  function isInstalledApp() {
+    return (
+      navigator.standalone === true ||
+      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches)
+    );
+  }
+
+  function pushSupported() {
+    return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  }
+
+  var PUSH_BUTTON_LABELS = {
+    on: "Notifications on",
+    off: "Enable notifications",
+    install: "Add to Home Screen",
+    blocked: "Notifications blocked",
+    unsupported: "Notifications unavailable",
+  };
+
+  // Every state except "already subscribed" stays tappable -- on iOS the whole
+  // point of the button is that tapping it explains the missing step.
+  function setPushButtonState(state) {
+    if (!enablePushBtn) return;
+    var label = enablePushBtn.querySelector("span");
+    var text = PUSH_BUTTON_LABELS[state] || PUSH_BUTTON_LABELS.off;
+    if (label) label.textContent = text;
+    enablePushBtn.title = text;
+    enablePushBtn.setAttribute("aria-label", text);
+    enablePushBtn.disabled = state === "on";
+    enablePushBtn.hidden = false;
+  }
+
+  function sendSubscriptionToServer(subscription) {
+    return fetch("/api/push/subscribe", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(subscription.toJSON()),
+    }).then(function (res) {
+      if (!res.ok) throw new Error("Subscribe request failed (" + res.status + ")");
+      return subscription;
+    });
+  }
+
+  // Runs on every dashboard load. Never prompts for permission -- it works out
+  // which state the button should show and, just as importantly, re-sends any
+  // existing subscription to the server. iOS drops push subscriptions fairly
+  // readily (OS updates, storage eviction, an app left unopened for a while);
+  // when that happens the server row has usually already been deleted on a 410
+  // while the device still hands us a subscription object, so without this
+  // re-sync the button reads "Notifications on" forever and nothing arrives.
   function checkPushSubscription() {
-    if (!enablePushBtn || !("serviceWorker" in navigator) || !("PushManager" in window)) {
-      if (enablePushBtn) enablePushBtn.hidden = true;
+    if (!enablePushBtn) return;
+
+    if (isIosDevice() && !isInstalledApp()) {
+      setPushButtonState("install");
+      return;
+    }
+    if (!pushSupported()) {
+      setPushButtonState("unsupported");
+      return;
+    }
+    if (Notification.permission === "denied") {
+      setPushButtonState("blocked");
       return;
     }
 
     navigator.serviceWorker
       .register("/chat-sw.js")
+      .then(function () {
+        return navigator.serviceWorker.ready;
+      })
       .then(function (registration) {
         return registration.pushManager.getSubscription();
       })
       .then(function (subscription) {
-        setPushButtonState(!!subscription);
+        if (!subscription || Notification.permission !== "granted") {
+          setPushButtonState("off");
+          return;
+        }
+        setPushButtonState("on");
+        return sendSubscriptionToServer(subscription).catch(function (err) {
+          window.console && console.error("Push re-sync failed", err);
+        });
       })
-      .catch(function () {
-        setPushButtonState(false);
+      .catch(function (err) {
+        window.console && console.error("Push check failed", err);
+        setPushButtonState("off");
       });
+  }
+
+  // Notification.requestPermission() is promise-based on every browser that
+  // supports Web Push, but older WebKit only ever called the legacy callback.
+  // Passing both and racing them covers either shape without asking twice.
+  function requestNotificationPermission() {
+    return new Promise(function (resolve) {
+      var result;
+      try {
+        result = Notification.requestPermission(resolve);
+      } catch (err) {
+        result = Notification.requestPermission();
+      }
+      if (result && typeof result.then === "function") {
+        result.then(resolve, function () {
+          resolve(Notification.permission);
+        });
+      }
+    });
   }
 
   // Only ever called from the button's click handler -- requesting
   // notification permission outside a direct user gesture is against
   // browser policy (and gets silently ignored or auto-denied anyway).
   function enablePush() {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    if (isIosDevice() && !isInstalledApp()) {
+      window.alert(
+        "On iPhone and iPad, notifications only work once Staff Chat has been added to your Home Screen.\n\n" +
+          'In Safari: tap the Share button, choose "Add to Home Screen", then open Staff Chat from that new icon and tap Enable notifications again.'
+      );
+      return;
+    }
+    if (!pushSupported()) {
       window.alert("Push notifications aren't supported in this browser.");
       return;
     }
+    if (Notification.permission === "denied") {
+      window.alert(
+        "Notifications are blocked for Staff Chat. Turn them back on in your device settings " +
+          "(iPhone: Settings > Notifications > Staff Chat), then reopen this page and try again."
+      );
+      return;
+    }
 
-    Notification.requestPermission().then(function (permission) {
-      if (permission !== "granted") return;
+    requestNotificationPermission()
+      .then(function (permission) {
+        if (permission !== "granted") {
+          setPushButtonState(permission === "denied" ? "blocked" : "off");
+          return;
+        }
 
-      navigator.serviceWorker.ready
-        .then(function (registration) {
-          return fetch("/api/push/vapid-public-key")
-            .then(function (res) {
-              return res.text();
-            })
-            .then(function (publicKey) {
-              return registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(publicKey),
-              });
+        return navigator.serviceWorker
+          .register("/chat-sw.js")
+          .then(function () {
+            return navigator.serviceWorker.ready;
+          })
+          .then(function (registration) {
+            // Reuse an existing subscription rather than subscribing again --
+            // Safari rejects a second subscribe() on the same registration.
+            return registration.pushManager.getSubscription().then(function (existing) {
+              if (existing) return existing;
+              return fetch("/api/push/vapid-public-key")
+                .then(function (res) {
+                  return res.text();
+                })
+                .then(function (publicKey) {
+                  if (!publicKey) throw new Error("no VAPID public key configured");
+                  return registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(publicKey.trim()),
+                  });
+                });
             });
-        })
-        .then(function (subscription) {
-          return fetch("/api/push/subscribe", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(subscription.toJSON()),
+          })
+          .then(sendSubscriptionToServer)
+          .then(function () {
+            setPushButtonState("on");
           });
-        })
-        .then(function () {
-          setPushButtonState(true);
-        })
-        .catch(function (err) {
-          window.console && console.error("Push subscribe failed", err);
-        });
-    });
+      })
+      .catch(function (err) {
+        window.console && console.error("Push subscribe failed", err);
+        setPushButtonState("off");
+        window.alert("Couldn't turn notifications on: " + ((err && err.message) || "unknown error"));
+      });
   }
 
   if (enablePushBtn) {

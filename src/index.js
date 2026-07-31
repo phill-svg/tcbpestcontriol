@@ -177,10 +177,9 @@ export default {
 			return handleBooking(request, env, ctx);
 		}
 
-		// The /contact enquiry form still posts to Web3Forms for the office
-		// email; this runs alongside it so the enquiry also becomes a ServiceM8
-		// Quote job and pings staff in the app, the same as a /book booking.
-		// See handleContactEnquiry for why it's fire-and-forget.
+		// The /contact enquiry form posts straight here: emails the office,
+		// creates a ServiceM8 Quote job and pings staff in the app, then sends
+		// the visitor on to /thank-you. See handleContactEnquiry.
 		if (url.pathname === "/api/contact" && request.method === "POST") {
 			return handleContactEnquiry(request, env, ctx);
 		}
@@ -332,22 +331,42 @@ async function handleBooking(request, env, ctx) {
 	return okJson({ ok: true });
 }
 
-// The /contact enquiry form. Unlike /book this is a side-car: the browser
-// still posts the form to Web3Forms as it always has, and calls this in
-// parallel with a keepalive fetch so the page can navigate away immediately.
-// Nothing the customer sees depends on the outcome, so the work is handed to
-// waitUntil and a response goes back straight away -- a slow ServiceM8 API
-// must never hold up the redirect to the thank-you page.
+// The /contact enquiry form, which the form posts to directly -- it used to go
+// to Web3Forms, which emailed the office but never touched this Worker, so an
+// enquiry never became a ServiceM8 job. Now this endpoint does both.
+//
+// It's a plain HTML form post, not fetch: no JavaScript is required to send an
+// enquiry, and the reply is a 303 back to the thank-you page (the same page
+// Web3Forms used to redirect to). A JSON body still gets a JSON reply, which
+// keeps the endpoint usable from a script.
+//
+// The ServiceM8 + email work is handed to waitUntil so a slow ServiceM8 API
+// can't hold up that redirect.
 async function handleContactEnquiry(request, env, ctx) {
+	const contentType = request.headers.get("content-type") || "";
+	const wantsJson = contentType.includes("application/json");
+
 	let body;
-	try {
-		body = await request.json();
-	} catch {
-		return jsonError(400, "Invalid request.");
+	if (wantsJson) {
+		try {
+			body = await request.json();
+		} catch {
+			return jsonError(400, "Invalid request.");
+		}
+	} else {
+		try {
+			const form = await request.formData();
+			body = Object.fromEntries([...form.entries()].map(([k, v]) => [k, typeof v === "string" ? v : ""]));
+		} catch {
+			return contactError(400, "We couldn't read that submission. Please try again.");
+		}
 	}
 
-	// botcheck is the contact form's own honeypot -- real users never fill it.
-	if (body.botcheck || body.company) return okJson({ ok: true });
+	// botcheck is the form's own honeypot -- real people never fill it in.
+	// Accept and drop silently rather than telling a bot it was spotted.
+	if (body.botcheck || body.company) {
+		return wantsJson ? okJson({ ok: true }) : Response.redirect(new URL("/thank-you", request.url).toString(), 303);
+	}
 
 	const fields = {
 		name: String(body.name || "").trim(),
@@ -363,20 +382,54 @@ async function handleContactEnquiry(request, env, ctx) {
 	};
 
 	const errors = validateEnquiryFields(fields);
-	if (errors.length) return jsonError(400, errors[0]);
+	if (errors.length) return wantsJson ? jsonError(400, errors[0]) : contactError(400, errors[0]);
+
+	// Same optional spam gate as /book -- only enforced once TURNSTILE_SECRET
+	// is set. Web3Forms did its own filtering, so this is the replacement hook.
+	if (env.TURNSTILE_SECRET) {
+		const ok = await verifyTurnstile(env, body.turnstileToken || body["cf-turnstile-response"], request);
+		if (!ok) {
+			const msg = "Verification failed. Please try again.";
+			return wantsJson ? jsonError(400, msg) : contactError(400, msg);
+		}
+	}
 
 	const work = createBookingAndNotify(env, ctx, fields, "Website enquiry (contact form)", {
 		alertLabel: "New enquiry",
-		// Web3Forms already emails the office this exact enquiry -- ours would
-		// only duplicate it, and a booking confirmation would misrepresent what
-		// the customer actually sent.
-		sendEmails: false,
-	}).catch((e) => console.error("Contact enquiry -> ServiceM8 failed:", e && (e.stack || e.message)));
+		emailLabel: "enquiry",
+		// The office notification is the whole reason Web3Forms was here, so it
+		// has to keep going out. No customer confirmation: this is an enquiry,
+		// not a booking, and Web3Forms never sent the customer anything either.
+		notifyOffice: true,
+		confirmCustomer: false,
+	}).catch((e) => console.error("Contact enquiry failed:", e && (e.stack || e.message)));
 
 	if (ctx && ctx.waitUntil) ctx.waitUntil(work);
 	else await work;
 
-	return okJson({ ok: true });
+	if (wantsJson) return okJson({ ok: true });
+	return Response.redirect(new URL("/thank-you", request.url).toString(), 303);
+}
+
+// A validation failure on a no-JavaScript form post can't be shown inline, so
+// this is the fallback: a plain page that says what went wrong and sends them
+// back. The browser's own required/type=email checks catch nearly everything
+// before it gets here, so this is rare by design.
+function contactError(status, messageText) {
+	const escaped = String(messageText).replace(
+		/[&<>"']/g,
+		(c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+	);
+	const html =
+		`<!doctype html><html lang="en-AU"><head><meta charset="utf-8">` +
+		`<meta name="viewport" content="width=device-width, initial-scale=1"><title>Check your enquiry</title>` +
+		`<style>body{font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;margin:0;padding:3rem 1.5rem;color:#111114;line-height:1.6}` +
+		`main{max-width:32rem;margin:0 auto}h1{font-size:1.4rem;margin:0 0 .75rem}` +
+		`a{color:#c41613;font-weight:700}</style></head><body><main>` +
+		`<h1>We couldn't send that enquiry</h1><p>${escaped}</p>` +
+		`<p><a href="/contact#quote">Go back and try again</a> &mdash; or call us on <a href="tel:0261059771">02 6105 9771</a>.</p>` +
+		`</main></body></html>`;
+	return new Response(html, { status, headers: { "content-type": "text/html; charset=utf-8" } });
 }
 
 async function verifyTurnstile(env, token, request) {

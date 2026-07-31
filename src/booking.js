@@ -51,17 +51,18 @@ export function validateEnquiryFields(f) {
 // (the web form vs. an AI agent via MCP).
 //
 // opts:
-//   alertLabel  first words of the ServiceM8 staff message ("New booking")
-//   sendEmails  false for a source that already emails the office itself --
-//               the /contact form goes out through Web3Forms, so sending our
-//               own office notification on top would just double it up, and a
-//               booking confirmation would be odd for what is only an enquiry
+//   alertLabel       first words of the ServiceM8 staff message ("New booking")
+//   emailLabel       what the office email calls this ("booking")
+//   notifyOffice     send the office the details (on by default)
+//   confirmCustomer  send the customer a booking confirmation -- off for the
+//                    /contact form, where "thanks for booking" would
+//                    misdescribe what they actually sent
 //
 // Never throws: a ServiceM8 API failure is caught and logged so the caller
-// still gets a clean response, and the office notification email (where it's
-// sent) captures the raw enquiry for manual entry.
+// still gets a clean response, and the office notification email captures the
+// raw enquiry for manual entry.
 export async function createBookingAndNotify(env, ctx, f, sourceLabel, opts = {}) {
-	const { alertLabel = "New booking", sendEmails = true } = opts;
+	const { alertLabel = "New booking", emailLabel = "booking", notifyOffice = true, confirmCustomer = true } = opts;
 	const description = [
 		sourceLabel,
 		`Service: ${f.service}`,
@@ -88,15 +89,17 @@ export async function createBookingAndNotify(env, ctx, f, sourceLabel, opts = {}
 	// Fire the office notification + customer confirmation without blocking the
 	// response (allSettled so one failing send never affects the other). Log the
 	// outcome of each so a send failure is diagnosable.
-	const notify = sendEmails
-		? Promise.allSettled([sendBookingNotification(env, booking, jobUrl), sendBookingConfirmation(env, booking)]).then((results) => {
-				const labels = ["office notification", "customer confirmation"];
-				results.forEach((r, i) => {
-					if (r.status === "rejected") console.error(`Booking ${labels[i]} email FAILED:`, r.reason && (r.reason.stack || r.reason.message));
-					else console.log(`Booking ${labels[i]} email sent`);
-				});
-		  })
-		: Promise.resolve();
+	const sends = [];
+	if (notifyOffice) sends.push(["office notification", sendBookingNotification(env, booking, jobUrl, emailLabel)]);
+	if (confirmCustomer) sends.push(["customer confirmation", sendBookingConfirmation(env, booking)]);
+
+	const notify = Promise.allSettled(sends.map(([, p]) => p)).then((results) => {
+		results.forEach((r, i) => {
+			const label = sends[i][0];
+			if (r.status === "rejected") console.error(`Booking ${label} email FAILED:`, r.reason && (r.reason.stack || r.reason.message));
+			else console.log(`Booking ${label} email sent`);
+		});
+	});
 
 	// ...and ping staff inside ServiceM8 itself, so the new job announces
 	// itself on the phone instead of waiting to be noticed in the Quote list.

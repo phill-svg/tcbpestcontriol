@@ -58,18 +58,22 @@ function escapeAttr(s) {
 // Notifies the office of a new website booking. Includes a link straight to the
 // ServiceM8 job when it was created; flags it if ServiceM8 couldn't be reached
 // so the lead is never lost. Throws are swallowed by the caller (waitUntil).
-export async function sendBookingNotification(env, booking, jobUrl) {
+// `label` is what this gets called throughout ("booking" from /book,
+// "enquiry" from the /contact form, which asks for fewer details) -- the rows
+// it didn't collect are left out rather than printed empty.
+export async function sendBookingNotification(env, booking, jobUrl, label = "booking") {
 	if (!env.EMAIL || typeof env.EMAIL.send !== "function") return;
 	const { name, email, phone, address, service, date, time, message } = booking;
 	const preferred = [date, time].filter(Boolean).join(" ");
+	const heading = label === "booking" ? "New online booking" : `New website ${label}`;
 
 	const textLines = [
-		"New online booking from the website:",
+		`${heading}:`,
 		"",
 		`Name:    ${name}`,
-		`Phone:   ${phone}`,
+		phone ? `Phone:   ${phone}` : "",
 		`Email:   ${email}`,
-		`Address: ${address}`,
+		address ? `Address: ${address}` : "",
 		`Service: ${service}`,
 		preferred ? `Preferred: ${preferred}` : "",
 		message ? `Notes:   ${message}` : "",
@@ -81,12 +85,14 @@ export async function sendBookingNotification(env, booking, jobUrl) {
 		`<tr><td style="padding:3px 14px 3px 0;color:#5a5a62;white-space:nowrap;vertical-align:top">${label}</td><td style="padding:3px 0"><strong>${escapeHtml(value)}</strong></td></tr>`;
 	const html =
 		`<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#111114;line-height:1.5;max-width:560px">` +
-		`<h2 style="font-size:18px;margin:0 0 14px">New online booking</h2>` +
+		`<h2 style="font-size:18px;margin:0 0 14px">${escapeHtml(heading)}</h2>` +
 		`<table style="border-collapse:collapse">` +
 		row("Name", name) +
-		`<tr><td style="padding:3px 14px 3px 0;color:#5a5a62">Phone</td><td style="padding:3px 0"><a href="tel:${escapeAttr(phone)}">${escapeHtml(phone)}</a></td></tr>` +
+		(phone
+			? `<tr><td style="padding:3px 14px 3px 0;color:#5a5a62">Phone</td><td style="padding:3px 0"><a href="tel:${escapeAttr(phone)}">${escapeHtml(phone)}</a></td></tr>`
+			: "") +
 		`<tr><td style="padding:3px 14px 3px 0;color:#5a5a62">Email</td><td style="padding:3px 0"><a href="mailto:${escapeAttr(email)}">${escapeHtml(email)}</a></td></tr>` +
-		row("Address", address) +
+		(address ? row("Address", address) : "") +
 		row("Service", service) +
 		(preferred ? row("Preferred", preferred) : "") +
 		(message ? `<tr><td style="padding:3px 14px 3px 0;color:#5a5a62;vertical-align:top">Notes</td><td style="padding:3px 0">${escapeHtml(message)}</td></tr>` : "") +
@@ -100,7 +106,7 @@ export async function sendBookingNotification(env, booking, jobUrl) {
 		from: FROM_ADDRESS,
 		to: OFFICE_EMAIL,
 		reply_to: email || REPLY_TO,
-		subject: `New online booking: ${name}${service ? " — " + service : ""}`,
+		subject: `${heading}: ${name}${service ? " — " + service : ""}`,
 		text: textLines.join("\n"),
 		html,
 	});

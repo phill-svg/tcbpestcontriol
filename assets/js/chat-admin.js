@@ -357,28 +357,55 @@ document.addEventListener("DOMContentLoaded", function () {
     } catch (e) {}
   }
 
+  var sessionRetries = 0;
+  var SESSION_MAX_RETRIES = 4;
+
+  // "Couldn't reach the server" is not the same thing as "signed out", and
+  // conflating the two is what made the staff chat feel like it logged you
+  // out at random on a phone -- an iPhone waking from sleep or moving between
+  // wifi and mobile data fails this fetch routinely, and the old catch-all
+  // sent the user straight back to the sign-in form with a session that was
+  // still perfectly valid. Retry a few times first, and never tear down a
+  // dashboard that's already up.
   function checkSession() {
     fetch("/api/staff/session")
       .then(function (res) {
+        if (!res.ok) throw new Error("Session check failed (" + res.status + ")");
         return res.json();
       })
       .then(function (data) {
+        sessionRetries = 0;
         if (data.authenticated) {
           isAdmin = !!data.isAdmin;
           myUsername = data.username;
           showDashboard();
-        } else {
-          return fetch("/api/staff/bootstrap-check")
-            .then(function (res) {
-              return res.json();
-            })
-            .then(function (bootstrap) {
-              setupLoginForm(!!bootstrap.needed);
-              showLogin();
-            });
+          return;
         }
+        return fetch("/api/staff/bootstrap-check")
+          .then(function (res) {
+            return res.json();
+          })
+          .then(function (bootstrap) {
+            setupLoginForm(!!bootstrap.needed);
+            showLogin();
+          });
       })
       .catch(function () {
+        // Already signed in and looking at the dashboard: leave it be. The
+        // WebSocket has its own reconnect loop, and the session is far more
+        // likely fine than not.
+        if (!dashboardEl.hidden) return;
+
+        if (sessionRetries < SESSION_MAX_RETRIES) {
+          var delay = 1000 * Math.pow(2, sessionRetries);
+          sessionRetries++;
+          window.setTimeout(checkSession, delay);
+          return;
+        }
+
+        // Genuinely can't reach the server after several tries -- fall back to
+        // the sign-in form so there's something on screen to act on.
+        sessionRetries = 0;
         setupLoginForm(false);
         showLogin();
       });

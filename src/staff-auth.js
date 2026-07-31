@@ -10,7 +10,15 @@
 // username/password from then on.
 
 const COOKIE_NAME = "tcb_staff_session";
-const SESSION_TTL_SECONDS = 24 * 60 * 60;
+
+// Sessions slide. The cookie used to be a fixed 24 hours that was never
+// renewed, so staff were dumped back to the sign-in form exactly a day after
+// signing in no matter how much they'd been using it -- on a phone that meant
+// logging in again before nearly every lookup. Now the cookie is re-issued
+// once it's more than a quarter used, so anyone who opens the dashboard at
+// least once every three weeks simply stays signed in.
+const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
+const SESSION_RENEW_AFTER_SECONDS = SESSION_TTL_SECONDS / 4;
 const PBKDF2_ITERATIONS = 100000;
 
 export async function passcodeMatches(env, submitted) {
@@ -54,7 +62,16 @@ export function logoutCookieHeader() {
 	return `${COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
 }
 
-// Returns {username, isAdmin} for a valid, unexpired session, or null.
+// True once enough of a session's life has been used up that it's worth
+// handing back a fresh cookie. Keeps Set-Cookie off the great majority of
+// requests while still guaranteeing an active staff member never runs out.
+export function shouldRenewSession(session) {
+	if (!session || typeof session.expires !== "number") return false;
+	const remainingSeconds = (session.expires - Date.now()) / 1000;
+	return remainingSeconds < SESSION_TTL_SECONDS - SESSION_RENEW_AFTER_SECONDS;
+}
+
+// Returns {username, isAdmin, expires} for a valid, unexpired session, or null.
 export async function getStaffSession(request, env) {
 	const token = readCookie(request, COOKIE_NAME);
 	if (!token) return null;
@@ -73,7 +90,7 @@ export async function getStaffSession(request, env) {
 	}
 
 	if (!data || typeof data.expires !== "number" || Date.now() >= data.expires) return null;
-	return { username: data.username, isAdmin: !!data.isAdmin };
+	return { username: data.username, isAdmin: !!data.isAdmin, expires: data.expires };
 }
 
 function readCookie(request, name) {

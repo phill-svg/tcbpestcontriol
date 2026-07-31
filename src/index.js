@@ -1,5 +1,5 @@
 export { ChatHub } from "./chat-hub.js";
-import { logoutCookieHeader, getStaffSession } from "./staff-auth.js";
+import { loginCookieHeader, logoutCookieHeader, getStaffSession, shouldRenewSession } from "./staff-auth.js";
 import { sendPasswordResetEmail } from "./email.js";
 import { validateBookingFields, createBookingAndNotify } from "./booking.js";
 import { handleMcp } from "./mcp.js";
@@ -123,9 +123,17 @@ export default {
 		}
 		if (url.pathname === "/api/staff/session") {
 			const session = await getStaffSession(request, env);
+			// Never let a cached copy of this stand in for a real check.
+			const headers = { "content-type": "application/json", "Cache-Control": "no-store" };
+			// The dashboard calls this on every load, which makes it the natural
+			// place to slide the session forward -- so anyone using the staff
+			// chat regularly is never signed out from underneath themselves.
+			if (session && shouldRenewSession(session)) {
+				headers["Set-Cookie"] = await loginCookieHeader(env, session);
+			}
 			return new Response(
 				JSON.stringify({ authenticated: !!session, username: session ? session.username : null, isAdmin: session ? session.isAdmin : false }),
-				{ status: 200, headers: { "content-type": "application/json" } }
+				{ status: 200, headers }
 			);
 		}
 		// Admin-only: managing other staff accounts. actingUser is attached

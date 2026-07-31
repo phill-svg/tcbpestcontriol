@@ -1,7 +1,7 @@
 export { ChatHub } from "./chat-hub.js";
 import { loginCookieHeader, logoutCookieHeader, getStaffSession, shouldRenewSession } from "./staff-auth.js";
 import { sendPasswordResetEmail } from "./email.js";
-import { validateBookingFields, createBookingAndNotify } from "./booking.js";
+import { validateBookingFields, validateEnquiryFields, createBookingAndNotify } from "./booking.js";
 import { handleMcp } from "./mcp.js";
 import { handleIndexJson } from "./index-json.js";
 import { renderMarkdown } from "./markdown.js";
@@ -177,6 +177,14 @@ export default {
 			return handleBooking(request, env, ctx);
 		}
 
+		// The /contact enquiry form still posts to Web3Forms for the office
+		// email; this runs alongside it so the enquiry also becomes a ServiceM8
+		// Quote job and pings staff in the app, the same as a /book booking.
+		// See handleContactEnquiry for why it's fire-and-forget.
+		if (url.pathname === "/api/contact" && request.method === "POST") {
+			return handleContactEnquiry(request, env, ctx);
+		}
+
 		// Public MCP (Model Context Protocol) server -- lets AI agents query
 		// suburb coverage, the services list and published starting prices
 		// directly instead of guessing from crawled page text. See src/mcp.js.
@@ -320,6 +328,53 @@ async function handleBooking(request, env, ctx) {
 	}
 
 	await createBookingAndNotify(env, ctx, fields, "Online booking request (website /book form)");
+
+	return okJson({ ok: true });
+}
+
+// The /contact enquiry form. Unlike /book this is a side-car: the browser
+// still posts the form to Web3Forms as it always has, and calls this in
+// parallel with a keepalive fetch so the page can navigate away immediately.
+// Nothing the customer sees depends on the outcome, so the work is handed to
+// waitUntil and a response goes back straight away -- a slow ServiceM8 API
+// must never hold up the redirect to the thank-you page.
+async function handleContactEnquiry(request, env, ctx) {
+	let body;
+	try {
+		body = await request.json();
+	} catch {
+		return jsonError(400, "Invalid request.");
+	}
+
+	// botcheck is the contact form's own honeypot -- real users never fill it.
+	if (body.botcheck || body.company) return okJson({ ok: true });
+
+	const fields = {
+		name: String(body.name || "").trim(),
+		email: String(body.email || "").trim(),
+		phone: String(body.phone || "").trim(),
+		// The enquiry form doesn't ask for one; the job gets a blank address
+		// and staff fill it in when they quote.
+		address: "",
+		service: String(body.service || "").trim(),
+		date: "",
+		time: "",
+		message: String(body.message || "").trim(),
+	};
+
+	const errors = validateEnquiryFields(fields);
+	if (errors.length) return jsonError(400, errors[0]);
+
+	const work = createBookingAndNotify(env, ctx, fields, "Website enquiry (contact form)", {
+		alertLabel: "New enquiry",
+		// Web3Forms already emails the office this exact enquiry -- ours would
+		// only duplicate it, and a booking confirmation would misrepresent what
+		// the customer actually sent.
+		sendEmails: false,
+	}).catch((e) => console.error("Contact enquiry -> ServiceM8 failed:", e && (e.stack || e.message)));
+
+	if (ctx && ctx.waitUntil) ctx.waitUntil(work);
+	else await work;
 
 	return okJson({ ok: true });
 }

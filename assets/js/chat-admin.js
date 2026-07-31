@@ -1161,6 +1161,63 @@ document.addEventListener("DOMContentLoaded", function () {
     enablePushBtn.addEventListener("click", enablePush);
   }
 
+  // "I'm not getting notifications" has too many possible causes to guess at:
+  // no subscription on this device, no VAPID key on the server, a push service
+  // rejecting the send, or iOS permission switched off. This asks the server
+  // to send a real push right now and reports back which of those it was.
+  var testPushBtn = document.querySelector("[data-staff-test-push]");
+  if (testPushBtn) {
+    testPushBtn.addEventListener("click", function () {
+      var label = testPushBtn.querySelector("span");
+      var original = label ? label.textContent : "";
+      testPushBtn.disabled = true;
+      if (label) label.textContent = "Sending…";
+
+      var restore = function () {
+        testPushBtn.disabled = false;
+        if (label) label.textContent = original;
+      };
+
+      fetch("/api/push/test", { method: "POST" })
+        .then(function (res) {
+          return res.json().then(function (data) {
+            return { ok: res.ok, data: data };
+          });
+        })
+        .then(function (r) {
+          restore();
+          var d = r.data || {};
+
+          if (!r.ok) {
+            window.alert("Couldn't run the test: " + (d.error || "server error"));
+            return;
+          }
+
+          if (d.ok) {
+            window.alert(
+              "Test sent to " + d.delivered + " of " + d.attempted + " device(s).\n\n" +
+                d.reason +
+                "\n\nIf nothing shows up within a few seconds, the send worked but the phone isn't displaying it — check that notifications are allowed for Staff Chat in your device settings."
+            );
+            return;
+          }
+
+          var lines = [d.reason || "The test push didn't go out."];
+          if (d.results && d.results.length) {
+            lines.push("");
+            d.results.forEach(function (x) {
+              lines.push(x.service + " → " + x.result + (x.status ? " (HTTP " + x.status + ")" : "") + (x.detail ? ": " + x.detail : ""));
+            });
+          }
+          window.alert(lines.join("\n"));
+        })
+        .catch(function (err) {
+          restore();
+          window.alert("Couldn't reach the server to run the test: " + ((err && err.message) || "unknown error"));
+        });
+    });
+  }
+
   function jsonResult(res) {
     return res.json().then(function (data) {
       return { ok: res.ok, data: data };

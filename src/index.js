@@ -156,8 +156,15 @@ export default {
 		if (url.pathname === "/api/push/vapid-public-key") {
 			return new Response(env.VAPID_PUBLIC_KEY || "", { status: 200, headers: { "content-type": "text/plain" } });
 		}
-		if (url.pathname === "/api/push/subscribe" || url.pathname === "/api/push/unsubscribe") {
-			if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+		if (
+			url.pathname === "/api/push/subscribe" ||
+			url.pathname === "/api/push/unsubscribe" ||
+			url.pathname === "/api/push/status" ||
+			url.pathname === "/api/push/test"
+		) {
+			// /status is a GET; the rest are POST-only.
+			const readOnly = url.pathname === "/api/push/status";
+			if (!readOnly && request.method !== "POST") return new Response("Method not allowed", { status: 405 });
 			const session = await getStaffSession(request, env);
 			if (!session) {
 				return new Response("Unauthorized", { status: 401 });

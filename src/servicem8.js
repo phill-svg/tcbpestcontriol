@@ -160,3 +160,121 @@ export async function createServiceM8Lead(env, lead, opts = {}) {
 
 	return { created: true, jobUuid, jobUrl: jobUrl(jobUuid), generatedJobId: null, reusedCustomer };
 }
+
+// --- Telling staff about it, inside ServiceM8 -------------------------------
+//
+// Creating the job was silent: it appeared in the Quote list and that was it,
+// so a website enquiry could sit unnoticed until somebody thought to look. A
+// StaffMessage is ServiceM8's own staff-to-staff message -- it shows up in
+// Messages in the ServiceM8 app and pushes to the phone of any staff member
+// whose device can receive one. Setting regarding_job_uuid attaches it to the
+// job, so opening the message goes straight to the enquiry it's about.
+
+function splitList(value) {
+	return String(value || "")
+		.split(",")
+		.map((v) => v.trim())
+		.filter(Boolean);
+}
+
+function staffLabel(s) {
+	return [s.first, s.last].filter(Boolean).join(" ") || s.email || s.uuid;
+}
+
+// Who hears about a new website enquiry, in order of preference:
+//   SERVICEM8_NOTIFY_STAFF_UUID   -- one or more staff UUIDs, comma separated
+//   SERVICEM8_NOTIFY_STAFF_EMAIL  -- one or more staff emails, comma separated
+//   (neither set)                 -- every active staff member whose device can
+//                                    actually receive a push
+// Resolved against the live staff list rather than hard-coded, so it keeps
+// working as staff come and go. Returns [{uuid, label}].
+async function resolveNotifyStaff(env) {
+	const explicit = splitList(env.SERVICEM8_NOTIFY_STAFF_UUID);
+	if (explicit.length) return explicit.map((uuid) => ({ uuid, label: uuid }));
+
+	const rows = await sm8Get(env, "/staff.json");
+	const active = (Array.isArray(rows) ? rows : []).filter((s) => String(s.active) !== "0");
+
+	const wantedEmails = splitList(env.SERVICEM8_NOTIFY_STAFF_EMAIL).map(normEmail);
+	if (wantedEmails.length) {
+		const matched = active.filter((s) => wantedEmails.includes(normEmail(s.email)));
+		if (matched.length) return matched.map((s) => ({ uuid: s.uuid, label: staffLabel(s) }));
+		console.error(
+			"ServiceM8 notify: no active staff matched SERVICEM8_NOTIFY_STAFF_EMAIL " +
+				`(${wantedEmails.join(", ")}) -- falling back to all push-capable staff`
+		);
+	}
+
+	// can_receive_push_notification is ServiceM8's own flag for "this staff
+	// member has the app installed with notifications enabled", so it's the
+	// closest thing to "who will actually see this".
+	return active
+		.filter((s) => String(s.can_receive_push_notification) === "1")
+		.map((s) => ({ uuid: s.uuid, label: staffLabel(s) }));
+}
+
+function truncate(text, max) {
+	const t = String(text || "").trim();
+	return t.length > max ? t.slice(0, max - 1) + "…" : t;
+}
+
+// Sends one in-app ServiceM8 message per recipient, about `jobUuid`.
+//
+// Deliberately never throws or rejects: this is a courtesy ping about a job
+// that has already been created, and a messaging failure must not take down
+// the enquiry that triggered it. Every failure path is logged instead, since
+// a notification that quietly stops working is worse than none at all.
+export async function notifyStaffOfNewJob(env, jobUuid, lines) {
+	if (!env.SERVICEM8_API_KEY || !jobUuid) return { sent: 0 };
+
+	let recipients;
+	try {
+		recipients = await resolveNotifyStaff(env);
+	} catch (e) {
+		console.error("ServiceM8 notify: couldn't resolve recipients:", e && (e.stack || e.message));
+		return { sent: 0 };
+	}
+
+	if (!recipients.length) {
+		console.error(
+			"ServiceM8 notify: nobody to notify -- set SERVICEM8_NOTIFY_STAFF_EMAIL (or " +
+				"SERVICEM8_NOTIFY_STAFF_UUID), or enable push notifications for a staff member in the ServiceM8 app"
+		);
+		return { sent: 0 };
+	}
+
+	// ServiceM8 shows the first line of the message in the push itself, so the
+	// customer's name and the service lead, and the detail follows.
+	const message = truncate(lines.filter(Boolean).join("\n"), 900);
+	const fromStaffUuid = env.SERVICEM8_NOTIFY_FROM_STAFF_UUID || "";
+
+	const results = await Promise.allSettled(
+		recipients.map((r) =>
+			sm8Create(env, "staffmessage", {
+				to_staff_uuid: r.uuid,
+				// Left unset unless configured -- a message addressed from the same
+				// person it's going to is the one case that risks being treated as
+				// "your own message" and not pushed.
+				...(fromStaffUuid ? { from_staff_uuid: fromStaffUuid } : {}),
+				message,
+				regarding_job_uuid: jobUuid,
+			})
+		)
+	);
+
+	let sent = 0;
+	results.forEach((r, i) => {
+		if (r.status === "fulfilled") sent++;
+		else
+			console.error(
+				`ServiceM8 notify: message to ${recipients[i].label} failed:`,
+				r.reason && (r.reason.stack || r.reason.message)
+			);
+	});
+
+	console.log(
+		`ServiceM8 notify: job ${jobUuid} -> in-app message sent to ${sent}/${recipients.length} ` +
+			`(${recipients.map((r) => r.label).join(", ")})`
+	);
+	return { sent, recipients: recipients.length };
+}

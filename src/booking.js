@@ -32,15 +32,36 @@ export function validateBookingFields(f) {
 	return errors;
 }
 
+// The /contact enquiry form asks for less than /book does: no address, and
+// phone is optional. Validate what it actually collects rather than rejecting
+// a perfectly good enquiry over a field we never put on the form.
+export function validateEnquiryFields(f) {
+	const errors = [];
+	if (!f.name || f.name.length > 120) errors.push("Please enter your name.");
+	if (!isValidEmail(f.email)) errors.push("Please enter a valid email address.");
+	if (f.phone && f.phone.replace(/\D/g, "").length < 6) errors.push("Please enter a valid phone number.");
+	if (!f.service) errors.push("Please choose a service.");
+	if (f.message.length > 2000) errors.push("Message is too long.");
+	return errors;
+}
+
 // f = { name, email, phone, address, service, date, time, message } -- all
 // already trimmed strings. sourceLabel is prepended to the ServiceM8 job
 // description so staff can tell at a glance where the enquiry came from
 // (the web form vs. an AI agent via MCP).
 //
+// opts:
+//   alertLabel  first words of the ServiceM8 staff message ("New booking")
+//   sendEmails  false for a source that already emails the office itself --
+//               the /contact form goes out through Web3Forms, so sending our
+//               own office notification on top would just double it up, and a
+//               booking confirmation would be odd for what is only an enquiry
+//
 // Never throws: a ServiceM8 API failure is caught and logged so the caller
-// still gets a clean response, and the office notification email (sent
-// regardless) captures the raw enquiry for manual entry.
-export async function createBookingAndNotify(env, ctx, f, sourceLabel) {
+// still gets a clean response, and the office notification email (where it's
+// sent) captures the raw enquiry for manual entry.
+export async function createBookingAndNotify(env, ctx, f, sourceLabel, opts = {}) {
+	const { alertLabel = "New booking", sendEmails = true } = opts;
 	const description = [
 		sourceLabel,
 		`Service: ${f.service}`,
@@ -67,19 +88,21 @@ export async function createBookingAndNotify(env, ctx, f, sourceLabel) {
 	// Fire the office notification + customer confirmation without blocking the
 	// response (allSettled so one failing send never affects the other). Log the
 	// outcome of each so a send failure is diagnosable.
-	const notify = Promise.allSettled([sendBookingNotification(env, booking, jobUrl), sendBookingConfirmation(env, booking)]).then((results) => {
-		const labels = ["office notification", "customer confirmation"];
-		results.forEach((r, i) => {
-			if (r.status === "rejected") console.error(`Booking ${labels[i]} email FAILED:`, r.reason && (r.reason.stack || r.reason.message));
-			else console.log(`Booking ${labels[i]} email sent`);
-		});
-	});
+	const notify = sendEmails
+		? Promise.allSettled([sendBookingNotification(env, booking, jobUrl), sendBookingConfirmation(env, booking)]).then((results) => {
+				const labels = ["office notification", "customer confirmation"];
+				results.forEach((r, i) => {
+					if (r.status === "rejected") console.error(`Booking ${labels[i]} email FAILED:`, r.reason && (r.reason.stack || r.reason.message));
+					else console.log(`Booking ${labels[i]} email sent`);
+				});
+		  })
+		: Promise.resolve();
 
 	// ...and ping staff inside ServiceM8 itself, so the new job announces
 	// itself on the phone instead of waiting to be noticed in the Quote list.
 	// First line is what shows in the push, so it carries the useful bit.
 	const alert = notifyStaffOfNewJob(env, jobUuid, [
-		`New booking: ${f.name} — ${f.service}`,
+		`${alertLabel}: ${f.name} — ${f.service}`,
 		f.phone,
 		f.address,
 		f.date || f.time ? `Preferred: ${[f.date, f.time].filter(Boolean).join(" ")}` : "",

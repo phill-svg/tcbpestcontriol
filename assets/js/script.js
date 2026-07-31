@@ -32,45 +32,6 @@ document.addEventListener("DOMContentLoaded", function () {
     window.addEventListener("scroll", applyShadow, { passive: true });
   }
 
-  // The contact form posts straight to Web3Forms, which emails the office but
-  // never touches this site's Worker -- so an enquiry from here never became a
-  // ServiceM8 job the way a /book booking does. Mirror the submission to
-  // /api/contact on the way past so it does.
-  //
-  // Deliberately additive: the native submit is left to proceed exactly as
-  // before, so if this request fails, is blocked, or JS is off entirely, the
-  // customer still gets through to Web3Forms and the thank-you page. keepalive
-  // is what lets the request outlive the navigation that's about to happen --
-  // without it the browser cancels it mid-flight.
-  var contactForm = document.querySelector('form[action="https://api.web3forms.com/submit"]');
-  if (contactForm) {
-    contactForm.addEventListener("submit", function () {
-      var value = function (fieldName) {
-        var el = contactForm.elements.namedItem(fieldName);
-        return el && typeof el.value === "string" ? el.value.trim() : "";
-      };
-      var botcheck = contactForm.elements.namedItem("botcheck");
-
-      try {
-        fetch("/api/contact", {
-          method: "POST",
-          keepalive: true,
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            name: value("Name"),
-            email: value("Email"),
-            phone: value("Phone"),
-            service: value("Service"),
-            message: value("Message"),
-            botcheck: botcheck && botcheck.checked ? "1" : "",
-          }),
-        }).catch(function () {});
-      } catch (e) {
-        // Never let a problem here block the real submission.
-      }
-    });
-  }
-
   if (navigator.modelContext && typeof navigator.modelContext.provideContext === "function") {
     navigator.modelContext.provideContext({
       tools: [
@@ -106,7 +67,7 @@ document.addEventListener("DOMContentLoaded", function () {
             required: ["name", "email", "service", "message"],
           },
           execute: function (input) {
-            var form = document.querySelector('form[action="https://api.web3forms.com/submit"]');
+            var form = document.querySelector('form[action="/api/contact"]');
             if (!form) {
               return {
                 status: "navigate_required",
@@ -118,11 +79,11 @@ document.addEventListener("DOMContentLoaded", function () {
               var el = form.elements.namedItem(fieldName);
               if (el && value != null) el.value = value;
             };
-            setValue("Name", input.name);
-            setValue("Email", input.email);
-            setValue("Phone", input.phone);
-            setValue("Service", input.service);
-            setValue("Message", input.message);
+            setValue("name", input.name);
+            setValue("email", input.email);
+            setValue("phone", input.phone);
+            setValue("service", input.service);
+            setValue("message", input.message);
             form.requestSubmit();
             return { status: "submitted" };
           },

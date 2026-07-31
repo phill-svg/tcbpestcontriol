@@ -215,9 +215,9 @@ document.addEventListener("DOMContentLoaded", function () {
     socket.addEventListener("open", function () {
       reconnectDelay = 1000;
       // Only say "Online" during business hours (Mon–Sat 8am–5pm Canberra) --
-      // outside those, no one's actively watching, so reflect that instead of
-      // implying a live agent is waiting.
-      setConnectionStatus(isBusinessHours() ? "Online" : "Away · we'll reply soon");
+      // outside those, no staff are actively watching, so say so (the AI
+      // assistant still answers directly in this same conversation).
+      setConnectionStatus(isBusinessHours() ? "Online" : "Away · AI assistant can help");
       flushQueue();
     });
 

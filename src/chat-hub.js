@@ -17,16 +17,44 @@ const MAX_MESSAGE_LENGTH = 2000;
 // Durable Object alarm below, not a live timer (this DO can hibernate).
 const AUTO_CLOSE_AFTER_MS = 10 * 60 * 1000;
 
-// After-hours auto-reply: business hours are Mon-Sat 8am-5pm Canberra time
-// (Australia/Sydney tz, DST-aware); Sunday is closed. Outside those, a visitor
-// message triggers one automated reply, then stays quiet for a cooldown so a
-// back-and-forth after hours doesn't get spammed.
+// After-hours AI takeover: business hours are Mon-Sat 8am-5pm Canberra time
+// (Australia/Sydney tz, DST-aware); Sunday is closed. Outside those, with no
+// staff connected, visitor messages are answered by Workers AI directly in
+// this same conversation -- staff see the whole exchange (labelled with
+// AI_SENDER_NAME below) in the dashboard next morning and can pick it up.
 const BUSINESS_OPEN_HOUR = 8;
 const BUSINESS_CLOSE_HOUR = 17;
 const BUSINESS_TIMEZONE = "Australia/Sydney";
-const AFTER_HOURS_COOLDOWN_MS = 4 * 60 * 60 * 1000;
-const AFTER_HOURS_MESSAGE =
-	"Thanks for reaching out to TCB Pest Control! We're currently closed, but we've got your message and will reply as soon as we're back. For anything urgent, call us on 02 6105 9771.";
+const AI_SENDER_NAME = "TCB Assistant (AI)";
+const AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+const AI_HISTORY_LIMIT = 12;
+const AI_FALLBACK_MESSAGE =
+	"Sorry, I'm having trouble responding right now. We've got your message and will get back to you as soon as we're open -- for anything urgent, call 02 6105 9771.";
+const AI_SYSTEM_PROMPT = `You are TCB Pest Control Canberra's AI assistant, replying directly in the visitor's live chat because the office is currently closed. A staff member will read this whole conversation and can take over once they're back.
+
+BUSINESS FACTS (only state what's here -- never invent details):
+- Serves the ACT and surrounds: Belconnen, Gungahlin, Tuggeranong, Woden Valley, Inner North, Inner South, Molonglo Valley, Weston Creek, plus Queanbeyan, Jerrabomberra and Fyshwick.
+- Treats 24 pest types including termites, spiders, cockroaches, ants, rodents (rats/mice), birds, wasps, bees, moths, silverfish, bed bugs, fleas, possums and stored-product pests.
+- Specialties: Termidor-accredited termite inspections and barrier treatments, pre-purchase (building) inspections, chemical barrier treatments.
+- Products are family-safe and pet-friendly.
+- TCB ALWAYS treats the interior of the home as part of a general treatment -- the inside is always included, not just "when required". Reassure customers of this if they ask.
+- 100% satisfaction guarantee with complimentary follow-up treatments on covered pests. Structural warranty on qualifying termite work. All technicians licensed and insured.
+- 4.9-star Google rating (60+ reviews). Upfront written quotes, 24-hour quote turnaround, and often same-week availability.
+- Hours: Monday to Saturday, 8am-5pm.
+- Phone: 02 6105 9771. Email: office@tcbpestcontrolcanberra.com.au.
+
+HOW TO HELP:
+- If this is your first message in this conversation (no earlier assistant turn below), briefly mention up front that you're TCB's AI assistant since the team is currently closed, then help with their question. If you've already spoken in this conversation, don't repeat that -- just continue naturally.
+- Answer pest questions helpfully, warmly and concisely (2-5 sentences). Give safe, practical general advice.
+- Encourage the customer to book a free inspection or get a free written quote; a staff member will follow up once TCB reopens.
+- NEVER make up prices -- pricing depends on the property size and pest; offer a free quote instead.
+- For anything urgent or risky (wasp nests, bee swarms, big rodent problems), advise caution and to call 02 6105 9771.
+- Only discuss pest control and TCB Pest Control. If asked something off-topic, politely steer back and offer to help with a pest problem or a quote.
+- Never claim a booking is made -- you can't book directly; a staff member will follow up, or they can call/email to lock in a time.
+
+CRITICAL CONTACT RULE: When you mention contact details, write them EXACTLY like this, character for character -- never shorten, respace, reformat or invent them:
+- Phone: 02 6105 9771
+- Email: office@tcbpestcontrolcanberra.com.au`;
 
 // Single global instance (env.CHAT_HUB.idFromName("global")) holds every
 // conversation's messages and live WebSocket connections. Traffic for this
@@ -127,8 +155,6 @@ export class ChatHub extends DurableObject {
 		this.ensureColumn("conversations", "servicem8_job_uuid", "TEXT");
 		this.ensureColumn("messages", "sender_name", "TEXT");
 		this.ensureColumn("conversations", "last_visitor_message_at", "INTEGER");
-		// When we last sent an after-hours auto-reply on a conversation (cooldown).
-		this.ensureColumn("conversations", "last_auto_reply_at", "INTEGER");
 		// Which staff member a push subscription belongs to -- lets team/DM
 		// notifications target the right device(s) instead of every staff
 		// device. Subscriptions created before this column existed have a
@@ -1202,9 +1228,9 @@ export class ChatHub extends DurableObject {
 		// it live, a phone buzz would just be noise.
 		if (!this.hasConnectedStaff()) {
 			this.ctx.waitUntil(this.notifyStaffOfNewMessage(attachment.conversationId, body));
-			// No staff watching -- if it's outside business hours, reassure the
-			// visitor with a one-off automated reply.
-			this.maybeSendAfterHoursReply(attachment.conversationId);
+			// No staff watching -- if it's outside business hours, let the AI
+			// answer directly in this same conversation.
+			this.ctx.waitUntil(this.maybeSendAiReply(attachment.conversationId));
 		}
 	}
 
@@ -1224,18 +1250,40 @@ export class ChatHub extends DurableObject {
 		return isOpenDay && hour >= BUSINESS_OPEN_HOUR && hour < BUSINESS_CLOSE_HOUR;
 	}
 
-	// Sends the after-hours auto-reply at most once per cooldown per conversation.
-	maybeSendAfterHoursReply(conversationId) {
+	// Outside business hours, with no staff connected, answers the visitor
+	// directly in this same conversation using Workers AI. Re-checks business
+	// hours itself (called via ctx.waitUntil, so time may have moved on by the
+	// time this actually runs).
+	async maybeSendAiReply(conversationId) {
 		const now = Date.now();
 		if (this.isWithinBusinessHours(now)) return;
 
 		const sql = this.ctx.storage.sql;
-		const row = sql.exec("SELECT last_auto_reply_at FROM conversations WHERE id = ?", conversationId).toArray()[0];
-		const last = row && row.last_auto_reply_at ? row.last_auto_reply_at : 0;
-		if (now - last < AFTER_HOURS_COOLDOWN_MS) return;
+		const history = sql
+			.exec("SELECT sender, sender_name, body FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT ?", conversationId, AI_HISTORY_LIMIT)
+			.toArray()
+			.reverse();
+		const hasRepliedBefore = history.some((m) => m.sender_name === AI_SENDER_NAME);
 
-		const msg = this.insertMessage(conversationId, "staff", AFTER_HOURS_MESSAGE, "TCB Pest Control");
-		sql.exec("UPDATE conversations SET last_auto_reply_at = ? WHERE id = ?", now, conversationId);
+		// A visible "typing" indicator while the model generates -- AI replies
+		// take a couple of seconds, unlike the instant echo of a stored message.
+		this.broadcastToConversation(conversationId, { type: "typing", from: "staff" });
+
+		const messages = [
+			{ role: "system", content: AI_SYSTEM_PROMPT + (hasRepliedBefore ? "" : "\n\n(This is your first message in this conversation.)") },
+			...history.map((m) => ({ role: m.sender === "visitor" ? "user" : "assistant", content: m.body })),
+		];
+
+		let text = "";
+		try {
+			const result = await this.env.AI.run(AI_MODEL, { messages, max_tokens: 512 });
+			text = result && typeof result.response === "string" ? result.response.trim() : "";
+		} catch (e) {
+			console.error("After-hours AI reply failed:", e && (e.stack || e.message));
+		}
+		if (!text) text = AI_FALLBACK_MESSAGE;
+
+		const msg = this.insertMessage(conversationId, "staff", text, AI_SENDER_NAME);
 		this.broadcastToConversation(conversationId, { type: "message", message: msg });
 		this.broadcastToStaff({ type: "message", conversationId, message: msg });
 		this.broadcastToStaff({ type: "conversations", ...this.getConversationLists() });

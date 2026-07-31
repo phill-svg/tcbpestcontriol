@@ -3,7 +3,7 @@
 // tool (src/mcp.js) -- one place for field validation and the
 // ServiceM8-lead-plus-notification-email pipeline, so the two entry points
 // can never drift apart.
-import { createServiceM8Lead, notifyStaffOfNewJob } from "./servicem8.js";
+import { createServiceM8Lead, notifyStaffOfNewJob, allocateJobToStaff } from "./servicem8.js";
 import { sendBookingNotification, sendBookingConfirmation } from "./email.js";
 
 // Fans a lead out to every staff phone subscribed to Web Push. The
@@ -114,19 +114,23 @@ export async function createBookingAndNotify(env, ctx, f, sourceLabel, opts = {}
 		});
 	});
 
-	// A real phone notification, through the site's own Web Push channel -- the
-	// same one the staff chat uses, which is the only path we control end to
-	// end. The ServiceM8 staff message below shows up inside the ServiceM8 app
-	// but doesn't reliably buzz the phone, so this is what actually gets
-	// someone's attention. Tapping it opens the ServiceM8 job.
+	// Allocating the job to staff is what makes ServiceM8 itself raise the
+	// notification -- and because that notification is native to the ServiceM8
+	// app, tapping it opens the job in the app rather than bouncing out to a
+	// browser. This is the one that's meant to buzz the phone.
+	const allocate = allocateJobToStaff(env, jobUuid);
+
+	// Backup through the site's own Web Push channel. Kept because it's the
+	// path we control end to end, so if ServiceM8's own notification doesn't
+	// come through, a lead still isn't missed entirely.
 	const phonePush = notifyStaffDevices(env, {
 		title: `${alertLabel}: ${f.name}`,
 		body: [f.service, f.phone, f.address].filter(Boolean).join(" · ") || f.email,
 		url: jobUrl || "/staff-chat",
 	});
 
-	// ...and ping staff inside ServiceM8 itself, so the job carries a message
-	// against it in the app for whoever picks it up.
+	// ...and a message against the job in ServiceM8, so whoever picks it up
+	// has the enquiry detail right there.
 	// First line is what shows in the push, so it carries the useful bit.
 	const alert = notifyStaffOfNewJob(env, jobUuid, [
 		`${alertLabel}: ${f.name} — ${f.service}`,
@@ -138,7 +142,7 @@ export async function createBookingAndNotify(env, ctx, f, sourceLabel, opts = {}
 		`\n${sourceLabel}`,
 	]);
 
-	const done = Promise.all([notify, alert, phonePush]);
+	const done = Promise.all([notify, allocate, alert, phonePush]);
 	if (ctx && ctx.waitUntil) ctx.waitUntil(done);
 	else await done;
 

@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { sendPushNotification } from "./push.js";
 import { passcodeMatches, hashPassword, verifyPassword, loginCookieHeader } from "./staff-auth.js";
-import { createServiceM8Lead, notifyStaffOfNewJob } from "./servicem8.js";
+import { createServiceM8Lead, notifyStaffOfNewJob, allocateJobToStaff } from "./servicem8.js";
 // Note: the actual reset email is sent by the Worker (src/index.js), not here --
 // the send_email binding is only reliably available in the Worker request context.
 // (ServiceM8 is a plain fetch to an external API, which works fine here in the DO.)
@@ -614,6 +614,11 @@ export class ChatHub extends DurableObject {
 			// way, and without this every later message would retry the lookup.
 			sql.exec("UPDATE conversations SET servicem8_job_uuid = ? WHERE id = ?", result.jobUuid, conversationId);
 			this.broadcastToStaff({ type: "conversations", ...this.getConversationLists() });
+
+			// Same as the website forms: allocating the job is what makes the
+			// ServiceM8 app itself raise a notification, and open the job in the
+			// app rather than a browser when it's tapped.
+			await allocateJobToStaff(this.env, result.jobUuid);
 
 			const firstVisitorMessage = (msgs.find((m) => m.sender === "visitor") || {}).body || "";
 			await notifyStaffOfNewJob(this.env, result.jobUuid, [

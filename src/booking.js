@@ -3,7 +3,7 @@
 // tool (src/mcp.js) -- one place for field validation and the
 // ServiceM8-lead-plus-notification-email pipeline, so the two entry points
 // can never drift apart.
-import { createServiceM8Lead } from "./servicem8.js";
+import { createServiceM8Lead, notifyStaffOfNewJob } from "./servicem8.js";
 import { sendBookingNotification, sendBookingConfirmation } from "./email.js";
 
 // Deliberately not a single regex like /^[^\s@]+@[^\s@]+\.[^\s@]+$/ -- since
@@ -53,9 +53,11 @@ export async function createBookingAndNotify(env, ctx, f, sourceLabel) {
 
 	const booking = { name: f.name, email: f.email, phone: f.phone, address: f.address, service: f.service, date: f.date, time: f.time, message: f.message };
 	let jobUrl = null;
+	let jobUuid = null;
 	try {
 		const result = await createServiceM8Lead(env, { name: f.name, email: f.email, phone: f.phone, address: f.address, description }, { force: true });
 		jobUrl = result && result.jobUrl;
+		jobUuid = result && result.jobUuid;
 	} catch (e) {
 		// Don't fail the enquiry on a ServiceM8 hiccup -- the office notification
 		// below still captures the lead (flagged for manual entry).
@@ -72,8 +74,23 @@ export async function createBookingAndNotify(env, ctx, f, sourceLabel) {
 			else console.log(`Booking ${labels[i]} email sent`);
 		});
 	});
-	if (ctx && ctx.waitUntil) ctx.waitUntil(notify);
-	else await notify;
+
+	// ...and ping staff inside ServiceM8 itself, so the new job announces
+	// itself on the phone instead of waiting to be noticed in the Quote list.
+	// First line is what shows in the push, so it carries the useful bit.
+	const alert = notifyStaffOfNewJob(env, jobUuid, [
+		`New booking: ${f.name} — ${f.service}`,
+		f.phone,
+		f.address,
+		f.date || f.time ? `Preferred: ${[f.date, f.time].filter(Boolean).join(" ")}` : "",
+		f.email,
+		f.message ? `\n${f.message}` : "",
+		`\n${sourceLabel}`,
+	]);
+
+	const done = Promise.all([notify, alert]);
+	if (ctx && ctx.waitUntil) ctx.waitUntil(done);
+	else await done;
 
 	return { jobUrl };
 }

@@ -398,10 +398,11 @@ async function handleContactEnquiry(request, env, ctx) {
 		alertLabel: "New enquiry",
 		emailLabel: "enquiry",
 		// The office notification is the whole reason Web3Forms was here, so it
-		// has to keep going out. No customer confirmation: this is an enquiry,
-		// not a booking, and Web3Forms never sent the customer anything either.
+		// has to keep going out. The customer gets an acknowledgement too --
+		// worded as an enquiry reply, not a booking confirmation for a time
+		// they never picked. Web3Forms never sent them anything at all.
 		notifyOffice: true,
-		confirmCustomer: false,
+		confirmCustomer: true,
 	}).catch((e) => console.error("Contact enquiry failed:", e && (e.stack || e.message)));
 
 	if (ctx && ctx.waitUntil) ctx.waitUntil(work);

@@ -112,25 +112,34 @@ export async function sendBookingNotification(env, booking, jobUrl, label = "boo
 	});
 }
 
-// Instant branded confirmation to the customer who booked.
-export async function sendBookingConfirmation(env, booking) {
+// Instant branded confirmation to the customer. `label` keeps it honest about
+// what they actually sent: someone who picked a date on /book gets "booking",
+// someone who sent the /contact form gets "enquiry" and is told when we'll
+// reply rather than that we're confirming a time they never chose.
+export async function sendBookingConfirmation(env, booking, label = "booking") {
 	if (!env.EMAIL || typeof env.EMAIL.send !== "function" || !booking.email) return;
 	const first = String(booking.name || "there").trim().split(/\s+/)[0] || "there";
 	const service = booking.service || "";
 	const preferred = [booking.date, booking.time].filter(Boolean).join(" ");
 	const forWhat = service ? ` for ${service}` : "";
 	const whenBit = preferred ? ` (${preferred})` : "";
+	const isBooking = label === "booking";
+
+	const subject = isBooking ? "We've got your booking — TCB Pest Control" : "Thanks for your enquiry — TCB Pest Control";
+	const opening = isBooking
+		? `Thanks for booking with TCB Pest Control Canberra! We've received your request${forWhat}${whenBit} and we'll be in touch shortly to confirm your time.`
+		: `Thanks for getting in touch with TCB Pest Control Canberra! We've received your enquiry${forWhat} and one of our technicians will get back to you within one business day.`;
 
 	const text =
 		`Hi ${first},\n\n` +
-		`Thanks for booking with TCB Pest Control Canberra! We've received your request${forWhat}${whenBit} and we'll be in touch shortly to confirm your time.\n\n` +
+		`${opening}\n\n` +
 		`Need us sooner? Call 02 6105 9771 (Mon-Sat 8am-5pm).\n\n` +
 		`-- TCB Pest Control Canberra`;
 
 	const html =
 		`<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#111114;line-height:1.6;max-width:520px">` +
 		`<p>Hi ${escapeHtml(first)},</p>` +
-		`<p>Thanks for booking with <strong>TCB Pest Control Canberra</strong>! We've received your request${escapeHtml(forWhat)}${escapeHtml(whenBit)} and we'll be in touch shortly to confirm your time.</p>` +
+		`<p>${escapeHtml(opening).replace("TCB Pest Control Canberra", "<strong>TCB Pest Control Canberra</strong>")}</p>` +
 		`<p style="color:#5a5a62">Need us sooner? Call <a href="tel:0261059771" style="color:#c41613">02 6105 9771</a> (Mon–Sat 8am–5pm).</p>` +
 		`<p style="margin-top:22px">&mdash; TCB Pest Control Canberra</p>` +
 		`</div>`;
@@ -139,7 +148,7 @@ export async function sendBookingConfirmation(env, booking) {
 		from: FROM_ADDRESS,
 		to: booking.email,
 		reply_to: OFFICE_EMAIL,
-		subject: "We've got your booking — TCB Pest Control",
+		subject,
 		text,
 		html,
 	});

@@ -16,3 +16,10 @@
 
 /assets/fonts/*
   Cache-Control: public, max-age=31536000, immutable
+
+# The push service worker has no cache-busting query string to lean on -- it's
+# fetched by URL from navigator.serviceWorker.register. Keep it uncached so a
+# change to notification handling reaches already-installed phones on the next
+# update check rather than whenever a stale copy happens to expire.
+/chat-sw.js
+  Cache-Control: no-cache

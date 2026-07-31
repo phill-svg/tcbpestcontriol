@@ -1147,6 +1147,33 @@ export class ChatHub extends DurableObject {
 		}
 	}
 
+	// Web push to every subscribed staff device, for a lead that came in through
+	// a form rather than the chat. Called over RPC from the Worker (see
+	// src/booking.js) because the subscriptions live in this object's storage.
+	//
+	// Unlike the chat's own push this is never suppressed when a dashboard is
+	// connected: a booking or enquiry doesn't appear on the dashboard at all, so
+	// there's nothing for an open browser tab to have already shown.
+	async notifyLead(payload) {
+		const subscriptions = this.getPushSubscriptions();
+		if (!subscriptions.length) {
+			console.error("Lead web push: no staff devices subscribed -- nobody will be buzzed about this lead");
+			return { sent: 0, devices: 0 };
+		}
+
+		let sent = 0;
+		await Promise.all(
+			subscriptions.map(async (subscription) => {
+				const result = await sendPushNotification(this.env, subscription, payload);
+				if (result === "gone") this.removePushSubscription(subscription.endpoint);
+				else if (result === "ok") sent++;
+			})
+		);
+
+		console.log(`Lead web push: sent to ${sent}/${subscriptions.length} device(s)`);
+		return { sent, devices: subscriptions.length };
+	}
+
 	getPushSubscriptions() {
 		return this.ctx.storage.sql.exec("SELECT endpoint, p256dh, auth FROM push_subscriptions").toArray();
 	}

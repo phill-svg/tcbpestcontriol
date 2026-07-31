@@ -6,6 +6,19 @@
 import { createServiceM8Lead, notifyStaffOfNewJob } from "./servicem8.js";
 import { sendBookingNotification, sendBookingConfirmation } from "./email.js";
 
+// Fans a lead out to every staff phone subscribed to Web Push. The
+// subscriptions live in the ChatHub Durable Object, so this hops over RPC.
+// Never throws -- a lead must never be lost because a notification failed.
+async function notifyStaffDevices(env, payload) {
+	if (!env.CHAT_HUB) return;
+	try {
+		const id = env.CHAT_HUB.idFromName("global");
+		await env.CHAT_HUB.get(id).notifyLead(payload);
+	} catch (e) {
+		console.error("Lead web push failed:", e && (e.stack || e.message));
+	}
+}
+
 // Deliberately not a single regex like /^[^\s@]+@[^\s@]+\.[^\s@]+$/ -- since
 // "." is a valid member of [^\s@], the two variable-length groups either
 // side of the literal "." overlap and can match the same characters in many
@@ -91,7 +104,7 @@ export async function createBookingAndNotify(env, ctx, f, sourceLabel, opts = {}
 	// outcome of each so a send failure is diagnosable.
 	const sends = [];
 	if (notifyOffice) sends.push(["office notification", sendBookingNotification(env, booking, jobUrl, emailLabel)]);
-	if (confirmCustomer) sends.push(["customer confirmation", sendBookingConfirmation(env, booking)]);
+	if (confirmCustomer) sends.push(["customer confirmation", sendBookingConfirmation(env, booking, emailLabel)]);
 
 	const notify = Promise.allSettled(sends.map(([, p]) => p)).then((results) => {
 		results.forEach((r, i) => {
@@ -101,8 +114,19 @@ export async function createBookingAndNotify(env, ctx, f, sourceLabel, opts = {}
 		});
 	});
 
-	// ...and ping staff inside ServiceM8 itself, so the new job announces
-	// itself on the phone instead of waiting to be noticed in the Quote list.
+	// A real phone notification, through the site's own Web Push channel -- the
+	// same one the staff chat uses, which is the only path we control end to
+	// end. The ServiceM8 staff message below shows up inside the ServiceM8 app
+	// but doesn't reliably buzz the phone, so this is what actually gets
+	// someone's attention. Tapping it opens the ServiceM8 job.
+	const phonePush = notifyStaffDevices(env, {
+		title: `${alertLabel}: ${f.name}`,
+		body: [f.service, f.phone, f.address].filter(Boolean).join(" · ") || f.email,
+		url: jobUrl || "/staff-chat",
+	});
+
+	// ...and ping staff inside ServiceM8 itself, so the job carries a message
+	// against it in the app for whoever picks it up.
 	// First line is what shows in the push, so it carries the useful bit.
 	const alert = notifyStaffOfNewJob(env, jobUuid, [
 		`${alertLabel}: ${f.name} — ${f.service}`,
@@ -114,7 +138,7 @@ export async function createBookingAndNotify(env, ctx, f, sourceLabel, opts = {}
 		`\n${sourceLabel}`,
 	]);
 
-	const done = Promise.all([notify, alert]);
+	const done = Promise.all([notify, alert, phonePush]);
 	if (ctx && ctx.waitUntil) ctx.waitUntil(done);
 	else await done;
 

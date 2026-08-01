@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { sendPushNotification } from "./push.js";
 import { passcodeMatches, hashPassword, verifyPassword, loginCookieHeader } from "./staff-auth.js";
-import { createServiceM8Lead, notifyStaffOfNewJob } from "./servicem8.js";
+import { createServiceM8Lead, notifyStaffOfNewJob, allocateJobToStaff } from "./servicem8.js";
 // Note: the actual reset email is sent by the Worker (src/index.js), not here --
 // the send_email binding is only reliably available in the Worker request context.
 // (ServiceM8 is a plain fetch to an external API, which works fine here in the DO.)
@@ -220,6 +220,14 @@ export class ChatHub extends DurableObject {
 		}
 		if (url.pathname === "/api/push/unsubscribe" && request.method === "POST") {
 			return this.handleUnsubscribe(request);
+		}
+		// Same Worker-side auth gate. Both are diagnostics for "I'm not getting
+		// notifications", which is otherwise only answerable by reading logs.
+		if (url.pathname === "/api/push/status") {
+			return this.handlePushStatus(url.searchParams.get("username"));
+		}
+		if (url.pathname === "/api/push/test" && request.method === "POST") {
+			return this.handlePushTest(url.searchParams.get("username"));
 		}
 
 		if (url.pathname === "/api/staff/bootstrap-check") {
@@ -607,6 +615,11 @@ export class ChatHub extends DurableObject {
 			sql.exec("UPDATE conversations SET servicem8_job_uuid = ? WHERE id = ?", result.jobUuid, conversationId);
 			this.broadcastToStaff({ type: "conversations", ...this.getConversationLists() });
 
+			// Same as the website forms: allocating the job is what makes the
+			// ServiceM8 app itself raise a notification, and open the job in the
+			// app rather than a browser when it's tapped.
+			await allocateJobToStaff(this.env, result.jobUuid);
+
 			const firstVisitorMessage = (msgs.find((m) => m.sender === "visitor") || {}).body || "";
 			await notifyStaffOfNewJob(this.env, result.jobUuid, [
 				`${result.duplicate ? "Chat from an existing quote" : "New chat enquiry"}: ${conv.visitor_name || "Website visitor"}`,
@@ -767,7 +780,7 @@ export class ChatHub extends DurableObject {
 		};
 		await Promise.all(
 			subscriptions.map(async (subscription) => {
-				const result = await sendPushNotification(this.env, subscription, payload);
+				const { result } = await sendPushNotification(this.env, subscription, payload);
 				if (result === "gone") this.removePushSubscription(subscription.endpoint);
 			})
 		);
@@ -1098,7 +1111,7 @@ export class ChatHub extends DurableObject {
 
 		await Promise.all(
 			subscriptions.map(async (subscription) => {
-				const result = await sendPushNotification(this.env, subscription, payload);
+				const { result } = await sendPushNotification(this.env, subscription, payload);
 				if (result === "gone") this.removePushSubscription(subscription.endpoint);
 			})
 		);
@@ -1164,7 +1177,7 @@ export class ChatHub extends DurableObject {
 		let sent = 0;
 		await Promise.all(
 			subscriptions.map(async (subscription) => {
-				const result = await sendPushNotification(this.env, subscription, payload);
+				const { result } = await sendPushNotification(this.env, subscription, payload);
 				if (result === "gone") this.removePushSubscription(subscription.endpoint);
 				else if (result === "ok") sent++;
 			})
@@ -1172,6 +1185,87 @@ export class ChatHub extends DurableObject {
 
 		console.log(`Lead web push: sent to ${sent}/${subscriptions.length} device(s)`);
 		return { sent, devices: subscriptions.length };
+	}
+
+	// "It isn't working" is impossible to act on without knowing which link in
+	// the chain is broken: no subscription on the device, no VAPID key on the
+	// server, or a push service rejecting the send. This reports all three.
+	handlePushStatus(username) {
+		const rows = this.ctx.storage.sql
+			.exec("SELECT endpoint, username, created_at FROM push_subscriptions ORDER BY created_at DESC")
+			.toArray();
+
+		const describe = (r) => ({
+			username: r.username || null,
+			// The endpoint host says which push service it is -- web.push.apple.com
+			// means an iPhone/iPad, fcm.googleapis.com an Android or Chrome.
+			service: safeHost(r.endpoint),
+			isApple: safeHost(r.endpoint).includes("apple"),
+			createdAt: r.created_at || null,
+		});
+
+		const mine = rows.filter((r) => r.username === username);
+		return jsonOk({
+			vapidPublicKeyConfigured: !!this.env.VAPID_PUBLIC_KEY,
+			vapidPrivateKeyConfigured: isJsonObject(this.env.VAPID_PRIVATE_KEY),
+			totalSubscriptions: rows.length,
+			subscriptionsForYou: mine.length,
+			appleSubscriptionsForYou: mine.filter((r) => safeHost(r.endpoint).includes("apple")).length,
+			you: username,
+			devices: rows.map(describe),
+		});
+	}
+
+	// Sends a real push to the caller's own devices and reports exactly what
+	// each push service said, so a silent phone can be told apart from a
+	// rejected send without digging through Worker logs.
+	async handlePushTest(username) {
+		if (!isJsonObject(this.env.VAPID_PRIVATE_KEY)) {
+			return jsonOk({
+				ok: false,
+				reason: "VAPID_PRIVATE_KEY is not set (or isn't valid JSON) on the Worker — no push can be sent until it is.",
+				attempted: 0,
+			});
+		}
+
+		const subscriptions = this.getPushSubscriptionsForUsernames([username]);
+		if (!subscriptions.length) {
+			const total = this.ctx.storage.sql.exec("SELECT endpoint FROM push_subscriptions").toArray().length;
+			return jsonOk({
+				ok: false,
+				reason:
+					total > 0
+						? `No push subscription is registered against "${username}". ${total} other device(s) are subscribed. Tap Enable notifications on this device.`
+						: "No device anywhere is subscribed yet. On iPhone: add Staff Chat to your Home Screen, open it from that icon, then tap Enable notifications.",
+				attempted: 0,
+			});
+		}
+
+		const payload = {
+			title: "Test notification ✅",
+			body: "If you can see this, push notifications are working.",
+			url: "/staff-chat",
+		};
+
+		const results = await Promise.all(
+			subscriptions.map(async (subscription) => {
+				const { result, status, detail } = await sendPushNotification(this.env, subscription, payload);
+				if (result === "gone") this.removePushSubscription(subscription.endpoint);
+				return { service: safeHost(subscription.endpoint), result, status, detail: String(detail || "").slice(0, 120) };
+			})
+		);
+
+		const delivered = results.filter((r) => r.result === "ok").length;
+		return jsonOk({
+			ok: delivered > 0,
+			attempted: results.length,
+			delivered,
+			reason:
+				delivered > 0
+					? "Accepted by the push service. If nothing appears on the phone, the problem is on the device — check notification permission for the app in Settings."
+					: "Every push service rejected the send. See the per-device detail below.",
+			results,
+		});
 	}
 
 	getPushSubscriptions() {
@@ -1240,7 +1334,7 @@ export class ChatHub extends DurableObject {
 
 		await Promise.all(
 			subscriptions.map(async (subscription) => {
-				const result = await sendPushNotification(this.env, subscription, payload);
+				const { result } = await sendPushNotification(this.env, subscription, payload);
 				if (result === "gone") this.removePushSubscription(subscription.endpoint);
 			})
 		);
@@ -1473,6 +1567,29 @@ export class ChatHub extends DurableObject {
 
 function normalizeUsername(value) {
 	return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function jsonOk(data) {
+	return new Response(JSON.stringify(data), { status: 200, headers: { "content-type": "application/json" } });
+}
+
+// The endpoint host identifies the push service (web.push.apple.com for an
+// iPhone, fcm.googleapis.com for Android/Chrome). Never throws on a malformed
+// stored endpoint -- a diagnostic that crashes is worse than useless.
+function safeHost(endpoint) {
+	try {
+		return new URL(endpoint).host;
+	} catch {
+		return "unknown";
+	}
+}
+
+function isJsonObject(value) {
+	try {
+		return !!value && typeof JSON.parse(value) === "object";
+	} catch {
+		return false;
+	}
 }
 
 function jsonError(status, message) {

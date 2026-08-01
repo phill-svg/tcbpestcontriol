@@ -213,6 +213,95 @@ async function resolveNotifyStaff(env) {
 		.map((s) => ({ uuid: s.uuid, label: staffLabel(s) }));
 }
 
+// Allocating a job to a staff member is the thing that makes the ServiceM8 app
+// itself raise a notification -- ServiceM8's own docs list "job allocated to
+// staff" as a trigger for a booking notification to field staff. A
+// StaffMessage (below) only ever shows up inside the app once you open it.
+//
+// It's also why this is the right mechanism for "open the job in the app, not
+// a browser": the notification is native to ServiceM8, so tapping it lands in
+// the ServiceM8 app on the job, with no web link in between.
+//
+// Never throws -- the job already exists, and a failed allocation must not
+// take down the enquiry that created it.
+export async function allocateJobToStaff(env, jobUuid, opts = {}) {
+	if (!env.SERVICEM8_API_KEY || !jobUuid) return { allocated: 0 };
+
+	let recipients;
+	try {
+		recipients = await resolveNotifyStaff(env);
+	} catch (e) {
+		console.error("ServiceM8 allocate: couldn't resolve staff:", e && (e.stack || e.message));
+		return { allocated: 0 };
+	}
+
+	if (!recipients.length) {
+		console.error(
+			"ServiceM8 allocate: nobody to allocate to -- set SERVICEM8_NOTIFY_STAFF_EMAIL (or " +
+				"SERVICEM8_NOTIFY_STAFF_UUID), or enable push notifications for a staff member in the ServiceM8 app"
+		);
+		return { allocated: 0 };
+	}
+
+	// Dates are ServiceM8's own "YYYY-MM-DD HH:MM:SS" in the account's local
+	// time. allocation_date is the earliest the work should show up on a
+	// schedule -- today, because a new website lead wants looking at now.
+	const now = serviceM8Timestamp(opts.timeZone || BUSINESS_TIMEZONE);
+	const allocationWindowUuid = env.SERVICEM8_ALLOCATION_WINDOW_UUID || "";
+
+	const results = await Promise.allSettled(
+		recipients.map((r) =>
+			sm8Create(env, "joballocation", {
+				job_uuid: jobUuid,
+				staff_uuid: r.uuid,
+				allocation_date: now.slice(0, 10) + " 00:00:00",
+				allocated_timestamp: now,
+				...(allocationWindowUuid ? { allocation_window_uuid: allocationWindowUuid } : {}),
+				...(env.SERVICEM8_NOTIFY_FROM_STAFF_UUID ? { allocated_by_staff_uuid: env.SERVICEM8_NOTIFY_FROM_STAFF_UUID } : {}),
+			})
+		)
+	);
+
+	let allocated = 0;
+	results.forEach((r, i) => {
+		if (r.status === "fulfilled") allocated++;
+		else
+			console.error(
+				`ServiceM8 allocate: allocating job ${jobUuid} to ${recipients[i].label} failed:`,
+				r.reason && (r.reason.stack || r.reason.message)
+			);
+	});
+
+	console.log(
+		`ServiceM8 allocate: job ${jobUuid} allocated to ${allocated}/${recipients.length} ` +
+			`(${recipients.map((r) => r.label).join(", ")})`
+	);
+	return { allocated, recipients: recipients.length };
+}
+
+const BUSINESS_TIMEZONE = "Australia/Sydney";
+
+// "YYYY-MM-DD HH:MM:SS" in the account's local time, which is the only date
+// format the ServiceM8 API accepts. Built from Intl parts rather than string
+// surgery on an ISO timestamp so it stays correct across daylight saving.
+function serviceM8Timestamp(timeZone) {
+	const parts = new Intl.DateTimeFormat("en-CA", {
+		timeZone,
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+		hour: "2-digit",
+		minute: "2-digit",
+		second: "2-digit",
+		hour12: false,
+	}).formatToParts(new Date());
+	const get = (t) => (parts.find((p) => p.type === t) || {}).value || "00";
+	// en-CA gives 24-hour time, but midnight can come back as "24" in some
+	// runtimes -- normalise it so the string is always a valid timestamp.
+	const hour = get("hour") === "24" ? "00" : get("hour");
+	return `${get("year")}-${get("month")}-${get("day")} ${hour}:${get("minute")}:${get("second")}`;
+}
+
 function truncate(text, max) {
 	const t = String(text || "").trim();
 	return t.length > max ? t.slice(0, max - 1) + "…" : t;

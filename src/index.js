@@ -2,6 +2,7 @@ export { ChatHub } from "./chat-hub.js";
 import { loginCookieHeader, logoutCookieHeader, getStaffSession, shouldRenewSession } from "./staff-auth.js";
 import { sendPasswordResetEmail } from "./email.js";
 import { validateBookingFields, validateEnquiryFields, createBookingAndNotify } from "./booking.js";
+import { diagnoseServiceM8 } from "./servicem8.js";
 import { handleMcp } from "./mcp.js";
 import { handleIndexJson } from "./index-json.js";
 import { renderMarkdown } from "./markdown.js";
@@ -109,6 +110,19 @@ export default {
 		}
 		// Staff-only: push a chat lead into ServiceM8. The Durable Object does the
 		// dedup + create via the ServiceM8 API (see src/servicem8.js).
+		// Staff-only: says what ServiceM8 thinks of our lead notifications --
+		// who would be notified, whether the account has an allocation window,
+		// and (with ?job=UUID) the raw result of really allocating that job.
+		if (url.pathname === "/api/staff/servicem8/diagnose") {
+			const session = await getStaffSession(request, env);
+			if (!session) return new Response("Unauthorized", { status: 401 });
+			const report = await diagnoseServiceM8(env, url.searchParams.get("job") || "");
+			return new Response(JSON.stringify(report, null, 2), {
+				status: 200,
+				headers: { "content-type": "application/json", "Cache-Control": "no-store" },
+			});
+		}
+
 		if (url.pathname === "/api/staff/servicem8/create-job" && request.method === "POST") {
 			const session = await getStaffSession(request, env);
 			if (!session) return new Response("Unauthorized", { status: 401 });

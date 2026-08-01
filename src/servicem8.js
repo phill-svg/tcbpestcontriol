@@ -48,7 +48,13 @@ async function sm8Create(env, resource, body) {
 	});
 	if (!res.ok) {
 		const detail = await res.text().catch(() => "");
-		throw new Error("ServiceM8 POST " + resource + " -> " + res.status + " " + detail.slice(0, 200));
+		const error = new Error("ServiceM8 POST " + resource + " -> " + res.status + " " + detail.slice(0, 200));
+		// Kept as fields as well as in the message so callers (and the
+		// /api/servicem8/diagnose endpoint) can report what ServiceM8 actually
+		// said, rather than everyone re-parsing a string.
+		error.status = res.status;
+		error.detail = detail.slice(0, 300);
+		throw error;
 	}
 	const uuid = res.headers.get("x-record-uuid");
 	if (!uuid) throw new Error("ServiceM8 POST " + resource + " returned no record UUID");
@@ -247,36 +253,107 @@ export async function allocateJobToStaff(env, jobUuid, opts = {}) {
 	// time. allocation_date is the earliest the work should show up on a
 	// schedule -- today, because a new website lead wants looking at now.
 	const now = serviceM8Timestamp(opts.timeZone || BUSINESS_TIMEZONE);
-	const allocationWindowUuid = env.SERVICEM8_ALLOCATION_WINDOW_UUID || "";
+
+	// Every allocation ServiceM8 itself creates carries a window, so send one:
+	// an allocation without it is the shape the API rejects. Configured wins;
+	// otherwise use whichever window the account actually has.
+	let allocationWindowUuid = env.SERVICEM8_ALLOCATION_WINDOW_UUID || "";
+	if (!allocationWindowUuid) {
+		try {
+			const windows = await sm8Get(env, "/allocationwindow.json");
+			const usable = (Array.isArray(windows) ? windows : []).find((w) => String(w.active) !== "0");
+			if (usable) allocationWindowUuid = usable.uuid;
+		} catch (e) {
+			console.error("ServiceM8 allocate: couldn't read allocation windows:", e && e.message);
+		}
+	}
 
 	const results = await Promise.allSettled(
 		recipients.map((r) =>
 			sm8Create(env, "joballocation", {
+				// active is not optional in practice -- left unset the record is
+				// created inactive, which shows up nowhere and notifies nobody.
+				active: 1,
 				job_uuid: jobUuid,
 				staff_uuid: r.uuid,
 				allocation_date: now.slice(0, 10) + " 00:00:00",
 				allocated_timestamp: now,
+				// Matches what ServiceM8 writes for its own allocations: a far-off
+				// expiry rather than none, and a nominal duration.
+				expiry_timestamp: `${Number(now.slice(0, 4)) + 10}${now.slice(4)}`,
+				estimated_duration: "60",
 				...(allocationWindowUuid ? { allocation_window_uuid: allocationWindowUuid } : {}),
-				...(env.SERVICEM8_NOTIFY_FROM_STAFF_UUID ? { allocated_by_staff_uuid: env.SERVICEM8_NOTIFY_FROM_STAFF_UUID } : {}),
+				...(env.SERVICEM8_NOTIFY_FROM_STAFF_UUID
+					? { allocated_by_staff_uuid: env.SERVICEM8_NOTIFY_FROM_STAFF_UUID }
+					: { allocated_by_staff_uuid: r.uuid }),
 			})
 		)
 	);
 
 	let allocated = 0;
+	const failures = [];
 	results.forEach((r, i) => {
-		if (r.status === "fulfilled") allocated++;
-		else
-			console.error(
-				`ServiceM8 allocate: allocating job ${jobUuid} to ${recipients[i].label} failed:`,
-				r.reason && (r.reason.stack || r.reason.message)
-			);
+		if (r.status === "fulfilled") {
+			allocated++;
+			return;
+		}
+		const reason = r.reason || {};
+		failures.push({ staff: recipients[i].label, status: reason.status || 0, detail: reason.detail || reason.message || "" });
+		console.error(
+			`ServiceM8 allocate: allocating job ${jobUuid} to ${recipients[i].label} failed ` +
+				`(HTTP ${reason.status || "?"}):`,
+			reason.detail || reason.message || reason
+		);
 	});
 
 	console.log(
 		`ServiceM8 allocate: job ${jobUuid} allocated to ${allocated}/${recipients.length} ` +
 			`(${recipients.map((r) => r.label).join(", ")})`
 	);
-	return { allocated, recipients: recipients.length };
+	return { allocated, recipients: recipients.length, failures, allocationWindowUuid };
+}
+
+// Reports what the ServiceM8 side of a lead notification actually looks like:
+// whether the key is set, who would be notified, whether the account has an
+// allocation window, and -- given a job UUID -- the raw result of really
+// allocating it. Exists because "no notification arrived" has several causes
+// that are indistinguishable without asking ServiceM8 directly.
+export async function diagnoseServiceM8(env, jobUuid) {
+	const report = { apiKeyConfigured: !!env.SERVICEM8_API_KEY };
+	if (!report.apiKeyConfigured) {
+		report.problem = "SERVICEM8_API_KEY is not set on the Worker.";
+		return report;
+	}
+
+	try {
+		const rows = await sm8Get(env, "/staff.json");
+		const active = (Array.isArray(rows) ? rows : []).filter((s) => String(s.active) !== "0");
+		report.activeStaff = active.map((s) => ({
+			name: staffLabel(s),
+			uuid: s.uuid,
+			canReceivePush: String(s.can_receive_push_notification) === "1",
+		}));
+	} catch (e) {
+		report.staffLookupError = e.message;
+	}
+
+	try {
+		report.notifyTargets = (await resolveNotifyStaff(env)).map((r) => r.label);
+	} catch (e) {
+		report.notifyTargetsError = e.message;
+	}
+
+	try {
+		const windows = await sm8Get(env, "/allocationwindow.json");
+		report.allocationWindows = (Array.isArray(windows) ? windows : [])
+			.filter((w) => String(w.active) !== "0")
+			.map((w) => ({ uuid: w.uuid, name: w.name || w.description || "" }));
+	} catch (e) {
+		report.allocationWindowError = e.message;
+	}
+
+	if (jobUuid) report.allocation = await allocateJobToStaff(env, jobUuid);
+	return report;
 }
 
 const BUSINESS_TIMEZONE = "Australia/Sydney";

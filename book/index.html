@@ -243,6 +243,7 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 <div class="field"><label for="bk-service">Service</label><select id="bk-service" name="service" required><option value="" disabled selected>Select a service…</option><option>General pest treatment</option><option>Termite inspection</option><option>Termite treatment</option><option>Ants / Spiders / Cockroaches</option><option>Rodents (mice &amp; rats)</option><option>Wasps / Bees</option><option>Commercial</option><option>Something else</option></select></div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem"><div class="field"><label for="bk-date">Preferred date</label><input id="bk-date" name="date" type="date" required/></div><div class="field"><label for="bk-time">Preferred time</label><select id="bk-time" name="time" required><option value="" disabled selected>Select…</option><option>Morning (8am–12pm)</option><option>Afternoon (12–5pm)</option><option>Anytime</option></select></div></div>
 <div class="field"><label for="bk-message">Anything else? <span class="optional">(optional)</span></label><textarea id="bk-message" name="message" rows="4" placeholder="Tell us about the pest, access, pets on site, etc."></textarea></div>
+<div class="cf-turnstile" data-sitekey="0x4AAAAAAEDn2ttjcXn4zIzP" data-action="book"></div>
 <p class="staff-login-error" data-booking-error hidden style="color:var(--accent);font-size:0.8125rem"></p>
 <div class="form-footer"><button class="btn btn-primary" type="submit" data-booking-submit>Request booking</button><p class="hint">We'll confirm your time by phone or email</p></div>
 </form>
@@ -358,6 +359,7 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 </div>
 </div>
 </footer>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <script src="../assets/js/script.js" defer></script>
 <script src="../assets/js/booking.js?v=1" defer></script>
 </body>

@@ -31,6 +31,7 @@ document.addEventListener("DOMContentLoaded", function () {
       time: val("time"),
       message: val("message"),
       company: val("company"), // honeypot -- must stay empty
+      turnstileToken: val("cf-turnstile-response"),
     };
 
     var orig = submitBtn ? submitBtn.textContent : "";
@@ -67,6 +68,8 @@ document.addEventListener("DOMContentLoaded", function () {
           errorEl.textContent = err.message;
           errorEl.hidden = false;
         }
+        // Turnstile tokens are single-use -- reset so a retry gets a fresh one.
+        if (window.turnstile) window.turnstile.reset();
       });
   });
 });

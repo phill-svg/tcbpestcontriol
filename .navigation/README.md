@@ -42,6 +42,7 @@ A category map of every page on the site, for finding things fast in an editor o
 - **[`ant-control/index.html`](ant-control/index.html)** — `/ant-control` — Ant control.
 - **[`carpenter-ants/index.html`](carpenter-ants/index.html)** — `/carpenter-ants` — Carpenter ant control.
 - **[`spider-control/index.html`](spider-control/index.html)** — `/spider-control` — Spider control.
+- **[`spider-control/orb-weaver-spider/index.html`](spider-control/orb-weaver-spider/index.html)** — `/spider-control/orb-weaver-spider` — Orb weaver spider — nested sub-page under spider control.
 - **[`cockroach-control/index.html`](cockroach-control/index.html)** — `/cockroach-control` — Cockroach control.
 - **[`cockroach-control/australian-cockroach/index.html`](cockroach-control/australian-cockroach/index.html)** — `/cockroach-control/australian-cockroach` — Australian cockroach — nested sub-page under cockroach control.
 - **[`termite-treatment/index.html`](termite-treatment/index.html)** — `/termite-treatment` — Termite treatment & inspections.

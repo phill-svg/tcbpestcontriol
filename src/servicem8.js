@@ -8,6 +8,9 @@
 // never create a second client for an email/phone that already exists, and we
 // won't silently open a second Quote job for a customer who already has one.
 
+import { sydneyLocalToMs, formatSydneyTimestamp } from "./availability.js";
+import { STAFF_UUID } from "./booking-config.js";
+
 const BASE = "https://api.servicem8.com/api_1.0";
 
 function headers(env) {
@@ -71,19 +74,23 @@ function splitName(name) {
 // Find an existing customer (company_uuid) by contact email, then phone.
 // Returns null if none -- caller creates a new one. Throws on API error so we
 // never accidentally create a duplicate when the dedup check itself failed.
+//
+// Matches inactive/archived contacts too, not just active ones: ServiceM8
+// enforces company-name uniqueness even against archived companies, so if we
+// only matched active contacts here, an archived customer's name would block
+// a genuine repeat customer's create with "Name must be unique" instead of
+// reusing their existing record (confirmed live 2026-08-05).
 async function findExistingCompanyUuid(env, email, phone) {
 	const e = normEmail(email);
 	if (e) {
 		const rows = await sm8Get(env, `/companycontact.json?%24filter=${encodeURIComponent(`email eq '${e}'`)}`);
-		const hit = Array.isArray(rows) && rows.find((r) => normEmail(r.email) === e && String(r.active) !== "0");
+		const hit = Array.isArray(rows) && rows.find((r) => normEmail(r.email) === e);
 		if (hit) return hit.company_uuid;
 	}
 	const p = normPhone(phone);
 	if (p) {
 		const rows = await sm8Get(env, `/companycontact.json?%24filter=${encodeURIComponent(`phone eq '${p}'`)}`);
-		const hit =
-			Array.isArray(rows) &&
-			rows.find((r) => (normPhone(r.phone) === p || normPhone(r.mobile) === p) && String(r.active) !== "0");
+		const hit = Array.isArray(rows) && rows.find((r) => normPhone(r.phone) === p || normPhone(r.mobile) === p);
 		if (hit) return hit.company_uuid;
 	}
 	return null;
@@ -418,10 +425,13 @@ export async function notifyStaffOfNewJob(env, jobUuid, lines) {
 		recipients.map((r) =>
 			sm8Create(env, "staffmessage", {
 				to_staff_uuid: r.uuid,
-				// Left unset unless configured -- a message addressed from the same
-				// person it's going to is the one case that risks being treated as
-				// "your own message" and not pushed.
-				...(fromStaffUuid ? { from_staff_uuid: fromStaffUuid } : {}),
+				// from_staff_uuid is REQUIRED by ServiceM8 (confirmed live 2026-08-05:
+				// omitting it entirely 400s with "is mandatory") -- there's no
+				// "no sender" option. Prefer the configured sender; otherwise fall back
+				// to the recipient's own uuid, which risks being treated as "your own
+				// message" and not pushed as prominently, but still succeeds -- far
+				// better than the message failing outright every time.
+				from_staff_uuid: fromStaffUuid || r.uuid,
 				message,
 				regarding_job_uuid: jobUuid,
 			})
@@ -443,4 +453,207 @@ export async function notifyStaffOfNewJob(env, jobUuid, lines) {
 			`(${recipients.map((r) => r.label).join(", ")})`
 	);
 	return { sent, recipients: recipients.length };
+}
+
+// --- Online booking widget: read/write the calendar directly -------------
+//
+// The lead flow above (createServiceM8Lead) opens a Quote and lets a human
+// pick a time later. The booking widget is the opposite: the customer picks
+// an exact slot on the website, so by the time we talk to ServiceM8 the job
+// needs to land as an already-confirmed Work Order with a jobactivity that
+// occupies the calendar -- and before that, we need to know which slots are
+// actually free by reading the calendar back.
+
+// Parse a ServiceM8 "YYYY-MM-DD HH:MM:SS" Sydney-local timestamp (as seen on
+// jobactivity/vacation start_date/end_date) into an absolute epoch-ms
+// instant. Splits the string rather than handing it to Date() -- Date would
+// parse it in the runtime's own timezone (UTC on Workers), not Sydney's --
+// and defers the actual DST-safe conversion to sydneyLocalToMs so this file
+// never re-derives its own timezone maths. Returns NaN on anything that
+// doesn't match the shape, so a bad row gets filtered out rather than
+// silently treated as instant 0.
+function parseServiceM8Timestamp(s) {
+	const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(String(s || ""));
+	if (!m) return NaN;
+	const year = Number(m[1]);
+	const month = Number(m[2]);
+	const day = Number(m[3]);
+	const hour = Number(m[4]);
+	const min = Number(m[5]);
+	const sec = Number(m[6]);
+	return sydneyLocalToMs(year, month, day, hour, min) + sec * 1000;
+}
+
+// Real busy intervals for STAFF_UUID between two instants, as
+// [{ startMs, endMs }, ...] -- the shape computeSlots (availability.js)
+// expects as `occupancy`. Two ServiceM8 objects can make a staff member
+// busy: jobactivity (scheduled work) and vacation (leave/blocked time).
+//
+// Both queries use the same overlap filter -- `start_date lt TO and
+// end_date gt FROM` -- rather than "starts within the window", so a job that
+// starts before the window but is still running when it opens (or starts
+// inside the window and runs past its end) is still caught.
+//
+// Fails safe: a broken jobactivity read throws (the caller must not offer
+// slots computed from unknown occupancy -- no availability beats wrong
+// availability). A broken vacation read only logs and is dropped, because
+// jobactivity is the occupancy source we're sure of and vacation's exact
+// object/field shape is unconfirmed (see task report).
+export async function readStaffOccupancy(env, fromMs, toMs) {
+	if (!env.SERVICEM8_API_KEY) throw new Error("ServiceM8 is not configured (no API key set)");
+
+	const fromStr = formatSydneyTimestamp(fromMs);
+	const toStr = formatSydneyTimestamp(toMs);
+	const overlapFilter = `staff_uuid eq '${STAFF_UUID}' and start_date lt '${toStr}' and end_date gt '${fromStr}'`;
+
+	const jobActivityRows = await sm8Get(env, `/jobactivity.json?%24filter=${encodeURIComponent(overlapFilter)}`);
+	const jobActivityIntervals = (Array.isArray(jobActivityRows) ? jobActivityRows : [])
+		.filter((r) => String(r.active) !== "0")
+		.map((r) => ({ startMs: parseServiceM8Timestamp(r.start_date), endMs: parseServiceM8Timestamp(r.end_date) }))
+		.filter((iv) => Number.isFinite(iv.startMs) && Number.isFinite(iv.endMs) && iv.endMs > iv.startMs);
+
+	let vacationIntervals = [];
+	try {
+		const vacationRows = await sm8Get(env, `/vacation.json?%24filter=${encodeURIComponent(overlapFilter)}`);
+		vacationIntervals = (Array.isArray(vacationRows) ? vacationRows : [])
+			.filter((r) => String(r.active) !== "0")
+			.map((r) => ({ startMs: parseServiceM8Timestamp(r.start_date), endMs: parseServiceM8Timestamp(r.end_date) }))
+			.filter((iv) => Number.isFinite(iv.startMs) && Number.isFinite(iv.endMs) && iv.endMs > iv.startMs);
+	} catch (e) {
+		console.error(
+			"ServiceM8 readStaffOccupancy: vacation read failed, continuing on jobactivity occupancy only:",
+			e && e.message
+		);
+	}
+
+	return jobActivityIntervals.concat(vacationIntervals);
+}
+
+// Like createServiceM8Lead, but for a booking the customer has already
+// locked into a specific slot -- so the job is created straight into
+// "Work Order" status, not "Quote", and there's no open-Quote dedup step (a
+// booking is always a new confirmed job, never a stand-in for some earlier
+// enquiry). Customer dedup is otherwise identical to createServiceM8Lead:
+// never create a second company/contact for an email/phone ServiceM8
+// already has.
+//   lead = { name, email, phone, address, description }
+//   opts = { status }  -- job status to create with; defaults to "Work Order".
+//                         The pricing widget passes status:"Quote" when the
+//                         customer asked for a custom quote instead of taking
+//                         the fixed online price -- everything else about the
+//                         flow (slot locked, jobactivity scheduled) is unchanged.
+// Returns { jobUuid, jobUrl }.
+export async function createWorkOrderJob(env, lead, opts = {}) {
+	if (!env.SERVICEM8_API_KEY) throw new Error("ServiceM8 is not configured (no API key set)");
+
+	const { name, email, phone, address, description } = lead;
+	const { first, last } = splitName(name);
+
+	// 1. Find or create the customer (never duplicate an existing email/phone).
+	let companyUuid = await findExistingCompanyUuid(env, email, phone);
+	if (!companyUuid) {
+		const baseName = name || email || "Website booking";
+		try {
+			companyUuid = await sm8Create(env, "company", { name: baseName, active: 1, is_individual: 1 });
+		} catch (e) {
+			// ServiceM8 enforces company-NAME uniqueness as a separate constraint
+			// from our email/phone dedup above -- two unrelated customers can
+			// share a display name (or the same literal test name gets reused),
+			// and that has nothing to do with whether they're the same contact.
+			// Confirmed live 2026-08-05: this 400s even though findExistingCompanyUuid
+			// correctly found no matching contact. Disambiguate with email/phone
+			// (guaranteed to differ per distinct customer) and retry once.
+			if (e && e.status === 400 && /name must be unique/i.test(e.detail || e.message || "")) {
+				const suffix = normEmail(email) || normPhone(phone) || String(Date.now());
+				companyUuid = await sm8Create(env, "company", {
+					name: `${baseName} (${suffix})`,
+					active: 1,
+					is_individual: 1,
+				});
+			} else {
+				throw e;
+			}
+		}
+		await sm8Create(env, "companycontact", {
+			company_uuid: companyUuid,
+			first: first || name || "Website",
+			last,
+			email: normEmail(email),
+			phone: normPhone(phone),
+			mobile: normPhone(phone),
+			type: "JOB",
+			is_primary_contact: 1,
+			active: 1,
+		});
+	}
+
+	// 2. Create the job (Work Order by default) + its job contact.
+	const jobUuid = await sm8Create(env, "job", {
+		status: opts.status || "Work Order",
+		company_uuid: companyUuid,
+		job_description: description || "",
+		job_address: address || "",
+	});
+	await sm8Create(env, "jobcontact", {
+		job_uuid: jobUuid,
+		first: first || name || "Website",
+		last,
+		email: normEmail(email),
+		phone: normPhone(phone),
+		mobile: normPhone(phone),
+		type: "JOB",
+	});
+
+	return { jobUuid, jobUrl: jobUrl(jobUuid) };
+}
+
+// Puts the booking on Phill's ServiceM8 calendar -- this is the write that
+// actually occupies the slot; readStaffOccupancy above reads exactly this
+// object back, so a booking is only really "locked in" once this succeeds.
+// startIso/endIso are "YYYY-MM-DD HH:MM:SS" Sydney local, same shape as
+// everywhere else in this file. activity_was_scheduled:1 marks this as a
+// real scheduled booking (as opposed to a logged/completed activity); active
+// is required for it to show up at all, same as every other create here.
+// Returns the new jobactivity uuid.
+export async function createJobActivity(env, { jobUuid, staffUuid, startIso, endIso }) {
+	if (!env.SERVICEM8_API_KEY) throw new Error("ServiceM8 is not configured (no API key set)");
+
+	return sm8Create(env, "jobactivity", {
+		job_uuid: jobUuid,
+		staff_uuid: staffUuid,
+		start_date: startIso,
+		end_date: endIso,
+		activity_was_scheduled: 1,
+		active: 1,
+	});
+}
+
+// Puts the fixed online price on the job as an invoice line item, so the
+// ServiceM8 invoice reflects what the customer was quoted on the website
+// without staff re-entering it by hand. Called best-effort by the booking
+// pipeline (src/booking.js) -- a failure here must never undo an
+// already-confirmed booking, so this throws on error and it's the caller's
+// job to catch it.
+//
+// GST: confirmed via ServiceM8's own field docs -- `jobmaterial.price` is
+// always EX-tax ("unit price of the material excluding tax"), while the
+// customer-facing invoice/quote amount is the separate `displayed_amount`
+// field, whose tax treatment is controlled by `displayed_amount_is_tax_inclusive`.
+// `amount` here is our inc-GST quoted price, so it goes in `displayed_amount`
+// (flagged as tax-inclusive) and is divided by 1.1 (AU GST) for `price`.
+// Confirmed live 2026-08-05: without `displayed_amount` set at all, ServiceM8
+// rejects the create with 400 "Provided displayed_amount is incorrect."
+export async function createInvoiceLineItem(env, { jobUuid, name, amount }) {
+	if (!env.SERVICEM8_API_KEY) throw new Error("ServiceM8 is not configured (no API key set)");
+
+	const exGstPrice = Math.round((amount / 1.1) * 100) / 100;
+
+	return sm8Create(env, "jobmaterial", {
+		job_uuid: jobUuid,
+		name,
+		quantity: 1,
+		price: exGstPrice,
+		displayed_amount: amount,
+		displayed_amount_is_tax_inclusive: true,
+	});
 }

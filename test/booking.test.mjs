@@ -1,0 +1,43 @@
+// Unit tests for the pure helpers in the booking pipeline. Only the
+// deterministic, network-free helper is covered here -- the scheduled-slot
+// D1/ServiceM8 flow needs live bindings and is self-reviewed rather than
+// mocked into a vacuous test. Run with:  node --test test/booking.test.mjs
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+import { formatConfirmedTime } from "../src/booking.js";
+import { msToSydneyParts, sydneyLocalToMs } from "../src/availability.js";
+
+test("anchor sanity: 2026-08-11 09:00 really is a Sydney Tuesday", () => {
+	assert.equal(msToSydneyParts(sydneyLocalToMs(2026, 8, 11, 9, 0)).weekday, 2);
+});
+
+test("formats a Sydney-local slot start as a friendly confirmed time (AEST)", () => {
+	assert.equal(formatConfirmedTime("2026-08-11 09:00:00"), "Tue 11 Aug 2026, 9:00 AM");
+});
+
+test("uses 12-hour clock with an uppercase period for the afternoon", () => {
+	assert.equal(formatConfirmedTime("2026-08-11 14:30:00"), "Tue 11 Aug 2026, 2:30 PM");
+});
+
+test("noon and midnight read as PM/AM, not 0:00", () => {
+	assert.equal(formatConfirmedTime("2026-08-11 12:00:00"), "Tue 11 Aug 2026, 12:00 PM");
+	assert.equal(formatConfirmedTime("2026-08-11 00:00:00"), "Tue 11 Aug 2026, 12:00 AM");
+});
+
+test("stays correct across DST -- a January slot is AEDT (+11), not AEST", () => {
+	// 2026-01-13 is a Tuesday in Sydney, deep in daylight-saving (AEDT). The
+	// display is driven off the Sydney wall clock, so the hour must read exactly
+	// what was booked regardless of the +11 offset.
+	assert.equal(msToSydneyParts(sydneyLocalToMs(2026, 1, 13, 9, 0)).weekday, 2);
+	assert.equal(formatConfirmedTime("2026-01-13 09:00:00"), "Tue 13 Jan 2026, 9:00 AM");
+});
+
+test("returns empty string for anything that isn't the expected shape", () => {
+	assert.equal(formatConfirmedTime(""), "");
+	assert.equal(formatConfirmedTime(null), "");
+	assert.equal(formatConfirmedTime(undefined), "");
+	assert.equal(formatConfirmedTime("2026-08-11T09:00:00"), ""); // ISO 'T', not our space form
+	assert.equal(formatConfirmedTime("not a date"), "");
+});

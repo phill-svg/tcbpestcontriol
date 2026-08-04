@@ -18,6 +18,11 @@
   "send_email": [
     { "name": "EMAIL", "remote": true }
   ],
+  "d1_databases": [
+    // Remote D1 database for the booking slot-lock/audit table (schema.sql).
+    // Created 2026-08-04 via the Cloudflare API; this is the real production id.
+    { "binding": "DB", "database_name": "tcb-booking-db", "database_id": "25dde6a5-146a-4ec7-9d4c-95d2d692e98f" }
+  ],
   "observability": {
     "enabled": true
   },

@@ -74,19 +74,23 @@ function splitName(name) {
 // Find an existing customer (company_uuid) by contact email, then phone.
 // Returns null if none -- caller creates a new one. Throws on API error so we
 // never accidentally create a duplicate when the dedup check itself failed.
+//
+// Matches inactive/archived contacts too, not just active ones: ServiceM8
+// enforces company-name uniqueness even against archived companies, so if we
+// only matched active contacts here, an archived customer's name would block
+// a genuine repeat customer's create with "Name must be unique" instead of
+// reusing their existing record (confirmed live 2026-08-05).
 async function findExistingCompanyUuid(env, email, phone) {
 	const e = normEmail(email);
 	if (e) {
 		const rows = await sm8Get(env, `/companycontact.json?%24filter=${encodeURIComponent(`email eq '${e}'`)}`);
-		const hit = Array.isArray(rows) && rows.find((r) => normEmail(r.email) === e && String(r.active) !== "0");
+		const hit = Array.isArray(rows) && rows.find((r) => normEmail(r.email) === e);
 		if (hit) return hit.company_uuid;
 	}
 	const p = normPhone(phone);
 	if (p) {
 		const rows = await sm8Get(env, `/companycontact.json?%24filter=${encodeURIComponent(`phone eq '${p}'`)}`);
-		const hit =
-			Array.isArray(rows) &&
-			rows.find((r) => (normPhone(r.phone) === p || normPhone(r.mobile) === p) && String(r.active) !== "0");
+		const hit = Array.isArray(rows) && rows.find((r) => normPhone(r.phone) === p || normPhone(r.mobile) === p);
 		if (hit) return hit.company_uuid;
 	}
 	return null;

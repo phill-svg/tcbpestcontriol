@@ -354,7 +354,7 @@ document.addEventListener("DOMContentLoaded", function () {
     var orig = submitBtn ? submitBtn.textContent : "";
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.textContent = "Booking…";
+      submitBtn.textContent = isQuoteMode() ? "Sending…" : "Booking…";
     }
 
     fetch("/api/booking", {

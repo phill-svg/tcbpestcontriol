@@ -2,10 +2,12 @@ export { ChatHub } from "./chat-hub.js";
 import { loginCookieHeader, logoutCookieHeader, getStaffSession, shouldRenewSession } from "./staff-auth.js";
 import { sendPasswordResetEmail } from "./email.js";
 import { validateBookingFields, validateEnquiryFields, createBookingAndNotify } from "./booking.js";
-import { diagnoseServiceM8 } from "./servicem8.js";
+import { diagnoseServiceM8, readStaffOccupancy } from "./servicem8.js";
 import { handleMcp } from "./mcp.js";
 import { handleIndexJson } from "./index-json.js";
 import { renderMarkdown } from "./markdown.js";
+import { isBookableService, SERVICE_LABELS, HORIZON_DAYS } from "./booking-config.js";
+import { computeSlots } from "./availability.js";
 
 export default {
 	async fetch(request, env, ctx) {
@@ -198,6 +200,13 @@ export default {
 			return handleBooking(request, env, ctx);
 		}
 
+		// Live slot availability for the online booking widget -- always fresh
+		// (never cached: it reflects Phill's real ServiceM8 diary at request time)
+		// and fails safe (no slots offered) if occupancy can't be read.
+		if (url.pathname === "/api/availability" && request.method === "GET") {
+			return handleAvailability(request, env);
+		}
+
 		// The /contact enquiry form posts straight here: emails the office,
 		// creates a ServiceM8 Quote job and pings staff in the app, then sends
 		// the visitor on to /thank-you. See handleContactEnquiry.
@@ -314,9 +323,64 @@ function withAgentDiscoveryLinks(response) {
 // their index.html directly, first. Only paths that already look like a
 // literal file (have an extension) or don't match any index.html fall back
 // to an exact-match lookup.
+// Shared by handleAvailability and handleBooking's slot re-validation, so the
+// two can never compute availability differently. Pads the horizon by two
+// days beyond HORIZON_DAYS when reading ServiceM8 occupancy -- computeSlots
+// itself stops offering days past the horizon, but the pad keeps the busy-time
+// window comfortably clear of the last offered day's slots across a TZ edge.
+// Throws whenever readStaffOccupancy does (ServiceM8 read failure) -- callers
+// must fail safe (never offer a slot when occupancy is unknown), not swallow it.
+async function computeAvailabilityFor(env, service, nowMs) {
+	const fromMs = nowMs;
+	const toMs = nowMs + (HORIZON_DAYS + 2) * 86400000;
+	const occupancy = await readStaffOccupancy(env, fromMs, toMs);
+	return computeSlots({ occupancy, service, nowMs });
+}
+
+// GET /api/availability?service=<key>[&date=YYYY-MM-DD] -- live slots for the
+// online booking widget. Always Cache-Control: no-store (it reflects Phill's
+// real ServiceM8 diary at request time); fails safe with a 503 rather than
+// showing stale or empty availability if occupancy can't be read.
+async function handleAvailability(request, env) {
+	const url = new URL(request.url);
+	const service = String(url.searchParams.get("service") || "").trim();
+	if (!isBookableService(service)) {
+		return jsonError(400, "Unknown service.");
+	}
+
+	let result;
+	try {
+		result = await computeAvailabilityFor(env, service, Date.now());
+	} catch (e) {
+		console.error("Availability read failed:", e && (e.stack || e.message));
+		return new Response(
+			JSON.stringify({ ok: false, error: "We couldn't load live availability just now — please call us on 02 6105 9771." }),
+			{ status: 503, headers: { "content-type": "application/json", "Cache-Control": "no-store" } }
+		);
+	}
+
+	const date = String(url.searchParams.get("date") || "").trim();
+	if (date) {
+		const day = result.days.find((d) => d.date === date);
+		result = { ...result, days: day ? [day] : [] };
+	}
+
+	return new Response(JSON.stringify({ ok: true, ...result }), {
+		status: 200,
+		headers: { "content-type": "application/json", "Cache-Control": "no-store" },
+	});
+}
+
 // Handle a public booking-form submission: validate, (optionally) verify
 // Turnstile, then hand off to the shared booking pipeline in src/booking.js
 // (also used by the submit_booking_enquiry MCP tool in src/mcp.js).
+//
+// Two paths, chosen by whether the client posted a chosen slotStartIso:
+//   - present -> scheduled auto-booking: the slot is re-validated against a
+//     freshly-recomputed availability (never trust the client -- an
+//     already-taken or now-expired slot is caught here), then handed to
+//     createBookingAndNotify with opts.slot to lock it in and confirm.
+//   - absent  -> the original JS-disabled fallback / lead behaviour, unchanged.
 async function handleBooking(request, env, ctx) {
 	let body;
 	try {
@@ -345,6 +409,39 @@ async function handleBooking(request, env, ctx) {
 	if (env.TURNSTILE_SECRET) {
 		const ok = await verifyTurnstile(env, body.turnstileToken, request);
 		if (!ok) return jsonError(400, "Verification failed. Please try again.");
+	}
+
+	const slotStartIso = String(body.slotStartIso || "").trim();
+
+	if (slotStartIso) {
+		// Scheduled booking: `service` here is a booking-config service KEY
+		// (the widget's <select> uses the key as its value), not free text.
+		if (!isBookableService(service)) {
+			return jsonError(400, "Please choose a bookable service.");
+		}
+
+		// Re-validate the slot server-side -- never trust the client. Recomputing
+		// availability from scratch (rather than trusting the posted end time)
+		// also catches a slot that's since been taken or has aged past "now".
+		let avail;
+		try {
+			avail = await computeAvailabilityFor(env, service, Date.now());
+		} catch (e) {
+			console.error("Availability read failed during booking:", e && (e.stack || e.message));
+			return jsonError(503, "We couldn't complete your booking — please call us on 02 6105 9771.");
+		}
+		const matched = avail.days.flatMap((d) => d.slots).find((s) => s.startIso === slotStartIso);
+		if (!matched) {
+			return jsonError(409, "That time is no longer available — please pick another.");
+		}
+
+		const scheduledFields = { ...fields, service: SERVICE_LABELS[service] };
+		const slot = { startIso: matched.startIso, endIso: matched.endIso, serviceKey: service };
+		const r = await createBookingAndNotify(env, ctx, scheduledFields, "Online booking (website /book form)", { slot });
+
+		if (r.conflict) return jsonError(409, "That time was just taken — please pick another.");
+		if (r.error) return jsonError(502, "We couldn't complete your booking — please call us on 02 6105 9771.");
+		return okJson({ ok: true, booked: true });
 	}
 
 	await createBookingAndNotify(env, ctx, fields, "Online booking request (website /book form)");

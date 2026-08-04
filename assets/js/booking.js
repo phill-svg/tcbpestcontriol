@@ -56,6 +56,13 @@ document.addEventListener("DOMContentLoaded", function () {
   var quoteToggle = form.querySelector("[data-quote-toggle]");
   var quoteInput = form.querySelector("[data-quote-input]");
 
+  // A custom-quote request is a no-time enquiry, so quote mode hides the whole
+  // date + time-slot step; these refs let us show/hide it and swap the success copy.
+  var dateField = dateInput ? dateInput.closest(".field") : null;
+  var slotsField = chipsEl ? chipsEl.closest(".field") : null;
+  var successTitle = successEl ? successEl.querySelector(".staff-login-success-title") : null;
+  var successText = successEl ? successEl.querySelector(".staff-login-success-text") : null;
+
   var DEFAULT_PRICE_NOTE = "Fixed price — no surprises. Includes GST.";
   var QUOTE_PRICE_NOTE = "We'll prepare a custom quote for you — no fixed price.";
 
@@ -67,7 +74,14 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!quoteInput) return;
     quoteInput.value = on ? "1" : "0";
     if (quoteToggle) quoteToggle.textContent = on ? "Use the fixed price instead" : "Prefer a custom quote instead?";
+    // Show/hide the date + time-slot step. Drop the date's `required` flag when
+    // hidden so a hidden field can't block submit, and relabel the button.
+    if (dateField) dateField.hidden = on;
+    if (slotsField) slotsField.hidden = on;
+    if (dateInput) dateInput.required = !on;
+    if (submitBtn) submitBtn.textContent = on ? "Request a quote" : "Book my time";
     if (on) {
+      clearSlotSelection();
       if (modifierField) modifierField.hidden = true;
       if (priceRow) priceRow.hidden = false;
       if (priceAmountEl) priceAmountEl.textContent = "";
@@ -295,7 +309,9 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
-    if (!slotInput || !slotInput.value) {
+    // A firm time is required for a normal booking, but NOT for a custom-quote
+    // request (that's a no-time enquiry).
+    if (!isQuoteMode() && (!slotInput || !slotInput.value)) {
       if (errorEl) {
         errorEl.textContent = "Please pick an available time.";
         errorEl.hidden = false;
@@ -325,8 +341,8 @@ document.addEventListener("DOMContentLoaded", function () {
       phone: val("phone"),
       address: val("address"),
       service: serviceSelect ? serviceSelect.value : "",
-      slotStartIso: slotInput.value,
-      date: chosenDate,
+      slotStartIso: isQuoteMode() ? "" : slotInput ? slotInput.value : "",
+      date: isQuoteMode() ? "" : chosenDate,
       message: val("message"),
       company: val("company"), // honeypot -- must stay empty
       turnstileToken: val("cf-turnstile-response"),
@@ -362,8 +378,14 @@ document.addEventListener("DOMContentLoaded", function () {
           err.status = r.status;
           throw err;
         }
-        // Success: swap the form for the confirmation.
-        if (whenEl) {
+        // Success: swap the form for the confirmation. A quote request gets an
+        // enquiry acknowledgement (no time); a booking gets the confirmed time.
+        if (isQuoteMode()) {
+          if (successTitle) successTitle.textContent = "Quote request received";
+          if (successText)
+            successText.textContent =
+              "Thanks — we'll be in touch with your quote and to arrange a time. For anything urgent, call 02 6105 9771.";
+        } else if (whenEl) {
           whenEl.textContent = friendlyDate(chosenDate) + ", " + chosenTimeLabel;
         }
         form.hidden = true;

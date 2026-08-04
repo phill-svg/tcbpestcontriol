@@ -412,6 +412,30 @@ async function handleBooking(request, env, ctx) {
 	}
 
 	const slotStartIso = String(body.slotStartIso || "").trim();
+	const modifier = String(body.modifier || "").trim();
+	const quoteRequested = String(body.quoteRequested || "") === "1";
+
+	// Custom-quote request: no fixed price and no firm appointment time. Create a
+	// lead (exactly like the enquiry form) for the owner to price and schedule by
+	// hand -- skip the availability/slot path and the pricing entirely.
+	if (quoteRequested) {
+		const svcLabel = isBookableService(service) ? SERVICE_LABELS[service] : service;
+		const quoteFields = {
+			...fields,
+			service: svcLabel,
+			message: [
+				message,
+				`Customer requested a CUSTOM QUOTE${modifier ? " (" + modifier + ")" : ""} — no fixed price. Please quote and arrange a time.`,
+			]
+				.filter(Boolean)
+				.join("\n"),
+		};
+		await createBookingAndNotify(env, ctx, quoteFields, "Custom quote request (website /book form)", {
+			alertLabel: "New quote request",
+			emailLabel: "quote request",
+		});
+		return okJson({ ok: true, quote: true });
+	}
 
 	if (slotStartIso) {
 		// Scheduled booking: `service` here is a booking-config service KEY
@@ -436,19 +460,12 @@ async function handleBooking(request, env, ctx) {
 		}
 
 		// Pricing is authoritative here, server-side -- the front end only ever
-		// DISPLAYS a price, it never sends one. `modifier` picks a fixed price
-		// off booking-config.js's PRICING table; quoteRequested skips that
-		// entirely and books the job as a Quote for the owner to price by hand.
-		const modifier = String(body.modifier || "").trim();
-		const quoteRequested = String(body.quoteRequested || "") === "1";
-		let pricing;
-		if (quoteRequested) {
-			pricing = { quote: true };
-		} else {
-			const p = computePrice(service, modifier);
-			if (!p.ok) return jsonError(400, "Please choose an option for that service.");
-			pricing = { amount: p.amount, modifierLabel: p.modifierLabel };
-		}
+		// DISPLAYS a price, it never sends one. `modifier` (read above) picks a
+		// fixed price off booking-config.js's PRICING table. (Quote requests were
+		// already handled above and never reach this priced slot-booking path.)
+		const p = computePrice(service, modifier);
+		if (!p.ok) return jsonError(400, "Please choose an option for that service.");
+		const pricing = { amount: p.amount, modifierLabel: p.modifierLabel };
 
 		const scheduledFields = { ...fields, service: SERVICE_LABELS[service] };
 		const slot = { startIso: matched.startIso, endIso: matched.endIso, serviceKey: service };

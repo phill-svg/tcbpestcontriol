@@ -421,10 +421,13 @@ export async function notifyStaffOfNewJob(env, jobUuid, lines) {
 		recipients.map((r) =>
 			sm8Create(env, "staffmessage", {
 				to_staff_uuid: r.uuid,
-				// Left unset unless configured -- a message addressed from the same
-				// person it's going to is the one case that risks being treated as
-				// "your own message" and not pushed.
-				...(fromStaffUuid ? { from_staff_uuid: fromStaffUuid } : {}),
+				// from_staff_uuid is REQUIRED by ServiceM8 (confirmed live 2026-08-05:
+				// omitting it entirely 400s with "is mandatory") -- there's no
+				// "no sender" option. Prefer the configured sender; otherwise fall back
+				// to the recipient's own uuid, which risks being treated as "your own
+				// message" and not pushed as prominently, but still succeeds -- far
+				// better than the message failing outright every time.
+				from_staff_uuid: fromStaffUuid || r.uuid,
 				message,
 				regarding_job_uuid: jobUuid,
 			})
@@ -611,24 +614,25 @@ export async function createJobActivity(env, { jobUuid, staffUuid, startIso, end
 // already-confirmed booking, so this throws on error and it's the caller's
 // job to catch it.
 //
-// GST NOTE (unverified -- flag before go-live): ServiceM8's `jobmaterial.price`
-// field may be treated as EX-GST, with GST then added on top when the
-// invoice/quote total is generated -- or it may be treated as the final
-// inc-GST line total, depending on the account's tax settings. We pass
-// `amount` (our inc-GST quoted price) straight through as `price` below. If
-// the account in fact adds GST on top, the resulting invoice total will be
-// ~10% more than what the customer was quoted online. This MUST be checked
-// against a real test invoice (create a booking, open the job in ServiceM8,
-// look at the generated invoice total) and, if wrong, fixed here -- e.g. by
-// sending `amount / 1.1` instead, or by adjusting the item/account's tax
-// rate -- before this goes live. Do not assume either way.
+// GST: confirmed via ServiceM8's own field docs -- `jobmaterial.price` is
+// always EX-tax ("unit price of the material excluding tax"), while the
+// customer-facing invoice/quote amount is the separate `displayed_amount`
+// field, whose tax treatment is controlled by `displayed_amount_is_tax_inclusive`.
+// `amount` here is our inc-GST quoted price, so it goes in `displayed_amount`
+// (flagged as tax-inclusive) and is divided by 1.1 (AU GST) for `price`.
+// Confirmed live 2026-08-05: without `displayed_amount` set at all, ServiceM8
+// rejects the create with 400 "Provided displayed_amount is incorrect."
 export async function createInvoiceLineItem(env, { jobUuid, name, amount }) {
 	if (!env.SERVICEM8_API_KEY) throw new Error("ServiceM8 is not configured (no API key set)");
+
+	const exGstPrice = Math.round((amount / 1.1) * 100) / 100;
 
 	return sm8Create(env, "jobmaterial", {
 		job_uuid: jobUuid,
 		name,
 		quantity: 1,
-		price: amount,
+		price: exGstPrice,
+		displayed_amount: amount,
+		displayed_amount_is_tax_inclusive: true,
 	});
 }

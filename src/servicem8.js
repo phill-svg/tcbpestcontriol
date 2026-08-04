@@ -552,11 +552,28 @@ export async function createWorkOrderJob(env, lead, opts = {}) {
 	// 1. Find or create the customer (never duplicate an existing email/phone).
 	let companyUuid = await findExistingCompanyUuid(env, email, phone);
 	if (!companyUuid) {
-		companyUuid = await sm8Create(env, "company", {
-			name: name || email || "Website booking",
-			active: 1,
-			is_individual: 1,
-		});
+		const baseName = name || email || "Website booking";
+		try {
+			companyUuid = await sm8Create(env, "company", { name: baseName, active: 1, is_individual: 1 });
+		} catch (e) {
+			// ServiceM8 enforces company-NAME uniqueness as a separate constraint
+			// from our email/phone dedup above -- two unrelated customers can
+			// share a display name (or the same literal test name gets reused),
+			// and that has nothing to do with whether they're the same contact.
+			// Confirmed live 2026-08-05: this 400s even though findExistingCompanyUuid
+			// correctly found no matching contact. Disambiguate with email/phone
+			// (guaranteed to differ per distinct customer) and retry once.
+			if (e && e.status === 400 && /name must be unique/i.test(e.detail || e.message || "")) {
+				const suffix = normEmail(email) || normPhone(phone) || String(Date.now());
+				companyUuid = await sm8Create(env, "company", {
+					name: `${baseName} (${suffix})`,
+					active: 1,
+					is_individual: 1,
+				});
+			} else {
+				throw e;
+			}
+		}
 		await sm8Create(env, "companycontact", {
 			company_uuid: companyUuid,
 			first: first || name || "Website",

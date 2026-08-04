@@ -1,4 +1,37 @@
 // Booking form -> live availability (GET /api/availability) + auto-book (POST /api/booking).
+//
+// Display copy of src/booking-config.js's PRICING/MODIFIER_LABELS/MODIFIER_OPTIONS
+// -- this is a plain <script> served to the browser, so it can't import the ES
+// module the Worker uses. Kept deliberately identical in shape and values so the
+// two never drift; the price shown here is DISPLAY ONLY -- the server (via
+// computePrice() in booking-config.js, called from index.js's handleBooking)
+// is the only place a price is actually decided, and this script never sends
+// one -- only the chosen `modifier` / `quoteRequested`.
+var PRICING = {
+  "general-pest": { modifier: "bedrooms", prices: { "1-3": 249, "4-5": 289, "6+": 349 } },
+  "ants-spiders-roaches": { modifier: "bedrooms", prices: { "1-3": 249, "4-5": 289, "6+": 349 } },
+  "termite-inspection": { modifier: "property", prices: { subfloor: 320, slab: 289 } },
+  "rodents": { modifier: "none", price: 289 },
+  "wasps-bees": { modifier: "none", price: 289 },
+};
+var MODIFIER_LABELS = { bedrooms: "How many bedrooms?", property: "Property type" };
+var MODIFIER_OPTIONS = {
+  bedrooms: [
+    { value: "1-3", label: "1–3 bedrooms" },
+    { value: "4-5", label: "4–5 bedrooms" },
+    { value: "6+", label: "6 or more bedrooms" },
+  ],
+  property: [
+    { value: "subfloor", label: "With subfloor" },
+    { value: "slab", label: "On a slab (no subfloor)" },
+  ],
+};
+
+function getModifierType(serviceKey) {
+  var entry = PRICING[serviceKey];
+  return entry ? entry.modifier : "none";
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   var form = document.querySelector("[data-booking-form]");
   if (!form) return;
@@ -12,6 +45,101 @@ document.addEventListener("DOMContentLoaded", function () {
   var errorEl = document.querySelector("[data-booking-error]");
   var successEl = document.querySelector("[data-booking-success]");
   var whenEl = successEl ? successEl.querySelector("[data-booking-when]") : null;
+
+  // -- Pricing UI ------------------------------------------------------------
+  var modifierField = form.querySelector("[data-modifier-field]");
+  var modifierLabelEl = form.querySelector("#bk-mod-label");
+  var modifierSelect = form.querySelector("#bk-modifier");
+  var priceRow = form.querySelector("[data-price-row]");
+  var priceAmountEl = form.querySelector("[data-price-amount]");
+  var priceNoteEl = form.querySelector("[data-price-note]");
+  var quoteToggle = form.querySelector("[data-quote-toggle]");
+  var quoteInput = form.querySelector("[data-quote-input]");
+
+  var DEFAULT_PRICE_NOTE = "Fixed price — no surprises. Includes GST.";
+  var QUOTE_PRICE_NOTE = "We'll prepare a custom quote for you — no fixed price.";
+
+  function isQuoteMode() {
+    return quoteInput && quoteInput.value === "1";
+  }
+
+  function setQuoteMode(on) {
+    if (!quoteInput) return;
+    quoteInput.value = on ? "1" : "0";
+    if (quoteToggle) quoteToggle.textContent = on ? "Use the fixed price instead" : "Prefer a custom quote instead?";
+    if (on) {
+      if (modifierField) modifierField.hidden = true;
+      if (priceRow) priceRow.hidden = false;
+      if (priceAmountEl) priceAmountEl.textContent = "";
+      if (priceNoteEl) priceNoteEl.textContent = QUOTE_PRICE_NOTE;
+    } else {
+      if (priceNoteEl) priceNoteEl.textContent = DEFAULT_PRICE_NOTE;
+      renderPriceForService();
+    }
+  }
+
+  // Rebuilds the modifier field + price display for whatever service is
+  // currently selected. Called on service change and to restore the normal
+  // (non-quote) price display when the quote toggle is switched back off.
+  function renderPriceForService() {
+    var serviceKey = serviceSelect ? serviceSelect.value : "";
+    var entry = PRICING[serviceKey];
+
+    if (!entry) {
+      if (modifierField) modifierField.hidden = true;
+      if (priceRow) priceRow.hidden = true;
+      return;
+    }
+
+    var type = getModifierType(serviceKey);
+    if (type === "none") {
+      if (modifierField) modifierField.hidden = true;
+      if (priceRow) priceRow.hidden = false;
+      if (priceAmountEl) priceAmountEl.textContent = "$" + entry.price;
+      return;
+    }
+
+    // bedrooms / property: populate the modifier <select>, show it, and clear
+    // the price until the customer actually picks an option.
+    if (modifierLabelEl) modifierLabelEl.textContent = MODIFIER_LABELS[type] || "";
+    if (modifierSelect) {
+      modifierSelect.innerHTML = '<option value="" disabled selected>Select…</option>';
+      (MODIFIER_OPTIONS[type] || []).forEach(function (opt) {
+        var o = document.createElement("option");
+        o.value = opt.value;
+        o.textContent = opt.label;
+        modifierSelect.appendChild(o);
+      });
+    }
+    if (modifierField) modifierField.hidden = false;
+    if (priceRow) priceRow.hidden = false;
+    if (priceAmountEl) priceAmountEl.textContent = "";
+  }
+
+  function onServiceChangeForPricing() {
+    setQuoteMode(false); // reset quote mode on every service change
+    renderPriceForService();
+  }
+
+  function onModifierChange() {
+    if (isQuoteMode()) return;
+    var serviceKey = serviceSelect ? serviceSelect.value : "";
+    var entry = PRICING[serviceKey];
+    var value = modifierSelect ? modifierSelect.value : "";
+    var amount = entry && entry.prices ? entry.prices[value] : undefined;
+    if (priceAmountEl) priceAmountEl.textContent = amount !== undefined ? "$" + amount : "";
+  }
+
+  if (serviceSelect) serviceSelect.addEventListener("change", onServiceChangeForPricing);
+  if (modifierSelect) modifierSelect.addEventListener("change", onModifierChange);
+  if (quoteToggle) {
+    quoteToggle.addEventListener("click", function () {
+      setQuoteMode(!isQuoteMode());
+    });
+  }
+  // Prime the pricing UI for whatever the service field starts as (usually
+  // nothing, but keeps behaviour correct if a browser restores a prior value).
+  renderPriceForService();
 
   function val(name) {
     var el = form.querySelector('[name="' + name + '"]');
@@ -175,6 +303,19 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
+    // A service with a bedrooms/property follow-up needs that answer before
+    // it has a price -- unless the customer opted into a custom quote instead.
+    var serviceKeyForGuard = serviceSelect ? serviceSelect.value : "";
+    var modifierType = getModifierType(serviceKeyForGuard);
+    var modifierValue = modifierSelect ? modifierSelect.value : "";
+    if (!isQuoteMode() && modifierType !== "none" && !modifierValue) {
+      if (errorEl) {
+        errorEl.textContent = "Please choose an option for that service.";
+        errorEl.hidden = false;
+      }
+      return;
+    }
+
     var chosenTimeLabel = prettyTime(selectedChipLabel() || "");
     var chosenDate = val("date");
 
@@ -189,6 +330,9 @@ document.addEventListener("DOMContentLoaded", function () {
       message: val("message"),
       company: val("company"), // honeypot -- must stay empty
       turnstileToken: val("cf-turnstile-response"),
+      // Server computes the actual price from these -- we never send a $ amount.
+      modifier: isQuoteMode() ? "" : modifierValue,
+      quoteRequested: isQuoteMode() ? "1" : "0",
     };
 
     var orig = submitBtn ? submitBtn.textContent : "";

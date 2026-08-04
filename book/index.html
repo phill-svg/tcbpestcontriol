@@ -251,6 +251,10 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 <div class="field"><label for="bk-phone">Phone</label><input id="bk-phone" name="phone" type="tel" autocomplete="tel" placeholder="04__ ___ ___" required/></div>
 <div class="field"><label for="bk-address">Service address</label><input id="bk-address" name="address" type="text" autocomplete="street-address" placeholder="Street, suburb" required/></div>
 <div class="field"><label for="bk-service">Service</label><select id="bk-service" name="service" required><option value="" disabled selected>Select a service…</option><option value="general-pest">General pest treatment</option><option value="termite-inspection">Termite inspection</option><option value="ants-spiders-roaches">Ants / Spiders / Cockroaches</option><option value="rodents">Rodents (mice &amp; rats)</option><option value="wasps-bees">Wasps / Bees</option></select></div>
+<div class="field" data-modifier-field hidden><label id="bk-mod-label" for="bk-modifier">How many bedrooms?</label><select id="bk-modifier" name="modifier"><option value="" disabled selected>Select…</option></select></div>
+<div class="field" data-price-row hidden><span class="mono" style="color:var(--ink-dim)">Price</span><div data-price-amount style="font-family:var(--font-display);font-size:1.6rem;font-weight:600;color:var(--accent)"></div><p class="hint" data-price-note>Fixed price — no surprises. Includes GST.</p></div>
+<p class="hint"><button type="button" data-quote-toggle style="background:none;border:none;color:var(--accent-deep);text-decoration:underline;cursor:pointer;font:inherit;padding:0">Prefer a custom quote instead?</button></p>
+<input type="hidden" name="quoteRequested" data-quote-input value="0"/>
 <div class="field"><label for="bk-date">Preferred date</label><input id="bk-date" name="date" type="date" required/></div>
 <div class="field"><label id="bk-slots-label">Available times</label><div class="slot-chips" data-slot-chips role="radiogroup" aria-labelledby="bk-slots-label"></div><p class="hint" data-slot-hint>Choose a service and date to see available times.</p><input type="hidden" name="slotStartIso" data-slot-input/></div>
 <div class="field"><label for="bk-message">Anything else? <span class="optional">(optional)</span></label><textarea id="bk-message" name="message" rows="4" placeholder="Tell us about the pest, access, pets on site, etc."></textarea></div>
@@ -372,6 +376,6 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 </footer>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <script src="../assets/js/script.js" defer></script>
-<script src="../assets/js/booking.js?v=2" defer></script>
+<script src="../assets/js/booking.js?v=3" defer></script>
 </body>
 </html>

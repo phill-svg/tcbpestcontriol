@@ -63,9 +63,10 @@ function escapeAttr(s) {
 // it didn't collect are left out rather than printed empty.
 export async function sendBookingNotification(env, booking, jobUrl, label = "booking") {
 	if (!env.EMAIL || typeof env.EMAIL.send !== "function") return;
-	// confirmedTime/warning are only set on the scheduled-booking path -- absent
-	// on the lead/enquiry path, where behaviour stays exactly as before.
-	const { name, email, phone, address, service, date, time, message, confirmedTime, warning } = booking;
+	// confirmedTime/warning/priceLine are only set on the scheduled-booking
+	// path -- absent on the lead/enquiry path, where behaviour stays exactly
+	// as before.
+	const { name, email, phone, address, service, date, time, message, confirmedTime, warning, priceLine } = booking;
 	const preferred = [date, time].filter(Boolean).join(" ");
 	const heading = label === "booking" ? "New online booking" : `New website ${label}`;
 
@@ -78,6 +79,7 @@ export async function sendBookingNotification(env, booking, jobUrl, label = "boo
 		`Email:   ${email}`,
 		address ? `Address: ${address}` : "",
 		`Service: ${service}`,
+		priceLine ? `Price:   ${priceLine}` : "",
 		// A confirmed booking shows the locked-in time instead of the "preferred".
 		confirmedTime ? `Confirmed: ${confirmedTime}` : "",
 		confirmedTime ? "" : preferred ? `Preferred: ${preferred}` : "",
@@ -108,6 +110,7 @@ export async function sendBookingNotification(env, booking, jobUrl, label = "boo
 		`<tr><td style="padding:3px 14px 3px 0;color:#5a5a62">Email</td><td style="padding:3px 0"><a href="mailto:${escapeAttr(email)}">${escapeHtml(email)}</a></td></tr>` +
 		(address ? row("Address", address) : "") +
 		row("Service", service) +
+		(priceLine ? row("Price", priceLine) : "") +
 		(confirmedTime ? confirmedRow : preferred ? row("Preferred", preferred) : "") +
 		(message ? `<tr><td style="padding:3px 14px 3px 0;color:#5a5a62;vertical-align:top">Notes</td><td style="padding:3px 0">${escapeHtml(message)}</td></tr>` : "") +
 		`</table>` +
@@ -154,9 +157,16 @@ export async function sendBookingConfirmation(env, booking, label = "booking") {
 			? `Thanks for booking with TCB Pest Control Canberra! We've received your request${forWhat}${whenBit} and we'll be in touch shortly to confirm your time.`
 			: `Thanks for getting in touch with TCB Pest Control Canberra! We've received your enquiry${forWhat} and one of our technicians will get back to you within one business day.`;
 
+	// Price only exists on the scheduled (confirmedTime) path -- a lead/enquiry
+	// hasn't been priced yet. "Custom quote requested" (see booking.js) is left
+	// as plain text rather than styled as a $ amount, since there isn't one yet.
+	const priceLine = booking.priceLine;
+	const priceBit = confirmedTime && priceLine ? `Price: ${priceLine}.` : "";
+
 	const text =
 		`Hi ${first},\n\n` +
 		`${opening}\n\n` +
+		(priceBit ? `${priceBit}\n\n` : "") +
 		`Need us sooner? Call 02 6105 9771 (Mon-Sat 8am-5pm).\n\n` +
 		`-- TCB Pest Control Canberra`;
 
@@ -164,6 +174,7 @@ export async function sendBookingConfirmation(env, booking, label = "booking") {
 		`<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#111114;line-height:1.6;max-width:520px">` +
 		`<p>Hi ${escapeHtml(first)},</p>` +
 		`<p>${escapeHtml(opening).replace("TCB Pest Control Canberra", "<strong>TCB Pest Control Canberra</strong>")}</p>` +
+		(priceBit ? `<p style="font-weight:700">${escapeHtml(priceBit)}</p>` : "") +
 		`<p style="color:#5a5a62">Need us sooner? Call <a href="tel:0261059771" style="color:#c41613">02 6105 9771</a> (Mon–Sat 8am–5pm).</p>` +
 		`<p style="margin-top:22px">&mdash; TCB Pest Control Canberra</p>` +
 		`</div>`;

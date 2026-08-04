@@ -3,7 +3,14 @@
 // tool (src/mcp.js) -- one place for field validation and the
 // ServiceM8-lead-plus-notification-email pipeline, so the two entry points
 // can never drift apart.
-import { createServiceM8Lead, createWorkOrderJob, createJobActivity, notifyStaffOfNewJob, allocateJobToStaff } from "./servicem8.js";
+import {
+	createServiceM8Lead,
+	createWorkOrderJob,
+	createJobActivity,
+	createInvoiceLineItem,
+	notifyStaffOfNewJob,
+	allocateJobToStaff,
+} from "./servicem8.js";
 import { sendBookingNotification, sendBookingConfirmation } from "./email.js";
 import { STAFF_UUID } from "./booking-config.js";
 import { sydneyLocalToMs } from "./availability.js";
@@ -199,15 +206,26 @@ async function releaseSlotLock(env, id) {
 async function bookScheduledSlot(env, ctx, f, sourceLabel, opts) {
 	const { slot } = opts;
 	const emailLabel = opts.emailLabel || "booking";
+	// pricing = { quote:true } for a custom-quote booking, or
+	// { amount, modifierLabel } for a fixed-price one. Always present -- the
+	// only caller (handleBooking's scheduled branch) computes it server-side
+	// before ever getting here.
+	const pricing = opts.pricing || {};
 
-	// Same description the lead path builds, so staff see identical detail.
-	const description = [
-		sourceLabel,
-		`Service: ${f.service}`,
-		f.date || f.time ? `Preferred: ${[f.date, f.time].filter(Boolean).join(" ")}` : "",
-		"",
-		f.message || "(no additional notes)",
-	]
+	// f.service is already the human label (index.js sets it from
+	// SERVICE_LABELS before calling in) -- fold the chosen modifier and price
+	// into the same "Service:" line rather than emitting it twice.
+	const serviceLine =
+		!pricing.quote && pricing.modifierLabel ? `Service: ${f.service} (${pricing.modifierLabel})` : `Service: ${f.service}`;
+	const descPriceLine = pricing.quote
+		? "Customer requested a CUSTOM QUOTE (no fixed price) — please quote."
+		: pricing.amount != null
+			? `Fixed online price: $${pricing.amount} inc GST`
+			: "";
+
+	// Same description shape the lead path builds (source + service + preferred
+	// + notes), with the price line folded in so staff see it at a glance.
+	const description = [sourceLabel, serviceLine, descPriceLine, f.date || f.time ? `Preferred: ${[f.date, f.time].filter(Boolean).join(" ")}` : "", "", f.message || "(no additional notes)"]
 		.filter((l) => l !== "")
 		.join("\n");
 
@@ -265,7 +283,11 @@ async function bookScheduledSlot(env, ctx, f, sourceLabel, opts) {
 	let jobUuid = null;
 	let jobUrl = null;
 	try {
-		const res = await createWorkOrderJob(env, { name: f.name, email: f.email, phone: f.phone, address: f.address, description });
+		const res = await createWorkOrderJob(
+			env,
+			{ name: f.name, email: f.email, phone: f.phone, address: f.address, description },
+			{ status: pricing.quote ? "Quote" : "Work Order" }
+		);
 		jobUuid = res && res.jobUuid;
 		jobUrl = res && res.jobUrl;
 	} catch (e) {
@@ -306,14 +328,52 @@ async function bookScheduledSlot(env, ctx, f, sourceLabel, opts) {
 		console.error("Booking confirm UPDATE failed (ServiceM8 job/jobactivity already created):", e && (e.stack || e.message));
 	}
 
+	// 4b. Add the fixed price as an invoice line item, best-effort. Deliberately
+	//     its own try/catch, separate from job/jobactivity creation above: the
+	//     booking itself is already fully made by this point (job exists, slot
+	//     locked, calendar entry placed), so a line-item failure must only be
+	//     logged and flagged to the office -- never treated as a booking failure.
+	//     Skipped entirely for a custom-quote booking, which has no fixed amount.
+	let lineItemFailed = false;
+	if (!pricing.quote && pricing.amount != null) {
+		try {
+			await createInvoiceLineItem(env, {
+				jobUuid,
+				name: `${f.service}${pricing.modifierLabel ? ` (${pricing.modifierLabel})` : ""} — online booking`,
+				amount: pricing.amount,
+			});
+		} catch (e) {
+			lineItemFailed = true;
+			console.error(
+				`Booking invoice line item FAILED for job ${jobUuid} (job/booking still confirmed) -- office must add the $${pricing.amount} charge in ServiceM8 manually:`,
+				e && (e.stack || e.message)
+			);
+		}
+	}
+
 	// 5. Notify. The customer always gets a clean confirmed-time email (an
-	//    internal scheduling hiccup isn't their problem -- the office will place
-	//    it). The office copy and the ServiceM8 StaffMessage carry the warning
-	//    when auto-scheduling failed so someone sets the time by hand.
-	const warning = schedulingFailed
-		? "⚠ Booking created but auto-scheduling failed — set the time in ServiceM8 manually."
-		: "";
-	const customerBooking = { name: f.name, email: f.email, phone: f.phone, address: f.address, service: f.service, date: f.date, time: f.time, message: f.message, confirmedTime };
+	//    internal scheduling/invoicing hiccup isn't their problem -- the office
+	//    will fix it up). The office copy and the ServiceM8 StaffMessage carry
+	//    the warning(s) so someone follows up by hand.
+	const warning = [
+		schedulingFailed ? "⚠ Booking created but auto-scheduling failed — set the time in ServiceM8 manually." : "",
+		lineItemFailed ? `⚠ Couldn't add the $${pricing.amount} price to the ServiceM8 invoice — add it manually.` : "",
+	]
+		.filter(Boolean)
+		.join(" ");
+	const priceLine = pricing.quote ? "Custom quote requested" : pricing.amount != null ? `$${pricing.amount} inc GST` : "";
+	const customerBooking = {
+		name: f.name,
+		email: f.email,
+		phone: f.phone,
+		address: f.address,
+		service: f.service,
+		date: f.date,
+		time: f.time,
+		message: f.message,
+		confirmedTime,
+		priceLine,
+	};
 	const officeBooking = { ...customerBooking, warning };
 
 	const sends = [

@@ -530,8 +530,13 @@ export async function readStaffOccupancy(env, fromMs, toMs) {
 // never create a second company/contact for an email/phone ServiceM8
 // already has.
 //   lead = { name, email, phone, address, description }
+//   opts = { status }  -- job status to create with; defaults to "Work Order".
+//                         The pricing widget passes status:"Quote" when the
+//                         customer asked for a custom quote instead of taking
+//                         the fixed online price -- everything else about the
+//                         flow (slot locked, jobactivity scheduled) is unchanged.
 // Returns { jobUuid, jobUrl }.
-export async function createWorkOrderJob(env, lead) {
+export async function createWorkOrderJob(env, lead, opts = {}) {
 	if (!env.SERVICEM8_API_KEY) throw new Error("ServiceM8 is not configured (no API key set)");
 
 	const { name, email, phone, address, description } = lead;
@@ -558,9 +563,9 @@ export async function createWorkOrderJob(env, lead) {
 		});
 	}
 
-	// 2. Create the confirmed Work Order job + its job contact.
+	// 2. Create the job (Work Order by default) + its job contact.
 	const jobUuid = await sm8Create(env, "job", {
-		status: "Work Order",
+		status: opts.status || "Work Order",
 		company_uuid: companyUuid,
 		job_description: description || "",
 		job_address: address || "",
@@ -596,5 +601,34 @@ export async function createJobActivity(env, { jobUuid, staffUuid, startIso, end
 		end_date: endIso,
 		activity_was_scheduled: 1,
 		active: 1,
+	});
+}
+
+// Puts the fixed online price on the job as an invoice line item, so the
+// ServiceM8 invoice reflects what the customer was quoted on the website
+// without staff re-entering it by hand. Called best-effort by the booking
+// pipeline (src/booking.js) -- a failure here must never undo an
+// already-confirmed booking, so this throws on error and it's the caller's
+// job to catch it.
+//
+// GST NOTE (unverified -- flag before go-live): ServiceM8's `jobmaterial.price`
+// field may be treated as EX-GST, with GST then added on top when the
+// invoice/quote total is generated -- or it may be treated as the final
+// inc-GST line total, depending on the account's tax settings. We pass
+// `amount` (our inc-GST quoted price) straight through as `price` below. If
+// the account in fact adds GST on top, the resulting invoice total will be
+// ~10% more than what the customer was quoted online. This MUST be checked
+// against a real test invoice (create a booking, open the job in ServiceM8,
+// look at the generated invoice total) and, if wrong, fixed here -- e.g. by
+// sending `amount / 1.1` instead, or by adjusting the item/account's tax
+// rate -- before this goes live. Do not assume either way.
+export async function createInvoiceLineItem(env, { jobUuid, name, amount }) {
+	if (!env.SERVICEM8_API_KEY) throw new Error("ServiceM8 is not configured (no API key set)");
+
+	return sm8Create(env, "jobmaterial", {
+		job_uuid: jobUuid,
+		name,
+		quantity: 1,
+		price: amount,
 	});
 }

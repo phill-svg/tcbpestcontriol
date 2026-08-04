@@ -6,7 +6,7 @@ import { diagnoseServiceM8, readStaffOccupancy } from "./servicem8.js";
 import { handleMcp } from "./mcp.js";
 import { handleIndexJson } from "./index-json.js";
 import { renderMarkdown } from "./markdown.js";
-import { isBookableService, SERVICE_LABELS, HORIZON_DAYS } from "./booking-config.js";
+import { isBookableService, SERVICE_LABELS, HORIZON_DAYS, computePrice } from "./booking-config.js";
 import { computeSlots } from "./availability.js";
 
 export default {
@@ -435,9 +435,24 @@ async function handleBooking(request, env, ctx) {
 			return jsonError(409, "That time is no longer available — please pick another.");
 		}
 
+		// Pricing is authoritative here, server-side -- the front end only ever
+		// DISPLAYS a price, it never sends one. `modifier` picks a fixed price
+		// off booking-config.js's PRICING table; quoteRequested skips that
+		// entirely and books the job as a Quote for the owner to price by hand.
+		const modifier = String(body.modifier || "").trim();
+		const quoteRequested = String(body.quoteRequested || "") === "1";
+		let pricing;
+		if (quoteRequested) {
+			pricing = { quote: true };
+		} else {
+			const p = computePrice(service, modifier);
+			if (!p.ok) return jsonError(400, "Please choose an option for that service.");
+			pricing = { amount: p.amount, modifierLabel: p.modifierLabel };
+		}
+
 		const scheduledFields = { ...fields, service: SERVICE_LABELS[service] };
 		const slot = { startIso: matched.startIso, endIso: matched.endIso, serviceKey: service };
-		const r = await createBookingAndNotify(env, ctx, scheduledFields, "Online booking (website /book form)", { slot });
+		const r = await createBookingAndNotify(env, ctx, scheduledFields, "Online booking (website /book form)", { slot, pricing });
 
 		if (r.conflict) return jsonError(409, "That time was just taken — please pick another.");
 		if (r.error) return jsonError(502, "We couldn't complete your booking — please call us on 02 6105 9771.");

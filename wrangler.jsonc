@@ -18,6 +18,12 @@
   "send_email": [
     { "name": "EMAIL", "remote": true }
   ],
+  "d1_databases": [
+    // Provisioned by Phill with `wrangler d1 create tcb-booking-db`; replace database_id with the real
+    // id it prints before any remote use. Local dev (`wrangler d1 execute --local`) works with this
+    // placeholder.
+    { "binding": "DB", "database_name": "tcb-booking-db", "database_id": "PLACEHOLDER_LOCAL_DEV" }
+  ],
   "observability": {
     "enabled": true
   },

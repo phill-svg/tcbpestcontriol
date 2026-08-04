@@ -63,29 +63,43 @@ function escapeAttr(s) {
 // it didn't collect are left out rather than printed empty.
 export async function sendBookingNotification(env, booking, jobUrl, label = "booking") {
 	if (!env.EMAIL || typeof env.EMAIL.send !== "function") return;
-	const { name, email, phone, address, service, date, time, message } = booking;
+	// confirmedTime/warning are only set on the scheduled-booking path -- absent
+	// on the lead/enquiry path, where behaviour stays exactly as before.
+	const { name, email, phone, address, service, date, time, message, confirmedTime, warning } = booking;
 	const preferred = [date, time].filter(Boolean).join(" ");
 	const heading = label === "booking" ? "New online booking" : `New website ${label}`;
 
 	const textLines = [
 		`${heading}:`,
+		warning || null,
 		"",
 		`Name:    ${name}`,
 		phone ? `Phone:   ${phone}` : "",
 		`Email:   ${email}`,
 		address ? `Address: ${address}` : "",
 		`Service: ${service}`,
-		preferred ? `Preferred: ${preferred}` : "",
+		// A confirmed booking shows the locked-in time instead of the "preferred".
+		confirmedTime ? `Confirmed: ${confirmedTime}` : "",
+		confirmedTime ? "" : preferred ? `Preferred: ${preferred}` : "",
 		message ? `Notes:   ${message}` : "",
 		"",
 		jobUrl ? `Open the job in ServiceM8: ${jobUrl}` : "NOTE: could not auto-create in ServiceM8 — please add this job manually.",
-	].filter((l) => l !== "");
+	].filter((l) => l !== "" && l !== null);
 
 	const row = (label, value) =>
 		`<tr><td style="padding:3px 14px 3px 0;color:#5a5a62;white-space:nowrap;vertical-align:top">${label}</td><td style="padding:3px 0"><strong>${escapeHtml(value)}</strong></td></tr>`;
+	// Prominent red row for a locked-in time; the office sees the confirmed time
+	// (or, on a partial failure, the warning carried in `confirmedTime`) instead
+	// of the customer's "preferred" guess.
+	const confirmedRow = confirmedTime
+		? `<tr><td style="padding:3px 14px 3px 0;color:#5a5a62;white-space:nowrap;vertical-align:top">Confirmed</td><td style="padding:3px 0"><strong style="color:#c41613">${escapeHtml(confirmedTime)}</strong></td></tr>`
+		: "";
 	const html =
 		`<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#111114;line-height:1.5;max-width:560px">` +
 		`<h2 style="font-size:18px;margin:0 0 14px">${escapeHtml(heading)}</h2>` +
+		(warning
+			? `<p style="margin:0 0 14px;padding:10px 14px;background:#fff3f2;border-left:4px solid #c41613;color:#c41613;font-weight:700">${escapeHtml(warning)}</p>`
+			: "") +
 		`<table style="border-collapse:collapse">` +
 		row("Name", name) +
 		(phone
@@ -94,7 +108,7 @@ export async function sendBookingNotification(env, booking, jobUrl, label = "boo
 		`<tr><td style="padding:3px 14px 3px 0;color:#5a5a62">Email</td><td style="padding:3px 0"><a href="mailto:${escapeAttr(email)}">${escapeHtml(email)}</a></td></tr>` +
 		(address ? row("Address", address) : "") +
 		row("Service", service) +
-		(preferred ? row("Preferred", preferred) : "") +
+		(confirmedTime ? confirmedRow : preferred ? row("Preferred", preferred) : "") +
 		(message ? `<tr><td style="padding:3px 14px 3px 0;color:#5a5a62;vertical-align:top">Notes</td><td style="padding:3px 0">${escapeHtml(message)}</td></tr>` : "") +
 		`</table>` +
 		(jobUrl
@@ -124,11 +138,21 @@ export async function sendBookingConfirmation(env, booking, label = "booking") {
 	const forWhat = service ? ` for ${service}` : "";
 	const whenBit = preferred ? ` (${preferred})` : "";
 	const isBooking = label === "booking";
+	// Set only on the scheduled path: the customer picked a real slot and we
+	// locked it in, so this is a genuine confirmation of an exact time -- not the
+	// "we'll be in touch to confirm" wording a lead/enquiry gets.
+	const confirmedTime = booking.confirmedTime;
 
-	const subject = isBooking ? "We've got your booking — TCB Pest Control" : "Thanks for your enquiry — TCB Pest Control";
-	const opening = isBooking
-		? `Thanks for booking with TCB Pest Control Canberra! We've received your request${forWhat}${whenBit} and we'll be in touch shortly to confirm your time.`
-		: `Thanks for getting in touch with TCB Pest Control Canberra! We've received your enquiry${forWhat} and one of our technicians will get back to you within one business day.`;
+	const subject = confirmedTime
+		? "Your booking is confirmed — TCB Pest Control"
+		: isBooking
+			? "We've got your booking — TCB Pest Control"
+			: "Thanks for your enquiry — TCB Pest Control";
+	const opening = confirmedTime
+		? `Your booking is confirmed for ${confirmedTime}${forWhat}. Thanks for booking with TCB Pest Control Canberra — we'll see you then.`
+		: isBooking
+			? `Thanks for booking with TCB Pest Control Canberra! We've received your request${forWhat}${whenBit} and we'll be in touch shortly to confirm your time.`
+			: `Thanks for getting in touch with TCB Pest Control Canberra! We've received your enquiry${forWhat} and one of our technicians will get back to you within one business day.`;
 
 	const text =
 		`Hi ${first},\n\n` +

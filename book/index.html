@@ -230,9 +230,16 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 </header>
 <main>
 <nav aria-label="Breadcrumb" class="breadcrumb-nav"><div class="container"><ol class="breadcrumb-list"><li><a href="../">Home</a></li><li aria-hidden="true" class="breadcrumb-sep">/</li><li aria-current="page">Book Online</li></ol></div></nav>
-<section class="hero simple"><div class="container"><div class="hero-eyebrow mono">TCB · Online Booking</div><h1 class="display">Book pest control <span class="accent">online.</span></h1><p class="hero-lead">Tell us the property, the pest and when suits you. We'll confirm your booking and have a licensed local technician out — usually the same week. No call required.</p><div class="hero-actions"><a class="btn btn-primary btn-lg" href="#book">Start your booking</a><a class="link-phone" href="tel:0261059771">Prefer to call? 02 6105 9771</a></div></div></section>
+<section class="hero simple"><div class="container"><div class="hero-eyebrow mono">TCB · Online Booking</div><h1 class="display">Book pest control <span class="accent">online.</span></h1><p class="hero-lead">Tell us the property, the pest and pick an open time — your booking is confirmed instantly and a licensed local technician is out, usually the same week. No call required.</p><div class="hero-actions"><a class="btn btn-primary btn-lg" href="#book">Start your booking</a><a class="link-phone" href="tel:0261059771">Prefer to call? 02 6105 9771</a></div></div></section>
 <section class="trust-bar"><div class="container"><div class="trust-item"><span class="dash"></span>Family-safe products</div><div class="trust-item"><span class="dash"></span>Fully licensed &amp; insured</div><div class="trust-item"><span class="dash"></span>Upfront written quotes</div><div class="trust-item"><span class="dash"></span>Same-week availability</div></div></section>
-<section class="section" id="book"><div class="container"><div class="section-head split"><div class="head-title"><div class="section-eyebrow mono">[01] Your details</div><h2 class="section-title display">Request your booking.</h2><p style="margin-top:1.25rem;color:var(--ink-muted);max-width:36rem;">Fill in a few details and we'll be in touch to confirm your time. The more you tell us about the property and pest, the faster we can get you sorted.</p></div><div class="head-text"></div></div>
+<section class="section" id="book"><div class="container"><div class="section-head split"><div class="head-title"><div class="section-eyebrow mono">[01] Your details</div><h2 class="section-title display">Request your booking.</h2><p style="margin-top:1.25rem;color:var(--ink-muted);max-width:36rem;">Fill in a few details and pick an open time — your booking is confirmed instantly. The more you tell us about the property and pest, the faster we can get you sorted.</p></div><div class="head-text"></div></div>
+<style>
+.slot-chips{display:flex;flex-wrap:wrap;gap:.5rem;margin:.25rem 0 .5rem}
+.slot-chip{font-family:var(--font-mono);font-size:0.8125rem;padding:.5rem .75rem;border:1px solid var(--line);background:var(--panel);border-radius:var(--radius-sm);color:var(--ink);cursor:pointer;transition:background-color 0.15s var(--ease),color 0.15s var(--ease),border-color 0.15s var(--ease)}
+.slot-chip:hover{border-color:var(--accent)}
+.slot-chip[aria-checked="true"]{background:var(--accent);color:#fff;border-color:var(--accent-deep)}
+.slot-chips.is-loading{opacity:.6}
+</style>
 <div class="form-grid"><div class="form-panel">
 <form class="form" data-booking-form novalidate>
 <input type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0"/>
@@ -240,20 +247,21 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 <div class="field"><label for="bk-email">Email</label><input id="bk-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required/></div>
 <div class="field"><label for="bk-phone">Phone</label><input id="bk-phone" name="phone" type="tel" autocomplete="tel" placeholder="04__ ___ ___" required/></div>
 <div class="field"><label for="bk-address">Service address</label><input id="bk-address" name="address" type="text" autocomplete="street-address" placeholder="Street, suburb" required/></div>
-<div class="field"><label for="bk-service">Service</label><select id="bk-service" name="service" required><option value="" disabled selected>Select a service…</option><option>General pest treatment</option><option>Termite inspection</option><option>Termite treatment</option><option>Ants / Spiders / Cockroaches</option><option>Rodents (mice &amp; rats)</option><option>Wasps / Bees</option><option>Commercial</option><option>Something else</option></select></div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem"><div class="field"><label for="bk-date">Preferred date</label><input id="bk-date" name="date" type="date" required/></div><div class="field"><label for="bk-time">Preferred time</label><select id="bk-time" name="time" required><option value="" disabled selected>Select…</option><option>Morning (8am–12pm)</option><option>Afternoon (12–5pm)</option><option>Anytime</option></select></div></div>
+<div class="field"><label for="bk-service">Service</label><select id="bk-service" name="service" required><option value="" disabled selected>Select a service…</option><option value="general-pest">General pest treatment</option><option value="termite-inspection">Termite inspection</option><option value="ants-spiders-roaches">Ants / Spiders / Cockroaches</option><option value="rodents">Rodents (mice &amp; rats)</option><option value="wasps-bees">Wasps / Bees</option></select></div>
+<div class="field"><label for="bk-date">Preferred date</label><input id="bk-date" name="date" type="date" required/></div>
+<div class="field"><label id="bk-slots-label">Available times</label><div class="slot-chips" data-slot-chips role="radiogroup" aria-labelledby="bk-slots-label"></div><p class="hint" data-slot-hint>Choose a service and date to see available times.</p><input type="hidden" name="slotStartIso" data-slot-input/></div>
 <div class="field"><label for="bk-message">Anything else? <span class="optional">(optional)</span></label><textarea id="bk-message" name="message" rows="4" placeholder="Tell us about the pest, access, pets on site, etc."></textarea></div>
 <div class="cf-turnstile" data-sitekey="0x4AAAAAAEDn2ttjcXn4zIzP" data-action="book"></div>
 <p class="staff-login-error" data-booking-error hidden style="color:var(--accent);font-size:0.8125rem"></p>
-<div class="form-footer"><button class="btn btn-primary" type="submit" data-booking-submit>Request booking</button><p class="hint">We'll confirm your time by phone or email</p></div>
+<div class="form-footer"><button class="btn btn-primary" type="submit" data-booking-submit>Book my time</button><p class="hint">Your time is confirmed instantly — no call required</p></div>
 </form>
 <div class="staff-login-success" data-booking-success hidden style="align-items:flex-start;text-align:left">
 <div class="staff-login-success-icon" aria-hidden="true"><svg fill="none" height="26" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="26"><path d="M20 6 9 17l-5-5"></path></svg></div>
-<p class="staff-login-success-title">Booking request received</p>
-<p class="staff-login-success-text">Thanks — we've got your request and we'll be in touch shortly to confirm your time. For anything urgent, call <a href="tel:0261059771" style="color:var(--accent-deep)">02 6105 9771</a>.</p>
+<p class="staff-login-success-title">Booking confirmed</p>
+<p class="staff-login-success-text">You're booked in for <span data-booking-when></span> — we've sent a confirmation to your email. Need to change it? Call <a href="tel:0261059771" style="color:var(--accent-deep)">02 6105 9771</a>.</p>
 </div>
 </div>
-<div class="info-panel"><div class="section-eyebrow mono">What happens next</div><h3>A real person, a real time.</h3><div class="contact-rows"><div class="contact-row"><div class="row-label"><span>1 · We confirm</span></div><p class="row-note">Your request lands straight with the technician, who confirms the exact time with you.</p></div><div class="contact-row"><div class="row-label"><span>2 · We treat</span></div><p class="row-note">Same licensed technician turns up, treats the property, and leaves a written report.</p></div><div class="contact-row"><div class="row-label"><span>Prefer to talk?</span></div><a class="row-value" href="tel:0261059771">02 6105 9771</a><p class="row-note">Mon–Sat 8am–5pm</p></div></div></div>
+<div class="info-panel"><div class="section-eyebrow mono">What happens next</div><h3>A real person, a real time.</h3><div class="contact-rows"><div class="contact-row"><div class="row-label"><span>1 · Instant booking</span></div><p class="row-note">Pick an open slot and you're booked in straight away — a licensed technician is allocated to your time.</p></div><div class="contact-row"><div class="row-label"><span>2 · We treat</span></div><p class="row-note">Same licensed technician turns up, treats the property, and leaves a written report.</p></div><div class="contact-row"><div class="row-label"><span>Prefer to talk?</span></div><a class="row-value" href="tel:0261059771">02 6105 9771</a><p class="row-note">Mon–Sat 8am–5pm</p></div></div></div>
 </div></div></section>
 </main>
 <!-- ========== FOOTER — logo, Google rating, links, contact details, social icons ========== -->
@@ -361,6 +369,6 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 </footer>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <script src="../assets/js/script.js" defer></script>
-<script src="../assets/js/booking.js?v=1" defer></script>
+<script src="../assets/js/booking.js?v=2" defer></script>
 </body>
 </html>

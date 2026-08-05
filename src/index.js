@@ -13,6 +13,13 @@ export default {
 	async fetch(request, env, ctx) {
 		const url = new URL(request.url);
 
+		// canberrabirdcontrol.com.au is a brand-protection domain only --
+		// every path funnels to the bird-control page on the main site.
+		// It must never serve content of its own (duplicate-site risk).
+		if (url.hostname.endsWith("canberrabirdcontrol.com.au")) {
+			return Response.redirect("https://www.tcbpestcontrolcanberra.com.au/bird-control", 301);
+		}
+
 		// Canonicalise the bare apex domain to www.
 		// Both hostnames are bound as Worker Custom Domains, so Cloudflare
 		// Page Rules never get a chance to run for them -- this has to

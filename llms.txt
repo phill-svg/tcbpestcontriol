@@ -1,6 +1,6 @@
 # TCB Pest Control Canberra
 
-> Family-run, fully licensed and insured pest control company servicing homes and businesses across the ACT and surrounding NSW (Queanbeyan). Same technician where possible, written report after every visit, family-safe products. Services include general pest control, termite treatment and inspection, ant, spider, rodent, cockroach, flea, bee, silverfish, bird, possum and stored-product-pest control, for residential and commercial customers. Rated 4.8 from 62 Google reviews.
+> Family-run, fully licensed and insured pest control company servicing homes and businesses across the ACT and surrounding NSW (Queanbeyan). Same technician where possible, written report after every visit, family-safe products. Services include general pest control, termite treatment and inspection, ant, spider, rodent, cockroach, flea, bee, silverfish, bird, possum and stored-product-pest control, for residential and commercial customers. Rated 4.8 from 61 Google reviews.
 
 ## Services
 
@@ -51,7 +51,7 @@ Every ACT suburb and surrounding NSW town has its own dedicated page at `/locati
 ## About & Trust
 
 - [About TCB](/about): Company background, accreditations, service area.
-- [Reviews](/reviews): Google reviews, rated 4.8 from 62 reviews.
+- [Reviews](/reviews): Google reviews, rated 4.8 from 61 reviews.
 - [FAQ](/faq): Frequently asked questions about booking, pricing and treatments.
 
 ## Resources

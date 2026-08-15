@@ -81,6 +81,11 @@ is worth fixing, with a rough preview of how it would appear in a Google
 result. It checks the title and description lengths, that there is one main
 heading, that images have descriptions, and that links say where they go.
 
+Under **The whole site** there is a **Check every page** button. It goes
+through every page in the sitemap — the same list Google crawls — and lists
+only the ones with something worth looking at, each linking straight into
+editing that page. It takes a second or two.
+
 The same preview appears in **Page title & description** and updates as you
 type, so you can see when a title is about to get cut off rather than guessing
 from a character count.

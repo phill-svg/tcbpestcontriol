@@ -606,3 +606,31 @@ body.tcb-editing-mode {
 	border-right: 2px solid #c41613;
 	padding-right: 0.25rem;
 }
+
+/* Site-wide scan results --------------------------------------------------- */
+
+.tcb-scan-page {
+	padding: 0.5rem 0.6rem;
+	border: 1px solid #e6e6ea;
+	border-radius: 0.35rem;
+}
+
+.tcb-scan-link {
+	font: 500 0.8125rem/1.3 "IBM Plex Mono", ui-monospace, monospace;
+	color: #1d4ed8;
+	overflow-wrap: anywhere;
+}
+
+.tcb-scan-findings {
+	margin-top: 0.3rem;
+	display: grid;
+	gap: 0.15rem;
+}
+
+.tcb-scan-problem {
+	color: #c41613;
+}
+
+.tcb-scan-worth-a-look {
+	color: #92400e;
+}

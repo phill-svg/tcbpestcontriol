@@ -1396,10 +1396,90 @@ class Editor {
 				}),
 				this.buildGooglePreview(page),
 				list,
+				this.buildSiteScan(),
 			],
 			null,
 			{ confirmLabel: null, cancelLabel: "Close" }
 		);
+	}
+
+	// Checks every page in sitemap.xml, a slice at a time.
+	//
+	// Batched rather than done in one call: 134 pages is far too much parsing
+	// for a single Worker invocation, and asking for a slice at a time means a
+	// slow scan is a longer scan rather than a failed one. Progress is shown
+	// because a silent thirty-second wait reads as a hang.
+	buildSiteScan() {
+		const status = el("p", { class: "tcb-hint" });
+		const results = el("div", { class: "tcb-findings" });
+		const button = el("button", { type: "button", class: "tcb-btn", text: "Check every page" });
+
+		button.addEventListener("click", async () => {
+			button.disabled = true;
+			results.replaceChildren();
+			const pages = [];
+			let offset = 0;
+			let total = 0;
+
+			try {
+				for (;;) {
+					const batch = await api(`/api/seo/scan?offset=${offset}&limit=10`);
+					total = batch.total;
+					pages.push(...batch.results);
+					offset += batch.scanned;
+					status.className = "tcb-hint";
+					status.textContent = `Checked ${offset} of ${total} pages… ${pages.length} with something to look at.`;
+					if (batch.done || !batch.scanned) break;
+				}
+			} catch (error) {
+				status.className = "tcb-hint tcb-hint-warn";
+				status.textContent = error.message;
+				button.disabled = false;
+				return;
+			}
+
+			button.disabled = false;
+			button.textContent = "Check again";
+
+			if (!pages.length) {
+				status.className = "tcb-hint";
+				status.textContent = `All ${total} pages checked. Nothing to fix.`;
+				return;
+			}
+
+			// Worst first, so the top of the list is the part worth acting on.
+			const weight = (page) => (page.findings.some((finding) => finding.level === "problem") ? 0 : 1);
+			pages.sort((a, b) => weight(a) - weight(b));
+
+			const problemPages = pages.filter((page) => weight(page) === 0).length;
+			status.textContent = `${total} pages checked. ${problemPages} with something to fix, ${pages.length - problemPages} worth a look.`;
+
+			for (const page of pages) {
+				const findings = el("div", { class: "tcb-scan-findings" });
+				for (const finding of page.findings) {
+					findings.appendChild(
+						el("p", { class: `tcb-finding-message tcb-scan-${finding.level.replace(/\s+/g, "-")}`, text: finding.message })
+					);
+				}
+				results.appendChild(
+					el("div", { class: "tcb-scan-page" }, [
+						el("a", { class: "tcb-scan-link", href: `${page.path}?edit=1`, text: page.path }),
+						findings,
+					])
+				);
+			}
+		});
+
+		return el("div", { class: "tcb-sync" }, [
+			el("p", { class: "tcb-sync-title", text: "The whole site" }),
+			el("p", {
+				class: "tcb-hint",
+				text: "Checks every page listed in the sitemap — the same list Google crawls. Takes a moment; you can watch it go.",
+			}),
+			button,
+			status,
+			results,
+		]);
 	}
 
 	// What the page is likely to look like in a result. A character count is

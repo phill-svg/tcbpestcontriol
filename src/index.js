@@ -765,7 +765,7 @@ function editorLauncherHtml({ editing, previewing }) {
 		// browsers by the old immutable rule -- a year-long cache entry cannot be
 		// revalidated away, only stepped around with a different URL. The
 		// no-cache rule in _headers is what stops it happening again.
-		`<link rel="stylesheet" href="/assets/css/editor.css?v=6">` +
+		`<link rel="stylesheet" href="/assets/css/editor.css?v=7">` +
 		`<script src="/assets/js/editor.js?v=1" type="module"></script>` +
 		`</div>`
 	);
@@ -886,11 +886,21 @@ async function handleSeoSuggest(request, url, env) {
 	let gaps = [];
 	if (isSearchConsoleConfigured(env)) {
 		try {
-			({ queries } = await searchInsights(env, { hostname: url.hostname, path }));
+			const insight = await searchInsights(env, { hostname: url.hostname, path, withRankings: true });
+			queries = insight.queries;
 			// The one instruction here with evidence behind it rather than
 			// judgement: Google already offers this page for these phrases
 			// and the page does not use the words.
-			gaps = findGaps(queries, { title: summary.title, description: summary.description, h1: content.h1 });
+			//
+			// Filtered to the gaps this page should act on. A phrase another
+			// page answers better belongs to that page, and writing it into
+			// this title would set the two of them competing -- which is the
+			// problem the duplicate-title check exists to catch.
+			gaps = findGaps(
+				queries,
+				{ title: summary.title, description: summary.description, h1: content.h1 },
+				{ path, rankings: insight.rankings }
+			).filter((gap) => gap.verdict === "add");
 		} catch {
 			// Search Console being unreachable is not a reason to refuse to
 			// draft anything -- it just means drafting from the page alone.
@@ -955,7 +965,7 @@ async function handleSearchConsole(url, env) {
 	const path = url.searchParams.get("path");
 	try {
 		const wanted = path && path.startsWith("/") ? normalisePath(path) : null;
-		const data = await searchInsights(env, { hostname: url.hostname, path: wanted });
+		const data = await searchInsights(env, { hostname: url.hostname, path: wanted, withRankings: Boolean(wanted) });
 
 		// For a single page, the gap between what Google shows it for and
 		// what it says. Needs the page's own wording, so it is only computed
@@ -975,14 +985,15 @@ async function handleSearchConsole(url, env) {
 					if (title !== undefined) summary.title = title;
 					if (description !== undefined) summary.description = description;
 				}
-				data.gaps = findGaps(data.queries, {
-					title: summary.title,
-					description: summary.description,
-					h1: content.h1,
-				}).map((gap) => ({ ...gap, sentence: describeGap(gap) }));
+				data.gaps = findGaps(
+					data.queries,
+					{ title: summary.title, description: summary.description, h1: content.h1 },
+					{ path: wanted, rankings: data.rankings }
+				).map((gap) => ({ ...gap, sentence: describeGap(gap, wanted) }));
 			}
 		}
 
+		delete data.rankings;
 		return new Response(JSON.stringify(data), {
 			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
 		});

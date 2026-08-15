@@ -366,7 +366,7 @@ class Editor {
 	// -- chrome ---------------------------------------------------------------
 
 	buildChrome() {
-		this.status = el("span", { class: "tcb-bar-label", text: "Click any text to change it." });
+		this.status = el("span", { class: "tcb-bar-label", text: this.isTouch ? "Tap any text to change it." : "Click any text to change it." });
 
 		this.publishButton = el("button", {
 			type: "button",
@@ -428,6 +428,9 @@ class Editor {
 			text: "Edit link",
 			onclick: () => this.openAttrPanel(),
 		});
+		for (const button of [this.styleChipButton, this.attrChipButton]) {
+			button.addEventListener("mousedown", (event) => event.preventDefault());
+		}
 		this.chip = chrome("div", { class: "tcb-chip" }, [this.styleChipButton, this.attrChipButton]);
 		this.chip.hidden = true;
 		document.body.appendChild(this.chip);
@@ -462,7 +465,7 @@ class Editor {
 		} else if (published) {
 			this.status.textContent = `${published} published ${published === 1 ? "change" : "changes"} on this page.`;
 		} else {
-			this.status.textContent = "Click any text to change it.";
+			this.status.textContent = this.isTouch ? "Tap any text to change it." : "Click any text to change it.";
 		}
 	}
 
@@ -564,8 +567,19 @@ class Editor {
 		return null;
 	}
 
+	// True on touchscreens, where there is no pointer to hover with. The chip
+	// is pinned open while editing instead -- see pinChip.
+	get isTouch() {
+		return window.matchMedia && window.matchMedia("(hover: none)").matches;
+	}
+
 	updateHover(event) {
-		if (this.active) return this.hideHover(true);
+		// While editing, the chip is pinned beside the field and must stay put.
+		// Only the hover outline is cleared.
+		if (this.active) {
+			this.hover.style.display = "none";
+			return;
+		}
 		// Reaching for the chip must not dismiss it. The pointer has to cross
 		// onto the chip to click it, and the chip is chrome, so the check below
 		// would hide the one control the user is aiming at -- and, worse, move
@@ -643,6 +657,43 @@ class Editor {
 
 	applyHoverHide() {
 		this.hover.style.display = "none";
+		// A pinned chip belongs to the edit in progress, not to the pointer.
+		if (!this.chipPinned) this.chip.hidden = true;
+	}
+
+	// Anchors the chip beside the field being edited and leaves it there.
+	//
+	// This is what makes the editor usable on a phone. The chip was only ever
+	// summoned by `mousemove`, which touchscreens do not fire, so Style, Edit
+	// link and Change image were unreachable on mobile -- you could retype a
+	// sentence but never restyle it. Pinning it to the active field needs no
+	// pointer at all, and is a small improvement on desktop too: the buttons
+	// stop moving around once you have committed to editing something.
+	pinChip(entry, field) {
+		// Located from the field, not from entry.node: opening the field lifts
+		// that text node out of the document, so it has no parent to ask by the
+		// time this runs. The field sits exactly where it was.
+		const link = field.parentElement && field.parentElement.closest("a[href]");
+		const linkEntry = link ? this.findAttrEntry(link, "href") : null;
+
+		this.styleEntry = entry;
+		this.chipEntry = linkEntry;
+		this.styleChipButton.hidden = false;
+		this.attrChipButton.hidden = !linkEntry;
+		if (linkEntry) this.attrChipButton.textContent = "Edit link";
+
+		const rect = field.getBoundingClientRect();
+		Object.assign(this.chip.style, {
+			top: `${rect.top + window.scrollY + 2}px`,
+			left: `${rect.left + window.scrollX + rect.width}px`,
+		});
+		this.cancelHoverHide();
+		this.chip.hidden = false;
+		this.chipPinned = true;
+	}
+
+	unpinChip() {
+		this.chipPinned = false;
 		this.chip.hidden = true;
 	}
 
@@ -698,6 +749,7 @@ class Editor {
 		});
 
 		span.focus();
+		this.pinChip(entry, span);
 		const range = document.createRange();
 		range.selectNodeContents(span);
 		const selection = window.getSelection();
@@ -710,6 +762,7 @@ class Editor {
 	closeActive(value) {
 		const { entry, span, leadNode, trailNode, leading, trailing } = this.active;
 		this.active = null;
+		this.unpinChip();
 		const node = document.createTextNode(`${leading}${value}${trailing}`);
 		span.parentNode.replaceChild(node, span);
 		if (leadNode && leadNode.parentNode) leadNode.parentNode.removeChild(leadNode);
@@ -779,6 +832,10 @@ class Editor {
 
 	openAttrPanel(entry = this.chipEntry) {
 		if (!entry) return;
+		// Committed first: while a field is open its text node has been lifted
+		// out of the document, so anything reading entry.node.parentElement -- as
+		// the size stepper does -- would be looking at nothing.
+		if (this.active) this.commitActive();
 		const isImage = entry.tag === "img";
 		const altEntry = isImage ? this.findAttrEntry(entry.element, "alt") : null;
 
@@ -936,6 +993,10 @@ class Editor {
 	// exactly what gets served.
 	openStylePanel(entry = this.styleEntry) {
 		if (!entry || entry.kind !== "text") return;
+		// Committed first: while a field is open its text node has been lifted
+		// out of the document, so anything reading entry.node.parentElement -- as
+		// the size stepper does -- would be looking at nothing.
+		if (this.active) this.commitActive();
 
 		const address = `s:${entry.address.slice(2)}`;
 		const row = this.rows.get(address);

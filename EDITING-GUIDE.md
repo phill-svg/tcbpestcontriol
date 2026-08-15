@@ -37,6 +37,12 @@ That's it. The change is live for everyone straight away.
 - **Publish** — makes your changes live.
 - **Done** — leave editing and go back to the normal page.
 
+## On your phone
+
+The editor works on a phone or tablet. Tap any text to edit it, and the
+**Style** and **Edit link** buttons appear next to what you are editing rather
+than needing a hover. Tap an image to change it.
+
 ## Deleting words
 
 Click the words, clear the box, press Enter. They disappear from the page.

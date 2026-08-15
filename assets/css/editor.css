@@ -635,6 +635,60 @@ body.tcb-editing-mode {
 	color: #92400e;
 }
 
+/* Search Console figures ---------------------------------------------------- */
+
+/* Four columns: the search phrase takes what is left, the three numbers get
+   only what they need. Numbers are right-aligned and tabular so the eye can
+   compare them down the column, which is the entire reason to show them. */
+.tcb-sc-table {
+	margin-top: 0.4rem;
+	display: grid;
+	gap: 0.1rem;
+	overflow-x: auto;
+}
+
+.tcb-sc-row {
+	display: grid;
+	grid-template-columns: minmax(8rem, 1fr) 3.5rem 4rem 4.5rem;
+	gap: 0.5rem;
+	align-items: baseline;
+	padding: 0.25rem 0.35rem;
+	border-radius: 0.25rem;
+	font-size: 0.8125rem;
+}
+
+.tcb-sc-row:nth-child(even) {
+	background: #f5f5f7;
+}
+
+.tcb-sc-row > span:not(:first-child),
+.tcb-sc-row > a ~ span {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+	color: #3f3f46;
+}
+
+.tcb-sc-head {
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: #8a8a92;
+	background: none;
+}
+
+.tcb-sc-term {
+	overflow-wrap: anywhere;
+}
+
+.tcb-sc-steps {
+	margin: 0.5rem 0 0 1.1rem;
+	display: grid;
+	gap: 0.4rem;
+	font-size: 0.8125rem;
+	line-height: 1.45;
+	color: #3f3f46;
+}
+
 /* The pages a whole-site finding refers to. Laid out as chips rather than a
    sentence because they are links, and a run of links with no gap between
    them reads as one long address. */

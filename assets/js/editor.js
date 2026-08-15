@@ -2034,6 +2034,11 @@ class Editor {
 	// backwards, because the wording somebody meant to change was the title.
 	buildFindingFix(path, action) {
 		if (action.kind !== "social") return el("span");
+		// The mechanism, spelled out: which lines in the page's code change,
+		// and when the change lands where. Somebody deciding whether to press
+		// a button that edits their website is owed the how, not just the
+		// before and after.
+		const tags = action.field === "title" ? "og:title and twitter:title" : "og:description and twitter:description";
 		const status = el("span", { class: "tcb-hint" });
 		const button = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Fix" });
 		button.addEventListener("click", async () => {
@@ -2047,7 +2052,7 @@ class Editor {
 				button.remove();
 				status.textContent = result.already
 					? `Nothing to do — ${result.already}.`
-					: "Fixed. Shares now match the page.";
+					: `Fixed — ${tags} now match the page ${action.field}.`;
 			} catch (error) {
 				button.disabled = false;
 				status.textContent = error.message;
@@ -2056,6 +2061,10 @@ class Editor {
 		return el("div", {}, [
 			...(action.from ? [el("p", { class: "tcb-hint", text: `Shares currently say: “${action.from}”` })] : []),
 			...(action.to ? [el("p", { class: "tcb-hint", text: `Fix changes that to the page's own ${action.field}: “${action.to}”` })] : []),
+			el("p", {
+				class: "tcb-hint",
+				text: `How: it rewrites the ${tags} lines in this page's code to match the ${action.field} — the same as publishing a ${action.field} edit, except the wording stays exactly what it already is. The fix is live as soon as it runs, and “Sync to code” writes it into the HTML file permanently. Nothing on the page itself changes.`,
+			}),
 			el("div", { class: "tcb-suggest-row" }, [button, status]),
 		]);
 	}

@@ -1,0 +1,224 @@
+{
+	"images": [
+		{
+			"path": "/assets/images/blog-spider-black-house-sm.webp",
+			"bytes": 39800
+		},
+		{
+			"path": "/assets/images/blog-spider-black-house.webp",
+			"bytes": 82730
+		},
+		{
+			"path": "/assets/images/blog-spider-funnel-web-sm.webp",
+			"bytes": 26072
+		},
+		{
+			"path": "/assets/images/blog-spider-funnel-web.webp",
+			"bytes": 86574
+		},
+		{
+			"path": "/assets/images/blog-spider-huntsman-sm.webp",
+			"bytes": 40806
+		},
+		{
+			"path": "/assets/images/blog-spider-huntsman.webp",
+			"bytes": 92050
+		},
+		{
+			"path": "/assets/images/blog-spider-mouse-spider-sm.webp",
+			"bytes": 53674
+		},
+		{
+			"path": "/assets/images/blog-spider-mouse-spider.webp",
+			"bytes": 102474
+		},
+		{
+			"path": "/assets/images/blog-spider-redback-sm.webp",
+			"bytes": 11494
+		},
+		{
+			"path": "/assets/images/blog-spider-redback.webp",
+			"bytes": 23166
+		},
+		{
+			"path": "/assets/images/blog-spider-white-tail-sm.webp",
+			"bytes": 18514
+		},
+		{
+			"path": "/assets/images/blog-spider-white-tail.webp",
+			"bytes": 39524
+		},
+		{
+			"path": "/assets/images/blog-spider-wolf-spider-sm.webp",
+			"bytes": 66078
+		},
+		{
+			"path": "/assets/images/blog-spider-wolf-spider.webp",
+			"bytes": 120784
+		},
+		{
+			"path": "/assets/images/pest-ant-macro-sm.webp",
+			"bytes": 39036
+		},
+		{
+			"path": "/assets/images/pest-ant-macro.webp",
+			"bytes": 84180
+		},
+		{
+			"path": "/assets/images/pest-bed-bug-macro-sm.webp",
+			"bytes": 39638
+		},
+		{
+			"path": "/assets/images/pest-bed-bug-macro.webp",
+			"bytes": 82116
+		},
+		{
+			"path": "/assets/images/pest-bee-macro-sm.webp",
+			"bytes": 25580
+		},
+		{
+			"path": "/assets/images/pest-bee-macro.webp",
+			"bytes": 56070
+		},
+		{
+			"path": "/assets/images/pest-bird-macro-sm.webp",
+			"bytes": 30916
+		},
+		{
+			"path": "/assets/images/pest-bird-macro.webp",
+			"bytes": 63622
+		},
+		{
+			"path": "/assets/images/pest-bird-myna-macro-sm.webp",
+			"bytes": 36522
+		},
+		{
+			"path": "/assets/images/pest-bird-myna-macro.webp",
+			"bytes": 74046
+		},
+		{
+			"path": "/assets/images/pest-bird-pigeon-macro-sm.webp",
+			"bytes": 12034
+		},
+		{
+			"path": "/assets/images/pest-bird-pigeon-macro.webp",
+			"bytes": 25074
+		},
+		{
+			"path": "/assets/images/pest-bird-sparrow-macro-sm.webp",
+			"bytes": 14780
+		},
+		{
+			"path": "/assets/images/pest-bird-sparrow-macro.webp",
+			"bytes": 34748
+		},
+		{
+			"path": "/assets/images/pest-bird-starling-macro-sm.webp",
+			"bytes": 24812
+		},
+		{
+			"path": "/assets/images/pest-bird-starling-macro.webp",
+			"bytes": 55288
+		},
+		{
+			"path": "/assets/images/pest-cockroach-macro-sm.webp",
+			"bytes": 9850
+		},
+		{
+			"path": "/assets/images/pest-cockroach-macro.webp",
+			"bytes": 23430
+		},
+		{
+			"path": "/assets/images/pest-flea-macro-sm.webp",
+			"bytes": 29074
+		},
+		{
+			"path": "/assets/images/pest-flea-macro.webp",
+			"bytes": 57572
+		},
+		{
+			"path": "/assets/images/pest-possum-macro-sm.webp",
+			"bytes": 35656
+		},
+		{
+			"path": "/assets/images/pest-possum-macro.webp",
+			"bytes": 72514
+		},
+		{
+			"path": "/assets/images/pest-rodent-macro-sm.webp",
+			"bytes": 37446
+		},
+		{
+			"path": "/assets/images/pest-rodent-macro.webp",
+			"bytes": 75798
+		},
+		{
+			"path": "/assets/images/pest-silverfish-macro-sm.webp",
+			"bytes": 37878
+		},
+		{
+			"path": "/assets/images/pest-silverfish-macro.webp",
+			"bytes": 78986
+		},
+		{
+			"path": "/assets/images/pest-spider-macro-sm.webp",
+			"bytes": 39250
+		},
+		{
+			"path": "/assets/images/pest-spider-macro.webp",
+			"bytes": 82894
+		},
+		{
+			"path": "/assets/images/pest-stored-product-macro-sm.webp",
+			"bytes": 32814
+		},
+		{
+			"path": "/assets/images/pest-stored-product-macro.webp",
+			"bytes": 66220
+		},
+		{
+			"path": "/assets/images/pest-termite-macro-sm.webp",
+			"bytes": 37638
+		},
+		{
+			"path": "/assets/images/pest-termite-macro.webp",
+			"bytes": 83130
+		},
+		{
+			"path": "/assets/images/tcb-icon-512.png",
+			"bytes": 55539
+		},
+		{
+			"path": "/assets/images/tcb-pest-control-logo-03284.webp",
+			"bytes": 10278
+		},
+		{
+			"path": "/assets/images/tcb-pest-control-service-vehicle-fc3b9.webp",
+			"bytes": 71540
+		},
+		{
+			"path": "/assets/images/tcb-pest-control-spraying-service-701e1.webp",
+			"bytes": 28796
+		},
+		{
+			"path": "/assets/images/tcb-pest-control-technician-sprayer-790eb.jpg",
+			"bytes": 136731
+		},
+		{
+			"path": "/assets/images/tcb-pest-control-technicians-treating-home-9300e-sm.webp",
+			"bytes": 35832
+		},
+		{
+			"path": "/assets/images/tcb-pest-control-technicians-treating-home-9300e.webp",
+			"bytes": 75684
+		},
+		{
+			"path": "/assets/images/termidor-2million-warranty-badge-7955c.webp",
+			"bytes": 5136
+		},
+		{
+			"path": "/assets/images/termidor-accredited-applicator-badge-d9466.webp",
+			"bytes": 6652
+		}
+	]
+}

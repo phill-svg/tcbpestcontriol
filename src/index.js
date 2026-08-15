@@ -11,7 +11,9 @@ import { computeSlots } from "./availability.js";
 import { loadPageEdits, applyContentEdits, handleContentApi } from "./content-edits.js";
 import { normalisePath } from "../assets/js/content-address.js";
 import { handleBlogApi } from "./blog-api.js";
-import { pathsFromSitemap, scanBatch } from "./seo-scan.js";
+import { pathsFromSitemap, scanBatch, extractPageSummary } from "./seo-scan.js";
+import { suggest, extractContent } from "./seo-suggest.js";
+import { TITLE_MIN, TITLE_MAX, DESCRIPTION_MIN, DESCRIPTION_MAX } from "../assets/js/seo-check.js";
 import { fetchAsset } from "./assets.js";
 import {
 	insights as searchInsights,
@@ -219,6 +221,16 @@ export default {
 			if (!session) return new Response("Unauthorized", { status: 401 });
 			if (!session.isAdmin) return new Response("Forbidden", { status: 403 });
 			return handleSearchConsole(url, env);
+		}
+
+		// Drafting a better title or description for a page. Writes nothing --
+		// the candidates come back as suggestions and are saved by hand like
+		// any other edit.
+		if (url.pathname === "/api/seo/suggest") {
+			const session = await getStaffSession(request, env);
+			if (!session) return new Response("Unauthorized", { status: 401 });
+			if (!session.isAdmin) return new Response("Forbidden", { status: 403 });
+			return handleSeoSuggest(request, url, env);
 		}
 
 		// Site-wide SEO scan. Batched: the browser asks for a slice at a time
@@ -752,7 +764,7 @@ function editorLauncherHtml({ editing, previewing }) {
 		// browsers by the old immutable rule -- a year-long cache entry cannot be
 		// revalidated away, only stepped around with a different URL. The
 		// no-cache rule in _headers is what stops it happening again.
-		`<link rel="stylesheet" href="/assets/css/editor.css?v=3">` +
+		`<link rel="stylesheet" href="/assets/css/editor.css?v=4">` +
 		`<script src="/assets/js/editor.js?v=1" type="module"></script>` +
 		`</div>`
 	);
@@ -826,6 +838,73 @@ async function handleSeoScan(request, url, env) {
 		}),
 		{ headers: { "content-type": "application/json", "Cache-Control": "no-store" } }
 	);
+}
+
+// Drafts a title or description for one page.
+//
+// Grounded in the page's own words, and in the phrases people really searched
+// to reach it when Search Console is connected -- a suggestion built from
+// what the page says and what worked is worth having; one invented from a
+// URL is not. Everything is validated in src/seo-suggest.js before it comes
+// back, and arrives in the editor as a draft to accept or ignore.
+async function handleSeoSuggest(request, url, env) {
+	let body = {};
+	try {
+		body = await request.json();
+	} catch {
+		return jsonError(400, "Expected a JSON body.");
+	}
+
+	const kind = body.kind === "description" ? "description" : "title";
+	const path = typeof body.path === "string" && body.path.startsWith("/") ? normalisePath(body.path) : null;
+	if (!path) return jsonError(400, "Which page?");
+
+	// Pristine, like edit mode: the page's own wording, before any override.
+	const pageResponse = await fetchAsset(new Request(new URL(path, url), { method: "GET" }), new URL(path, url), env);
+	if (pageResponse.status !== 200) return jsonError(404, "That page could not be read.");
+
+	const [summary, content] = await Promise.all([
+		extractPageSummary(pageResponse.clone()),
+		extractContent(pageResponse),
+	]);
+
+	// A published override is what the page currently says, so it is what a
+	// suggestion has to improve on.
+	const edits = await loadPageEdits(env, path).catch(() => null);
+	if (edits) {
+		const title = edits.get("m:title");
+		const description = edits.get("m:description");
+		if (title !== undefined) summary.title = title;
+		if (description !== undefined) summary.description = description;
+	}
+
+	// Real searches when they are available, and nothing when they are not.
+	// The suggestion is worth less without them, which is worth saying, but
+	// it is not worth refusing to make.
+	let queries = [];
+	if (isSearchConsoleConfigured(env)) {
+		try {
+			({ queries } = await searchInsights(env, { hostname: url.hostname, path }));
+		} catch {
+			// Search Console being unreachable is not a reason to refuse to
+			// draft anything -- it just means drafting from the page alone.
+		}
+	}
+
+	try {
+		const { candidates, rejected } = await suggest(env, {
+			kind,
+			page: { title: summary.title, description: summary.description, h1: content.h1, body: content.body },
+			queries,
+			min: kind === "title" ? TITLE_MIN : DESCRIPTION_MIN,
+			max: kind === "title" ? TITLE_MAX : DESCRIPTION_MAX,
+		});
+		return new Response(JSON.stringify({ kind, candidates, rejected, usedSearches: queries.length }), {
+			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
+		});
+	} catch (error) {
+		return jsonError(502, `Could not draft a suggestion (${error.message}).`);
+	}
 }
 
 // Search Console figures for the whole site, or for one page with ?path=.

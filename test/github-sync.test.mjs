@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { isConfigured, missingConfig, setupMessage, commitFiles, readFile, decodeBase64Utf8 } from "../src/github-sync.js";
+import { isConfigured, missingConfig, setupMessage, commitFiles, readFile, decodeBase64Utf8, explainForTest } from "../src/github-sync.js";
 
 const ENV = { GITHUB_TOKEN: "test-token", GITHUB_REPO: "owner/repo" };
 
@@ -117,7 +117,7 @@ test("a rejected ref update surfaces as an error rather than passing silently", 
 	try {
 		await assert.rejects(
 			() => commitFiles(ENV, "main", [{ path: "index.html", content: "x" }], "msg"),
-			/failed \(422\)/
+			/branch moved/
 		);
 	} finally {
 		github.restore();
@@ -158,5 +158,31 @@ test("a page path with characters needing escaping is encoded once", async () =>
 		assert.doesNotMatch(call.path, /%25/, "must not double-encode");
 	} finally {
 		github.restore();
+	}
+});
+
+test("GitHub errors are explained in terms of what to change, not just a status", () => {
+	// The person reading this is looking at a settings page, not debugging an
+	// API, so a bare "403" sends them nowhere. The mapping is asserted directly
+	// -- routing every case through a stubbed fetch would only prove that
+	// readFile calls the same function.
+	assert.match(explainForTest(401, "/repos/o/r/git/ref/heads/main"), /not valid/);
+	assert.match(explainForTest(403, "/repos/o/r/contents/index.html"), /Contents: read and write/);
+	assert.match(explainForTest(404, "/repos/o/r/contents/index.html"), /file does not exist/);
+	assert.match(explainForTest(404, "/repos/o/r/git/ref/heads/main"), /GITHUB_REPO/);
+	assert.match(explainForTest(422, "/repos/o/r/git/refs/heads/main"), /branch moved/);
+	assert.equal(explainForTest(500, "/repos/o/r/git/blobs"), null, "unmapped statuses fall through to the raw detail");
+});
+
+test("a failed read reports the explanation, not a bare status code", async () => {
+	const original = globalThis.fetch;
+	globalThis.fetch = async () => new Response("{}", { status: 403 });
+	try {
+		await assert.rejects(
+			() => readFile({ GITHUB_TOKEN: "t", GITHUB_REPO: "o/r" }, "index.html", "main"),
+			/Contents: read and write/
+		);
+	} finally {
+		globalThis.fetch = original;
 	}
 });

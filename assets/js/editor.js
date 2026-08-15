@@ -487,8 +487,8 @@ class Editor {
 		}, true);
 
 		document.addEventListener("mousemove", (event) => this.updateHover(event));
-		window.addEventListener("scroll", () => this.hideHover(), { passive: true });
-		window.addEventListener("resize", () => this.hideHover());
+		window.addEventListener("scroll", () => this.hideHover(true), { passive: true });
+		window.addEventListener("resize", () => this.hideHover(true));
 	}
 
 	isChrome(node) {
@@ -565,12 +565,12 @@ class Editor {
 	}
 
 	updateHover(event) {
-		if (this.active) return this.hideHover();
+		if (this.active) return this.hideHover(true);
 		// Reaching for the chip must not dismiss it. The pointer has to cross
 		// onto the chip to click it, and the chip is chrome, so the check below
 		// would hide the one control the user is aiming at -- and, worse, move
 		// it out from under the cursor mid-click.
-		if (this.chip.contains(event.target)) return;
+		if (this.chip.contains(event.target)) return this.cancelHoverHide();
 		if (this.isChrome(event.target)) return this.hideHover();
 
 		const image = event.target.closest && event.target.closest("img");
@@ -606,9 +606,10 @@ class Editor {
 		this.styleChipButton.hidden = !textEntry;
 
 		if (chipEntry || textEntry) {
+			this.cancelHoverHide();
 			this.chip.hidden = false;
 			Object.assign(this.chip.style, {
-				top: `${rect.top + window.scrollY - 12}px`,
+				top: `${rect.top + window.scrollY + 2}px`,
 				left: `${rect.left + window.scrollX + rect.width}px`,
 			});
 		} else {
@@ -616,7 +617,31 @@ class Editor {
 		}
 	}
 
-	hideHover() {
+	// Hiding is delayed by default. Getting from the text to the chip means
+	// crossing whatever sits between them, and for those few milliseconds the
+	// pointer is over neither -- so hiding immediately would snatch the chip
+	// away mid-reach, every time. The delay is cancelled the moment the
+	// pointer lands on anything that should keep it up.
+	hideHover(immediate = false) {
+		if (immediate) {
+			this.cancelHoverHide();
+			this.applyHoverHide();
+			return;
+		}
+		if (this.hoverHideTimer) return;
+		this.hoverHideTimer = setTimeout(() => {
+			this.hoverHideTimer = null;
+			this.applyHoverHide();
+		}, 260);
+	}
+
+	cancelHoverHide() {
+		if (!this.hoverHideTimer) return;
+		clearTimeout(this.hoverHideTimer);
+		this.hoverHideTimer = null;
+	}
+
+	applyHoverHide() {
 		this.hover.style.display = "none";
 		this.chip.hidden = true;
 	}
@@ -1252,12 +1277,14 @@ class Editor {
 					} ${result.files === 1 ? "file" : "files"}. The site itself doesn't change; the code just caught up.`;
 				}
 				if (result.problems && result.problems.length) {
-					// Anything unmatched is left live on purpose, so say so rather
-					// than reporting a clean sweep.
+					// Anything unmatched is left live on purpose. The reasons are
+					// listed rather than counted: "3 were skipped" gives nobody
+					// anything to act on, and when the cause is a permissions
+					// problem rather than an edited file, a count actively misleads.
 					status.className = "tcb-hint tcb-hint-warn";
-					status.textContent += ` ${result.problems.length} ${
-						result.problems.length === 1 ? "change was" : "changes were"
-					} left alone because the wording in the code had already been altered by hand — they're still live on the site.`;
+					status.textContent += ` ${result.problems.length} left alone — ${result.problems
+						.slice(0, 3)
+						.join("; ")}${result.problems.length > 3 ? " …" : ""}`;
 				}
 			} catch (error) {
 				status.className = "tcb-hint tcb-hint-warn";

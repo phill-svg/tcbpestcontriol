@@ -590,7 +590,7 @@ export async function handleContentApi(request, url, env, session) {
 			try {
 				file = await readFile(env, filePath, branch);
 			} catch (error) {
-				problems.push(`${pagePath}: could not read ${filePath} (${error.status || "error"})`);
+				problems.push(`${pagePath}: ${error.message}`);
 				continue;
 			}
 
@@ -608,6 +608,22 @@ export async function handleContentApi(request, url, env, session) {
 		}
 
 		if (!files.length) {
+			// "Nothing needed changing" is only true when nothing went wrong.
+			// If every file failed to read -- a token without Contents access
+			// reads as a 403 on all of them -- that message would report a
+			// success that never happened, which is the worst possible answer.
+			if (problems.length) {
+				return json(
+					{
+						ok: false,
+						files: 0,
+						edits: 0,
+						problems,
+						message: `Nothing could be written. ${problems[0]}`,
+					},
+					409
+				);
+			}
 			return json({ ok: true, files: 0, edits: 0, problems, message: "Nothing needed changing in the code." });
 		}
 

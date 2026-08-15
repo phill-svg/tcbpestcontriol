@@ -12,7 +12,7 @@ import { loadPageEdits, applyContentEdits, handleContentApi } from "./content-ed
 import { normalisePath } from "../assets/js/content-address.js";
 import { handleBlogApi } from "./blog-api.js";
 import { pathsFromSitemap, scanBatch, extractPageSummary } from "./seo-scan.js";
-import { suggest, fixGap, extractContent, extractMeta, examplePaths, HEADING_MIN, HEADING_MAX } from "./seo-suggest.js";
+import { suggest, fixGaps, extractContent, extractMeta, examplePaths, HEADING_MIN, HEADING_MAX } from "./seo-suggest.js";
 import { TITLE_MIN, TITLE_MAX, DESCRIPTION_MIN, DESCRIPTION_MAX } from "../assets/js/seo-check.js";
 import { findGaps, describeGap, fixForGap } from "./seo-gaps.js";
 import { fetchAsset, fetchNegotiatedImage } from "./assets.js";
@@ -780,7 +780,7 @@ function editorLauncherHtml({ editing, previewing }) {
 		// browsers by the old immutable rule -- a year-long cache entry cannot be
 		// revalidated away, only stepped around with a different URL. The
 		// no-cache rule in _headers is what stops it happening again.
-		`<link rel="stylesheet" href="/assets/css/editor.css?v=10">` +
+		`<link rel="stylesheet" href="/assets/css/editor.css?v=11">` +
 		`<script src="/assets/js/editor.js?v=1" type="module"></script>` +
 		`</div>`
 	);
@@ -914,7 +914,7 @@ async function handleSeoSuggest(request, url, env) {
 			gaps = findGaps(
 				queries,
 				{ title: summary.title, description: summary.description, h1: content.h1 },
-				{ path, rankings: insight.rankings }
+				{ path, rankings: insight.rankings, metaFor: await rivalMeta(url, env, insight.rankings, path) }
 			).filter((gap) => gap.verdict === "add");
 		} catch {
 			// Search Console being unreachable is not a reason to refuse to
@@ -962,8 +962,7 @@ async function handleSeoFix(request, url, env) {
 	}
 
 	const path = typeof body.path === "string" && body.path.startsWith("/") ? normalisePath(body.path) : null;
-	const query = typeof body.query === "string" ? body.query.trim() : "";
-	if (!path || !query) return jsonError(400, "Which page, and which search?");
+	if (!path) return jsonError(400, "Which page?");
 	if (!isSearchConsoleConfigured(env)) return jsonError(409, searchConsoleSetupMessage());
 
 	const pageUrl = new URL(path, url);
@@ -982,15 +981,23 @@ async function handleSeoFix(request, url, env) {
 		if (description !== undefined) summary.description = description;
 	}
 
-	// The gap is recomputed rather than taken from the request. The browser
-	// could send anything, and the words to be worked in are the whole point.
-	let gap;
+	// Every gap this page should act on, not one -- and recomputed here rather
+	// than taken from the request, because the words to be worked in are the
+	// whole point and the browser could send anything.
+	//
+	// A page has one title. Offering a separate fix per search meant two
+	// buttons proposing two different titles for the same box, where accepting
+	// the second silently undid the first. One rewrite, covering as many of
+	// them as it honestly can.
+	let gaps;
 	try {
 		const insight = await searchInsights(env, { hostname: url.hostname, path, withRankings: true });
 		const page = { title: summary.title, description: summary.description, h1: content.h1 };
-		gap = findGaps(insight.queries, page, { path, rankings: insight.rankings }).find((entry) => entry.query === query);
-		if (!gap) return jsonError(404, "That search is no longer a gap on this page — it may already be fixed.");
-		if (gap.verdict === "elsewhere") return jsonError(409, fixForGap(gap));
+		const metaFor = await rivalMeta(url, env, insight.rankings, path);
+		gaps = findGaps(insight.queries, page, { path, rankings: insight.rankings, metaFor }).filter(
+			(entry) => entry.verdict === "add"
+		);
+		if (!gaps.length) return jsonError(404, "There is nothing left on this page to fix from search data.");
 	} catch (error) {
 		return jsonError(502, error.message);
 	}
@@ -998,8 +1005,8 @@ async function handleSeoFix(request, url, env) {
 	const examples = await styleExamples(request, url, env, path);
 
 	try {
-		const result = await fixGap(env, {
-			gap,
+		const result = await fixGaps(env, {
+			gaps,
 			page: { title: summary.title, description: summary.description, h1: content.h1, body: content.body },
 			examples,
 			limits: {
@@ -1010,8 +1017,7 @@ async function handleSeoFix(request, url, env) {
 		});
 		return new Response(
 			JSON.stringify({
-				query,
-				missing: gap.missing,
+				queries: gaps.map((gap) => gap.query),
 				kind: result.kind,
 				candidates: result.candidates,
 				// Why the more obvious places were skipped. "It will not fit in
@@ -1024,6 +1030,37 @@ async function handleSeoFix(request, url, env) {
 	} catch (error) {
 		return jsonError(502, `Could not draft a fix (${error.message}).`);
 	}
+}
+
+// What the pages competing for a search say about themselves.
+//
+// Relatedness used to be judged on the URL alone, which decided that nothing
+// on this site was about "pigeon control canberra" -- while /bird-control's
+// description reads "pigeons on solar panels, mynas in roof eaves". A URL is
+// a label somebody chose once. Only the pages that actually rank for one of
+// this page's searches are read, and only the first few of those.
+async function rivalMeta(url, env, rankings, ownPath) {
+	const paths = new Set();
+	for (const rows of Object.values(rankings || {})) {
+		for (const row of rows) {
+			if (row.path && row.path !== ownPath) paths.add(row.path);
+		}
+	}
+
+	const wanted = [...paths].slice(0, 12);
+	const found = new Map();
+	await Promise.all(
+		wanted.map(async (path) => {
+			try {
+				const pageUrl = new URL(path, url);
+				const response = await fetchAsset(new Request(pageUrl, { method: "GET" }), pageUrl, env);
+				if (response.status === 200) found.set(path, await extractMeta(response));
+			} catch {
+				// A page that will not load simply has no words to match on.
+			}
+		})
+	);
+	return (path) => found.get(path) || null;
 }
 
 // Writing samples from elsewhere on the site, shared by the suggest and fix
@@ -1083,10 +1120,11 @@ async function handleSearchConsole(url, env) {
 					if (title !== undefined) summary.title = title;
 					if (description !== undefined) summary.description = description;
 				}
+				const metaFor = await rivalMeta(url, env, data.rankings, wanted);
 				data.gaps = findGaps(
 					data.queries,
 					{ title: summary.title, description: summary.description, h1: content.h1 },
-					{ path: wanted, rankings: data.rankings }
+					{ path: wanted, rankings: data.rankings, metaFor }
 				).map((gap) => ({ ...gap, sentence: describeGap(gap), fix: fixForGap(gap) }));
 			}
 		}

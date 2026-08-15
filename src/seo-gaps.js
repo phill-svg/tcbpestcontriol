@@ -71,6 +71,11 @@ export const WORST_POSITION = 20;
 // fact worth building an instruction on.
 export const LEVEL_MARGIN = 2;
 
+// Words every path on this site contains, and which therefore say nothing
+// about what a page is for. Without these removed, /locations-pest-control-
+// tuggeranong looks related to every pest search ever made.
+const GENERIC = new Set(["pest", "control", "canberra", "location", "locations", "act", "treatment", "service", "services"]);
+
 // Crude singularisation, deliberately. "ants" and "ant", "termites" and
 // "termite", "cockroaches" and "cockroach" have to match or every plural
 // search looks like a gap. A real stemmer would be worse here: it would also
@@ -102,25 +107,15 @@ export function isBrandQuery(query) {
 // eleventh paragraph is not what the page is presenting itself as being about.
 export function missingWords(query, page) {
 	const said = new Set(contentWords([page.title, page.description, page.h1].filter(Boolean).join(" ")));
-	return [...new Set(contentWords(query))].filter((word) => !said.has(word));
+	// Generic words are dropped as well as absent ones. A page sitting 18th
+	// for "bird pest control canberra" is not 18th because its heading omits
+	// the word "pest" -- every page on this site is about pest control, and
+	// "work “pest” into this page's title" is advice worth nobody's time.
+	return [...new Set(contentWords(query))].filter((word) => !said.has(word) && !GENERIC.has(word));
 }
 
-// Whether some other page on the site is the better answer for this search,
-// and how it is doing. `rankings` maps a search phrase to every page of this
-// site that Google shows for it.
-//
-// This is the question the first version of this module forgot to ask, and
-// forgetting it made the advice actively harmful. The homepage was shown 165
-// times for "bird control canberra", never says "bird", and the obvious
-// conclusion -- work "bird" into the homepage -- would have set the homepage
-// competing against /bird-control, which is the exact problem the duplicate
-// title check elsewhere warns about. A gap is only an instruction to change
-// *this* page once you know no better page exists.
-// Words every path on this site contains, and which therefore say nothing
-// about what a page is for. Without these removed, /locations-pest-control-
-// tuggeranong looks related to every pest search ever made.
-const GENERIC = new Set(["pest", "control", "canberra", "location", "locations", "act", "treatment", "service", "services"]);
-
+// The words that say what a thing is about, once the ones every page here
+// shares are taken out.
 export function distinctiveWords(text) {
 	return contentWords(String(text || "").replace(/[-/]/g, " ")).filter((word) => !GENERIC.has(word));
 }
@@ -132,20 +127,30 @@ export function distinctiveWords(text) {
 // printed: "/locations-pest-control-tuggeranong is the page that should own
 // borer control". Tuggeranong ranked at 20.0 for it, so the code called it
 // the rightful owner. It is a suburb page. Ranking next is not the same as
-// being the right answer, and a page is only the right answer for a search
-// when it is actually on that subject.
-export function isAbout(query, path) {
+// being the right answer.
+//
+// `meta` is the candidate page's own title, description and heading, and it
+// matters as much as the path. Judging on the URL alone decided that nothing
+// on this site was about "pigeon control canberra" -- while /bird-control's
+// description reads "pigeons on solar panels, mynas in roof eaves". A URL is
+// a label somebody chose once; the page says what it is about.
+export function isAbout(query, path, meta = null) {
 	const wanted = distinctiveWords(query);
 	if (!wanted.length) return false;
-	const has = new Set(distinctiveWords(path));
+	const has = new Set([
+		...distinctiveWords(path),
+		...(meta ? distinctiveWords([meta.title, meta.description, meta.h1].filter(Boolean).join(" ")) : []),
+	]);
 	return wanted.some((word) => has.has(word));
 }
 
 // The page on this site that is genuinely about this search, if there is one.
-export function betterPageFor(query, path, rankings) {
+// `metaFor` looks up what a candidate page says about itself, and is optional
+// -- without it this falls back to matching on the path alone.
+export function betterPageFor(query, path, rankings, metaFor = null) {
 	const rows = (rankings && rankings[query]) || [];
 	const related = rows
-		.filter((row) => row.path && row.path !== path && isAbout(query, row.path))
+		.filter((row) => row.path && row.path !== path && isAbout(query, row.path, metaFor ? metaFor(row.path) : null))
 		.sort((a, b) => (a.position || 999) - (b.position || 999));
 	return related[0] || null;
 }
@@ -157,7 +162,7 @@ export function betterPageFor(query, path, rankings) {
 // Returned worst-gap-first, where "worst" weighs how often Google shows the
 // page against how far down it puts it. A phrase shown 2,000 times at
 // position 15 is a bigger miss than one shown 40 times at position 5.
-export function findGaps(queries, page, { path = null, rankings = null } = {}) {
+export function findGaps(queries, page, { path = null, rankings = null, metaFor = null } = {}) {
 	const gaps = [];
 
 	for (const row of queries || []) {
@@ -173,7 +178,7 @@ export function findGaps(queries, page, { path = null, rankings = null } = {}) {
 		if (!missing.length) continue;
 
 		const position = row.position || 0;
-		const better = rankings ? betterPageFor(query, path, rankings) : null;
+		const better = rankings ? betterPageFor(query, path, rankings, metaFor) : null;
 
 		// Three different situations wearing the same clothes. "Clearly ahead"
 		// needs a real margin: a page beating another by 0.2 places has not

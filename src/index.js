@@ -13,6 +13,12 @@ import { normalisePath } from "../assets/js/content-address.js";
 import { handleBlogApi } from "./blog-api.js";
 import { pathsFromSitemap, scanBatch } from "./seo-scan.js";
 import { fetchAsset } from "./assets.js";
+import {
+	insights as searchInsights,
+	isConfigured as isSearchConsoleConfigured,
+	setupMessage as searchConsoleSetupMessage,
+	setupSteps as searchConsoleSetupSteps,
+} from "./search-console.js";
 
 export default {
 	async fetch(request, env, ctx) {
@@ -203,6 +209,16 @@ export default {
 			forwardUrl.searchParams.set("username", session.username);
 			const id = env.CHAT_HUB.idFromName("global");
 			return env.CHAT_HUB.get(id).fetch(new Request(forwardUrl, request));
+		}
+
+		// What people actually searched before they arrived. Read-only, and
+		// the only thing in the editor that reports what happened rather than
+		// what some check thinks ought to happen.
+		if (url.pathname === "/api/seo/search-console") {
+			const session = await getStaffSession(request, env);
+			if (!session) return new Response("Unauthorized", { status: 401 });
+			if (!session.isAdmin) return new Response("Forbidden", { status: 403 });
+			return handleSearchConsole(url, env);
 		}
 
 		// Site-wide SEO scan. Batched: the browser asks for a slice at a time
@@ -736,7 +752,7 @@ function editorLauncherHtml({ editing, previewing }) {
 		// browsers by the old immutable rule -- a year-long cache entry cannot be
 		// revalidated away, only stepped around with a different URL. The
 		// no-cache rule in _headers is what stops it happening again.
-		`<link rel="stylesheet" href="/assets/css/editor.css?v=2">` +
+		`<link rel="stylesheet" href="/assets/css/editor.css?v=3">` +
 		`<script src="/assets/js/editor.js?v=1" type="module"></script>` +
 		`</div>`
 	);
@@ -810,6 +826,39 @@ async function handleSeoScan(request, url, env) {
 		}),
 		{ headers: { "content-type": "application/json", "Cache-Control": "no-store" } }
 	);
+}
+
+// Search Console figures for the whole site, or for one page with ?path=.
+//
+// A 409 rather than a 500 when it is not connected: nothing has gone wrong,
+// there is simply a setup step outstanding, and the panel shows the
+// instructions instead of an error.
+async function handleSearchConsole(url, env) {
+	if (!isSearchConsoleConfigured(env)) {
+		return new Response(JSON.stringify({ error: searchConsoleSetupMessage(), steps: searchConsoleSetupSteps(), needsSetup: true }), {
+			status: 409,
+			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
+		});
+	}
+
+	const path = url.searchParams.get("path");
+	try {
+		const data = await searchInsights(env, {
+			hostname: url.hostname,
+			path: path && path.startsWith("/") ? normalisePath(path) : null,
+		});
+		return new Response(JSON.stringify(data), {
+			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
+		});
+	} catch (error) {
+		// The messages thrown in src/search-console.js already say what to go
+		// and change, so they are passed through rather than flattened into
+		// "something went wrong".
+		return new Response(JSON.stringify({ error: error.message }), {
+			status: 502,
+			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
+		});
+	}
 }
 
 // Checks whether a list of internal link destinations actually load.

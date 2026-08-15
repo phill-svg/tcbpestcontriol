@@ -109,6 +109,37 @@ What it does not check: page speed, mobile layout, structured data (your pages
 already carry it), or anything to do with keywords. Nothing here scores your
 page out of a hundred, because that number would be made up.
 
+## What people actually searched
+
+Everything above is an opinion about your pages. **What people actually
+searched** is the one part that reports what happened — the real phrases people
+typed, from Google Search Console, over the last 28 days.
+
+It shows three things:
+
+- **This page** — how many times it was shown, how many clicked, and the
+  searches that brought them.
+- **Shown often, clicked rarely** — the pages where a better title or
+  description would pay. This is the useful one, because the title and
+  description are exactly what you can change here. Each row links straight
+  into editing that page.
+- **Just off the first page** — searches where you sit around position 8 to 20.
+  Google already thinks you are relevant and almost nobody is seeing you.
+
+Google's own numbers stop two or three days short of today, so the window ends
+a few days back. That is Google, not a delay here.
+
+Unlike everything else in the editor, this needs connecting once — it is your
+Google account, so it cannot be set up from this side. The panel walks you
+through it if it is not connected: create a service account key in Google
+Cloud, paste it into Cloudflare as a secret named `GOOGLE_SERVICE_ACCOUNT`, then
+add that service account's email address as a user in Search Console under
+Settings → Users and permissions. That last step is the one people skip, and
+nothing works without it.
+
+Access is read-only, and you can revoke it any time by removing that user in
+Search Console.
+
 ## Drafts vs published
 
 Every change you make is saved straight away as a **draft**. Drafts are only

@@ -53,6 +53,16 @@ function start(mode) {
 
 const PATH = normalisePath(location.pathname);
 
+// Search Console reports pages as whole URLs. Everything in this editor keys
+// off paths, and a full URL is also too wide to read in the panel.
+function pathOf(pageUrl) {
+	try {
+		return normalisePath(new URL(pageUrl).pathname);
+	} catch {
+		return String(pageUrl || "");
+	}
+}
+
 function el(tag, props = {}, children = []) {
 	const node = document.createElement(tag);
 	for (const [key, value] of Object.entries(props)) {
@@ -104,7 +114,12 @@ async function api(path, options = {}) {
 		if (response.status === 401 || response.status === 403) {
 			throw new Error("Your sign-in has expired. Open /staff-chat, sign in again, then reload this page.");
 		}
-		throw new Error((body && body.error) || `Something went wrong (${response.status}).`);
+		const error = new Error((body && body.error) || `Something went wrong (${response.status}).`);
+		// Some failures carry more than a sentence -- the Search Console setup
+		// steps, for one -- and flattening them to a message throws that away.
+		error.status = response.status;
+		error.body = body || {};
+		throw error;
 	}
 	return body || {};
 }
@@ -1420,11 +1435,175 @@ class Editor {
 				}),
 				this.buildGooglePreview(page),
 				list,
+				this.buildSearchConsole(),
 				this.buildSiteScan(),
 			],
 			null,
 			{ confirmLabel: null, cancelLabel: "Close" }
 		);
+	}
+
+	// What people actually searched for, from Search Console.
+	//
+	// Everything else in this panel is an opinion about the page. This is the
+	// only part that reports what happened. It loads on a button rather than
+	// when the panel opens, because it is two requests to Google and most
+	// visits to this panel are about the sentence being edited, not about
+	// last month's traffic.
+	buildSearchConsole() {
+		const status = el("p", { class: "tcb-hint" });
+		const results = el("div", { class: "tcb-findings" });
+		const button = el("button", { type: "button", class: "tcb-btn", text: "What people searched" });
+
+		const number = (value) => Math.round(value).toLocaleString();
+		const percent = (value) => `${(value * 100).toFixed(1)}%`;
+
+		// A table of query, clicks, impressions and position. Position is
+		// rounded to one place because Search Console's is an average, and
+		// showing it to four decimals implies a precision it does not have.
+		const queryTable = (rows) => {
+			const table = el("div", { class: "tcb-sc-table" });
+			table.appendChild(
+				el("div", { class: "tcb-sc-row tcb-sc-head" }, [
+					el("span", { text: "Search" }),
+					el("span", { text: "Clicks" }),
+					el("span", { text: "Shown" }),
+					el("span", { text: "Position" }),
+				])
+			);
+			for (const row of rows) {
+				table.appendChild(
+					el("div", { class: "tcb-sc-row" }, [
+						el("span", { class: "tcb-sc-term", text: row.key }),
+						el("span", { text: number(row.clicks) }),
+						el("span", { text: number(row.impressions) }),
+						el("span", { text: row.position.toFixed(1) }),
+					])
+				);
+			}
+			return table;
+		};
+
+		button.addEventListener("click", async () => {
+			button.disabled = true;
+			results.replaceChildren();
+			status.className = "tcb-hint";
+			status.textContent = "Asking Google…";
+
+			let page;
+			let site;
+			try {
+				[page, site] = await Promise.all([
+					api(`/api/seo/search-console?path=${encodeURIComponent(PATH)}`),
+					api("/api/seo/search-console"),
+				]);
+			} catch (error) {
+				button.disabled = false;
+				status.className = "tcb-hint tcb-hint-warn";
+				if (error.body && error.body.needsSetup) {
+					status.textContent = "Search Console isn't connected yet. It takes about ten minutes, once.";
+					const steps = el("ol", { class: "tcb-sc-steps" });
+					for (const step of error.body.steps || []) steps.appendChild(el("li", { text: step }));
+					results.appendChild(steps);
+					results.appendChild(
+						el("p", {
+							class: "tcb-hint",
+							text: "The last step is the one people miss — creating the key does not by itself grant access to anything.",
+						})
+					);
+					return;
+				}
+				status.textContent = error.message;
+				return;
+			}
+
+			button.disabled = false;
+			button.textContent = "Check again";
+			status.textContent = `${site.window.startDate} to ${site.window.endDate}. Google's figures stop a few days short of today.`;
+
+			// This page first: whoever opened this panel is editing this page.
+			results.appendChild(
+				el("div", { class: "tcb-finding" }, [
+					el("div", {}, [
+						el("p", {
+							class: "tcb-finding-message",
+							text: page.totals.impressions
+								? `This page: ${number(page.totals.clicks)} clicks from ${number(page.totals.impressions)} times shown (${percent(page.totals.ctr)}).`
+								: "This page had no search traffic in this period.",
+						}),
+						...(page.queries.length
+							? [queryTable(page.queries.slice(0, 10))]
+							: [el("p", { class: "tcb-hint", text: "Nothing to show — it may be new, or not indexed yet." })]),
+					]),
+				])
+			);
+
+			// Where rewriting a title would pay. This is the whole reason the
+			// panel exists: the shortlist is actionable in this editor.
+			if (site.opportunities.missed.length) {
+				const list = el("div", { class: "tcb-sc-table" });
+				for (const row of site.opportunities.missed) {
+					list.appendChild(
+						el("div", { class: "tcb-sc-row" }, [
+							el("a", { class: "tcb-scan-link", href: `${pathOf(row.key)}?edit=1`, text: pathOf(row.key) }),
+							el("span", { text: number(row.clicks) }),
+							el("span", { text: number(row.impressions) }),
+							el("span", { text: percent(row.ctr) }),
+						])
+					);
+				}
+				results.appendChild(
+					el("div", { class: "tcb-finding tcb-finding-worth-a-look" }, [
+						el("span", { class: "tcb-finding-level", text: "worth a look" }),
+						el("div", {}, [
+							el("p", {
+								class: "tcb-finding-message",
+								text: "Shown often, clicked rarely. The title and description are all anyone sees before deciding — and both are editable here.",
+							}),
+							list,
+						]),
+					])
+				);
+			}
+
+			// Searches sitting at the top of page two.
+			if (site.opportunities.nearlyThere.length) {
+				results.appendChild(
+					el("div", { class: "tcb-finding tcb-finding-worth-a-look" }, [
+						el("span", { class: "tcb-finding-level", text: "worth a look" }),
+						el("div", {}, [
+							el("p", {
+								class: "tcb-finding-message",
+								text: "Just off the first page. Google already thinks you are relevant for these and almost nobody is seeing you.",
+							}),
+							queryTable(site.opportunities.nearlyThere),
+						]),
+					])
+				);
+			}
+
+			if (site.queries.length) {
+				results.appendChild(
+					el("div", { class: "tcb-finding" }, [
+						el("div", {}, [
+							el("p", { class: "tcb-finding-message", text: "Across the whole site, what people searched:" }),
+							queryTable(site.queries.slice(0, 15)),
+						]),
+					])
+				);
+			}
+		});
+
+		return el("div", { class: "tcb-sync" }, [
+			el("p", { class: "tcb-sync-title", text: "What people actually searched" }),
+			el("p", {
+				class: "tcb-hint",
+				text: "From Google Search Console — the real phrases people typed, not a guess about them. Last 28 days.",
+			}),
+			button,
+			status,
+			results,
+		]);
 	}
 
 	// Checks every page in sitemap.xml, a slice at a time.

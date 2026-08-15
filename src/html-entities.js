@@ -83,6 +83,21 @@ export function decodeEntities(value) {
 	});
 }
 
+// Escaping for a value written into a double-quoted attribute by hand.
+//
+// Only used for the style attribute on a styled run, whose value has already
+// been rebuilt from an allowlist and so cannot contain a quote or an angle
+// bracket in the first place. Escaping anyway costs nothing and means the
+// attribute stays well-formed even if that allowlist is ever widened without
+// this being revisited.
+export function escapeStyleAttribute(value) {
+	return String(value == null ? "" : value)
+		.replace(/&/g, "&amp;")
+		.replace(/"/g, "&quot;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;");
+}
+
 // Escaping for text written back into the page. The rewriter re-emits text
 // with `{ html: true }` (the only mode that round-trips existing markup
 // byte-for-byte), which means replacement text is inserted verbatim -- so it

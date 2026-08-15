@@ -20,6 +20,7 @@ That's it. The change is live for everyone straight away.
 | --- | --- |
 | Any text on the page | Click it and type |
 | Deleting words | Click them, clear the box, press Enter |
+| Size, colour, bold, font | Hover the words, click **Style** |
 | A link's destination | Hover the link, click **Edit link** |
 | An image | Hover the image, click **Change image**, pick a new one |
 | Image alt text | Same panel as the image |
@@ -47,6 +48,25 @@ to bring the wording back, or use **Changes → Revert**.
 Note that headings are often made of two or three separate runs of text
 (different colours or styles). Clicking selects just the run you clicked, so
 you can delete half a heading and keep the rest.
+
+## Changing how text looks
+
+Hover any words and a small **Style** button appears. It opens a panel with:
+
+- **Size** — bigger and smaller in steps, or reset to normal
+- **Colour** — the site palette, or the default
+- **Bold, italic, UPPERCASE**
+- **Font** — body, display, or mono
+
+Changes show on the page as you make them, so you can see what you are doing.
+**Cancel** puts everything back; **Clear styling** removes it entirely.
+
+Styling applies to the run of text you hovered, not the whole heading or
+paragraph — so you can make one coloured word inside a sentence.
+
+One difference from the wording changes: styling stays in the site settings
+and is not written into the code files by **Sync to code**. It is still live
+for visitors and still revertable, it just lives in one place instead of two.
 
 ## Drafts vs published
 

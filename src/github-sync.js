@@ -64,17 +64,41 @@ function encodeBase64Utf8(text) {
 	return btoa(binary);
 }
 
+// Which pieces of configuration are absent, so the message can name them.
+// Reporting "not set up" when one of the two is already in place sends people
+// to re-do the part that was already right.
+export function missingConfig(env) {
+	const missing = [];
+	if (!env.GITHUB_TOKEN) missing.push("GITHUB_TOKEN");
+	if (!env.GITHUB_REPO) missing.push("GITHUB_REPO");
+	return missing;
+}
+
 export function isConfigured(env) {
-	return !!(env.GITHUB_TOKEN && env.GITHUB_REPO);
+	return missingConfig(env).length === 0;
 }
 
 // Instructions rather than a bare "not configured", because the person who
 // sees this is the one who has to fix it and is probably not a developer.
-export const SETUP_MESSAGE =
-	"Syncing to code isn't set up yet. It needs a GitHub token: create a fine-grained personal access token with " +
-	"'Contents: read and write' on this repository, then add it to the Worker as a secret named GITHUB_TOKEN " +
-	"(Cloudflare dashboard -> Workers -> tcbpestreal -> Settings -> Variables and Secrets), and set GITHUB_REPO " +
-	"to 'owner/name'. See EDITING-GUIDE.md.";
+export function setupMessage(missing) {
+	const parts = [`Syncing to code isn't set up yet — the Worker is missing ${missing.join(" and ")}.`];
+	if (missing.includes("GITHUB_TOKEN")) {
+		parts.push(
+			"For GITHUB_TOKEN: create a fine-grained personal access token on GitHub with 'Contents: read and write' on " +
+				"this repository, then add it in the Cloudflare dashboard under Workers → tcbpestreal → Settings → " +
+				"Variables and Secrets, as type Secret, named exactly GITHUB_TOKEN."
+		);
+	}
+	if (missing.includes("GITHUB_REPO")) {
+		parts.push(
+			"GITHUB_REPO should already be set in wrangler.jsonc and applied on deploy. If it is missing, the Worker is " +
+				"probably running an older deployment — check that the latest push to the main branch finished building, " +
+				"or add GITHUB_REPO as a plain text variable with the value 'owner/name'."
+		);
+	}
+	parts.push("See EDITING-GUIDE.md.");
+	return parts.join(" ");
+}
 
 export function readFile(env, path, branch) {
 	const [owner, repo] = String(env.GITHUB_REPO).split("/");

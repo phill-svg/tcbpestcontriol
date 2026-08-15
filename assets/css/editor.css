@@ -323,6 +323,62 @@ body.tcb-editing-mode .tcb-has-edit {
 	font-size: 0.8125rem;
 }
 
+/* Style panel -------------------------------------------------------------- */
+
+.tcb-style-row {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	flex-wrap: wrap;
+}
+
+.tcb-size-value {
+	font: 500 0.8125rem/1 "IBM Plex Mono", ui-monospace, monospace;
+	min-width: 3.5rem;
+	text-align: center;
+	color: #111114;
+}
+
+.tcb-btn-on {
+	background: #111114;
+	border-color: #111114;
+	color: #ffffff;
+}
+
+.tcb-btn-on:hover:not(:disabled) {
+	background: #3f3f46;
+}
+
+.tcb-swatches {
+	display: flex;
+	gap: 0.35rem;
+	flex-wrap: wrap;
+}
+
+.tcb-swatch {
+	width: 1.75rem;
+	height: 1.75rem;
+	border-radius: 0.25rem;
+	border: 1px solid #d4d4d8;
+	cursor: pointer;
+	padding: 0;
+	font-size: 0.875rem;
+	line-height: 1;
+	color: #6c6c74;
+}
+
+.tcb-swatch-on {
+	outline: 2px solid #1d4ed8;
+	outline-offset: 1px;
+}
+
+/* The live-preview wrapper the editor puts around a styled run. It must not
+ * contribute any appearance of its own -- everything visible comes from the
+ * inline style attribute, which is exactly what the Worker will serve. */
+.tcb-styled {
+	all: unset;
+}
+
 /* Change list -------------------------------------------------------------- */
 
 .tcb-changes {

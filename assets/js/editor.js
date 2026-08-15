@@ -28,6 +28,10 @@ import {
 	isSafeHref,
 	isSafeImageSrc,
 	previewableImagePath,
+	STYLE_COLOURS,
+	STYLE_FONTS,
+	parseStyleParts,
+	buildStyleString,
 } from "./content-address.js";
 
 // The call that actually starts all this is the very last statement in the
@@ -99,6 +103,28 @@ async function api(path, options = {}) {
 		throw new Error((body && body.error) || `Something went wrong (${response.status}).`);
 	}
 	return body || {};
+}
+
+// Turns a stored declaration string into something readable for the change
+// list. "font-size:2rem;color:#e5251a" is accurate but nobody wants to read
+// CSS to find out what they changed.
+function describeStyle(css) {
+	const parts = parseStyleParts(css);
+	if (!Object.keys(parts).length) return "(styling cleared)";
+	const words = [];
+	if (parts["font-size"]) words.push(`size ${parts["font-size"]}`);
+	if (parts.color) {
+		const named = STYLE_COLOURS.find((colour) => colour.value === parts.color);
+		words.push(named ? named.label.toLowerCase() : parts.color);
+	}
+	if (parts["font-weight"] === "700") words.push("bold");
+	if (parts["font-style"] === "italic") words.push("italic");
+	if (parts["text-transform"] === "uppercase") words.push("uppercase");
+	if (parts["font-family"]) {
+		const named = STYLE_FONTS.find((font) => font.value === parts["font-family"]);
+		if (named) words.push(`${named.label.toLowerCase()} font`);
+	}
+	return words.join(", ");
 }
 
 // ---------------------------------------------------------------------------
@@ -271,6 +297,17 @@ class Editor {
 		for (const [address, row] of this.rows) {
 			const value = row.draft !== null && row.draft !== undefined ? row.draft : row.published;
 			if (value === null || value === undefined) continue;
+
+			// A styling row is addressed by the same hash as the text it styles,
+			// in the "s:" namespace, so it resolves back to the same entry.
+			if (address.startsWith("s:")) {
+				const entry = this.entries.get(`t:${address.slice(2)}`);
+				if (!entry) continue;
+				this.previewStyle(entry, value);
+				this.markEdited(entry);
+				continue;
+			}
+
 			const entry = this.entries.get(address);
 			if (!entry) continue;
 			this.renderValue(entry, value);
@@ -377,9 +414,21 @@ class Editor {
 		this.hover = chrome("div", { class: "tcb-hover" });
 		document.body.appendChild(this.hover);
 
-		this.chip = chrome("div", { class: "tcb-chip" }, [
-			el("button", { type: "button", class: "tcb-chip-btn", text: "Edit link", onclick: () => this.openAttrPanel() }),
-		]);
+		// Two buttons, shown independently: styling applies to any run of text,
+		// while the link/image one only appears over an <a> or an <img>.
+		this.styleChipButton = el("button", {
+			type: "button",
+			class: "tcb-chip-btn",
+			text: "Style",
+			onclick: () => this.openStylePanel(),
+		});
+		this.attrChipButton = el("button", {
+			type: "button",
+			class: "tcb-chip-btn",
+			text: "Edit link",
+			onclick: () => this.openAttrPanel(),
+		});
+		this.chip = chrome("div", { class: "tcb-chip" }, [this.styleChipButton, this.attrChipButton]);
 		this.chip.hidden = true;
 		document.body.appendChild(this.chip);
 
@@ -516,7 +565,13 @@ class Editor {
 	}
 
 	updateHover(event) {
-		if (this.active || this.isChrome(event.target)) return this.hideHover();
+		if (this.active) return this.hideHover();
+		// Reaching for the chip must not dismiss it. The pointer has to cross
+		// onto the chip to click it, and the chip is chrome, so the check below
+		// would hide the one control the user is aiming at -- and, worse, move
+		// it out from under the cursor mid-click.
+		if (this.chip.contains(event.target)) return;
+		if (this.isChrome(event.target)) return this.hideHover();
 
 		const image = event.target.closest && event.target.closest("img");
 		const link = event.target.closest && event.target.closest("a[href]");
@@ -543,9 +598,14 @@ class Editor {
 		// clicking those directly edits their visible text instead, which is
 		// what you want the great majority of the time.
 		const chipEntry = image ? this.findAttrEntry(image, "src") : link ? this.findAttrEntry(link, "href") : null;
-		if (chipEntry) {
-			this.chipEntry = chipEntry;
-			this.chip.querySelector(".tcb-chip-btn").textContent = image ? "Change image" : "Edit link";
+		this.chipEntry = chipEntry;
+		this.styleEntry = textEntry;
+
+		this.attrChipButton.hidden = !chipEntry;
+		if (chipEntry) this.attrChipButton.textContent = image ? "Change image" : "Edit link";
+		this.styleChipButton.hidden = !textEntry;
+
+		if (chipEntry || textEntry) {
 			this.chip.hidden = false;
 			Object.assign(this.chip.style, {
 				top: `${rect.top + window.scrollY - 12}px`,
@@ -553,7 +613,6 @@ class Editor {
 			});
 		} else {
 			this.chip.hidden = true;
-			this.chipEntry = null;
 		}
 	}
 
@@ -845,6 +904,195 @@ class Editor {
 		}
 	}
 
+	// -- styling a run of text ------------------------------------------------
+
+	// Styling wraps the run in a <span>, so the preview here does the same
+	// thing the Worker will do -- what you see while the panel is open is
+	// exactly what gets served.
+	openStylePanel(entry = this.styleEntry) {
+		if (!entry || entry.kind !== "text") return;
+
+		const address = `s:${entry.address.slice(2)}`;
+		const row = this.rows.get(address);
+		const current = parseStyleParts((row && (row.draft ?? row.published)) || "");
+
+		// Size is offered as steps relative to whatever this text already is,
+		// but stored as an absolute rem value read off the live element. That
+		// keeps it contextual (a heading steps in heading-sized jumps) without
+		// the value compounding if it were ever applied twice.
+		const host = entry.node.parentElement;
+		const rootSize = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+		const baseRem = (parseFloat(getComputedStyle(host).fontSize) || rootSize) / rootSize;
+		const currentRem = current["font-size"] ? parseFloat(current["font-size"]) : baseRem;
+
+		const parts = { ...current };
+		const preview = () => this.previewStyle(entry, buildStyleString(parts));
+
+		const sizeLabel = el("span", { class: "tcb-size-value" });
+		const setSize = (rem) => {
+			const clamped = Math.min(8, Math.max(0.5, Math.round(rem * 100) / 100));
+			parts["font-size"] = `${clamped}rem`;
+			sizeLabel.textContent = `${clamped}rem`;
+			preview();
+		};
+		sizeLabel.textContent = `${Math.round(currentRem * 100) / 100}rem`;
+
+		const sizeRow = el("div", { class: "tcb-style-row" }, [
+			el("button", {
+				type: "button",
+				class: "tcb-btn",
+				text: "−",
+				onclick: () => setSize((parseFloat(parts["font-size"]) || currentRem) * 0.9),
+			}),
+			sizeLabel,
+			el("button", {
+				type: "button",
+				class: "tcb-btn",
+				text: "+",
+				onclick: () => setSize((parseFloat(parts["font-size"]) || currentRem) * 1.1),
+			}),
+			el("button", {
+				type: "button",
+				class: "tcb-btn tcb-btn-quiet",
+				text: "Reset size",
+				onclick: () => {
+					delete parts["font-size"];
+					sizeLabel.textContent = `${Math.round(baseRem * 100) / 100}rem`;
+					preview();
+				},
+			}),
+		]);
+
+		const swatches = el("div", { class: "tcb-swatches" });
+		for (const colour of STYLE_COLOURS) {
+			const swatch = el("button", {
+				type: "button",
+				class: "tcb-swatch",
+				title: colour.label,
+				onclick: () => {
+					if (colour.value) parts.color = colour.value;
+					else delete parts.color;
+					for (const other of swatches.children) other.classList.remove("tcb-swatch-on");
+					swatch.classList.add("tcb-swatch-on");
+					preview();
+				},
+			});
+			// "Default" is the absence of a colour, so it gets a slash rather
+			// than a fill -- a white swatch would read as "white text".
+			swatch.style.background = colour.value || "transparent";
+			if (!colour.value) swatch.textContent = "⊘";
+			if ((current.color || "") === colour.value) swatch.classList.add("tcb-swatch-on");
+			swatches.appendChild(swatch);
+		}
+
+		const toggle = (label, property, on, off) =>
+			el("button", {
+				type: "button",
+				class: `tcb-btn${(current[property] || off) === on ? " tcb-btn-on" : ""}`,
+				text: label,
+				onclick: (event) => {
+					const button = event.currentTarget;
+					const active = parts[property] === on;
+					if (active) delete parts[property];
+					else parts[property] = on;
+					button.classList.toggle("tcb-btn-on", !active);
+					preview();
+				},
+			});
+
+		const fontSelect = el("select", { class: "tcb-input" });
+		for (const font of STYLE_FONTS) {
+			const option = el("option", { value: font.value, text: font.label });
+			if ((current["font-family"] || "") === font.value) option.selected = true;
+			fontSelect.appendChild(option);
+		}
+		fontSelect.addEventListener("change", () => {
+			if (fontSelect.value) parts["font-family"] = fontSelect.value;
+			else delete parts["font-family"];
+			preview();
+		});
+
+		const fields = [
+			el("p", { class: "tcb-hint", text: "Changes show on the page as you make them." }),
+			el("label", { class: "tcb-label" }, [el("span", { text: "Size" }), sizeRow]),
+			el("label", { class: "tcb-label" }, [el("span", { text: "Colour" }), swatches]),
+			el("label", { class: "tcb-label" }, [
+				el("span", { text: "Weight & style" }),
+				el("div", { class: "tcb-style-row" }, [
+					toggle("Bold", "font-weight", "700", "400"),
+					toggle("Italic", "font-style", "italic", "normal"),
+					toggle("UPPERCASE", "text-transform", "uppercase", "none"),
+				]),
+			]),
+			el("label", { class: "tcb-label" }, [el("span", { text: "Font" }), fontSelect]),
+		];
+
+		this.openDialog("Style this text", fields, async () => {
+			await this.saveStyle(entry, address, buildStyleString(parts));
+		}, {
+			// Closing without saving has to put the page back, since every
+			// control has already changed it.
+			onCancel: () => this.previewStyle(entry, (row && (row.draft ?? row.published)) || ""),
+			extraActions: [
+				el("button", {
+					type: "button",
+					class: "tcb-btn tcb-btn-quiet",
+					text: "Clear styling",
+					onclick: async (event) => {
+						const button = event.currentTarget;
+						button.disabled = true;
+						try {
+							await this.saveStyle(entry, address, "");
+							this.previewStyle(entry, "");
+							button.closest(".tcb-overlay").remove();
+						} catch {
+							button.disabled = false;
+						}
+					},
+				}),
+			],
+		});
+	}
+
+	// Applies styling in the browser the same way the Worker will: by wrapping
+	// the run in a span. The wrapper is marked as editor chrome so the text
+	// walk keeps ignoring it, and removed again when the styling is cleared.
+	previewStyle(entry, css) {
+		if (!css) {
+			if (entry.styleWrap && entry.styleWrap.parentNode) {
+				entry.styleWrap.parentNode.insertBefore(entry.node, entry.styleWrap);
+				entry.styleWrap.parentNode.removeChild(entry.styleWrap);
+			}
+			entry.styleWrap = null;
+			return;
+		}
+		if (!entry.styleWrap || !entry.styleWrap.isConnected) {
+			const wrap = chrome("span", { class: "tcb-styled" });
+			entry.node.parentNode.insertBefore(wrap, entry.node);
+			wrap.appendChild(entry.node);
+			entry.styleWrap = wrap;
+		}
+		entry.styleWrap.setAttribute("style", css);
+	}
+
+	async saveStyle(entry, address, css) {
+		const previous = this.rows.get(address);
+		try {
+			await api("save", {
+				method: "POST",
+				body: JSON.stringify({ path: PATH, address, original: entry.original, value: css }),
+			});
+		} catch (error) {
+			this.toast(error.message, "error");
+			throw error;
+		}
+		const row = previous || { address, kind: "style", original: entry.original, published: null };
+		row.draft = css;
+		this.rows.set(address, row);
+		this.markEdited(entry);
+		this.refreshStatus();
+	}
+
 	// -- page title and description ------------------------------------------
 
 	openPageSettings() {
@@ -948,7 +1196,7 @@ class Editor {
 							// An empty value means the words were deleted. Rendering that
 							// as a blank line would make the change list look broken.
 							class: value === "" ? "tcb-change-now tcb-change-gone" : "tcb-change-now",
-							text: value === "" ? "(deleted)" : value,
+							text: value === "" ? "(deleted)" : row.kind === "style" ? describeStyle(value) : value,
 						}),
 					]),
 					el("button", {
@@ -1059,14 +1307,27 @@ class Editor {
 
 	// -- dialog ---------------------------------------------------------------
 
-	openDialog(title, content, onConfirm, { confirmLabel = "Save", cancelLabel = "Cancel" } = {}) {
+	openDialog(
+		title,
+		content,
+		onConfirm,
+		{ confirmLabel = "Save", cancelLabel = "Cancel", onCancel = null, extraActions = [] } = {}
+	) {
 		const body = el("div", { class: "tcb-dialog-body" }, content);
 		const error = el("p", { class: "tcb-dialog-error" });
 		error.hidden = true;
 
 		const actions = el("div", { class: "tcb-dialog-actions" });
 		const close = () => overlay.remove();
-		actions.appendChild(el("button", { type: "button", class: "tcb-btn tcb-btn-quiet", text: cancelLabel, onclick: close }));
+		// The style panel changes the page live as you touch the controls, so
+		// dismissing it has to undo that -- otherwise Cancel would leave the
+		// page showing something that was never saved.
+		const dismiss = () => {
+			if (onCancel) onCancel();
+			close();
+		};
+		for (const action of extraActions) actions.appendChild(action);
+		actions.appendChild(el("button", { type: "button", class: "tcb-btn tcb-btn-quiet", text: cancelLabel, onclick: dismiss }));
 		if (confirmLabel && onConfirm) {
 			const confirm = el("button", { type: "button", class: "tcb-btn tcb-btn-primary", text: confirmLabel });
 			confirm.addEventListener("click", async () => {
@@ -1093,11 +1354,11 @@ class Editor {
 		]);
 		const overlay = chrome("div", { class: "tcb-overlay" }, [panel]);
 		overlay.addEventListener("click", (event) => {
-			if (event.target === overlay) close();
+			if (event.target === overlay) dismiss();
 		});
 		document.addEventListener("keydown", function onKey(event) {
 			if (event.key === "Escape") {
-				close();
+				dismiss();
 				document.removeEventListener("keydown", onKey);
 			}
 		});

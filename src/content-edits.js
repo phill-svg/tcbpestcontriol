@@ -28,10 +28,11 @@ import {
 	isSafeImageSrc,
 	META_TITLE_ADDRESS,
 	META_DESCRIPTION_ADDRESS,
+	sanitiseStyle,
 } from "../assets/js/content-address.js";
-import { decodeEntities, escapeHtmlText } from "./html-entities.js";
+import { decodeEntities, escapeHtmlText, escapeStyleAttribute } from "./html-entities.js";
 import { bakeEdits, pathToFile } from "./bake-edits.js";
-import { isConfigured, SETUP_MESSAGE, readFile, commitFiles, decodeBase64Utf8 } from "./github-sync.js";
+import { missingConfig, setupMessage, readFile, commitFiles, decodeBase64Utf8 } from "./github-sync.js";
 
 const TABLE_DDL = `CREATE TABLE IF NOT EXISTS content_edits (
   path         TEXT NOT NULL,
@@ -240,9 +241,14 @@ export function applyContentEdits(rewriter, edits) {
 				return;
 			}
 
-			const address = `t:${hashValue(normalised)}:${nextOrdinal(`t|${normalised}`)}`;
-			const replacement = edits.get(address);
-			if (replacement === undefined) {
+			// One ordinal serves both namespaces: a run can carry a wording
+			// change and a styling change at once without the two colliding.
+			const ordinal = nextOrdinal(`t|${normalised}`);
+			const hash = hashValue(normalised);
+			const replacement = edits.get(`t:${hash}:${ordinal}`);
+			const style = edits.get(`s:${hash}:${ordinal}`);
+
+			if (replacement === undefined && !style) {
 				emit(raw);
 				return;
 			}
@@ -252,10 +258,22 @@ export function applyContentEdits(rewriter, edits) {
 			// onto one line, and every later diff of the file is noise.
 			const leading = raw.match(/^\s*/)[0];
 			const trailing = raw.match(/\s*$/)[0];
+
 			// Escaped by hand, because the exact-restore requirement above forces
 			// `html: true`. This is what stops a stored edit becoming injected
-			// markup.
-			emit(`${leading}${escapeHtmlText(replacement)}${trailing}`);
+			// markup. When there is no wording change the original bytes are kept
+			// verbatim, entities and all.
+			const core =
+				replacement === undefined
+					? raw.slice(leading.length, raw.length - trailing.length)
+					: escapeHtmlText(replacement);
+
+			// Styling wraps the run rather than setting an attribute on its
+			// parent: HTMLRewriter has already emitted the opening tag by the
+			// time the text arrives, and a <span> also confines the styling to
+			// this run rather than to everything else the element contains.
+			const body = style ? `<span style="${escapeStyleAttribute(style)}">${core}</span>` : core;
+			emit(`${leading}${body}${trailing}`);
 		},
 	});
 
@@ -337,6 +355,9 @@ export function parseAddress(address) {
 	if (parts[0] === "t" && parts.length === 3 && /^\d+$/.test(parts[2])) {
 		return { kind: "text" };
 	}
+	if (parts[0] === "s" && parts.length === 3 && /^\d+$/.test(parts[2])) {
+		return { kind: "style" };
+	}
 	if (parts[0] === "a" && parts.length === 5 && /^\d+$/.test(parts[4])) {
 		const [, tag, attr] = parts;
 		const allowed = EDITABLE_ATTRS[tag];
@@ -364,6 +385,15 @@ export function validateValue(parsed, rawValue) {
 		// confirmation step of its own.
 		if (value.length > MAX_TEXT_LENGTH) return { error: `Text is too long (limit ${MAX_TEXT_LENGTH} characters).` };
 		return { value };
+	}
+
+	if (parsed.kind === "style") {
+		// Rebuilt from the allowlist rather than accepted as written, so what
+		// gets stored is always a strict subset of the permitted properties --
+		// see sanitiseStyle in content-address.js. An empty result means every
+		// declaration was rejected, or the styling was cleared; both are stored
+		// as "" and render as no <span> at all.
+		return { value: sanitiseStyle(value) };
 	}
 
 	if (parsed.kind === "meta") {
@@ -524,7 +554,7 @@ export async function handleContentApi(request, url, env, session) {
 	if (route === "export" && request.method === "GET") {
 		await ensureTable(env);
 		const result = await env.DB.prepare(
-			"SELECT path, address, kind, original, published, updated_by, published_at FROM content_edits WHERE published IS NOT NULL ORDER BY path, address"
+			"SELECT path, address, kind, original, published, updated_by, published_at FROM content_edits WHERE published IS NOT NULL AND kind != 'style' ORDER BY path, address"
 		).all();
 		return json({ exportedAt: Date.now(), edits: result.results || [] });
 	}
@@ -533,11 +563,12 @@ export async function handleContentApi(request, url, env, session) {
 	// on GitHub and pushes a single commit. See src/github-sync.js for why the
 	// Worker does this itself rather than handing it to a scheduled job.
 	if (route === "sync" && request.method === "POST") {
-		if (!isConfigured(env)) return json({ error: SETUP_MESSAGE }, 501);
+		const missing = missingConfig(env);
+		if (missing.length) return json({ error: setupMessage(missing), missing }, 501);
 		await ensureTable(env);
 
 		const result = await env.DB.prepare(
-			"SELECT path, address, original, published FROM content_edits WHERE published IS NOT NULL AND synced_at IS NULL ORDER BY path, address"
+			"SELECT path, address, original, published FROM content_edits WHERE published IS NOT NULL AND synced_at IS NULL AND kind != 'style' ORDER BY path, address"
 		).all();
 		const rows = result.results || [];
 		if (!rows.length) return json({ ok: true, files: 0, edits: 0, message: "Everything is already in the code." });

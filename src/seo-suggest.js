@@ -85,9 +85,17 @@ export function claimsIn(text) {
 // `source` is everything the page itself says -- its own title, description,
 // heading and body text. A candidate is allowed to rearrange and sharpen what
 // is there. It is not allowed to add facts.
-export function validateSuggestion(candidate, { source, min, max, current } = {}) {
+export function validateSuggestion(candidate, { source, min, max, current, require = [] } = {}) {
 	const text = String(candidate || "").trim();
 	if (!text) return { ok: false, reason: "empty" };
+
+	// When a suggestion exists to close a specific gap, one that leaves the
+	// words out is not a fix, however well it reads. Substring rather than
+	// whole-word so the stemmed "ant" matches "ants" and "Ants".
+	const haystack = normalise(text);
+	for (const word of require) {
+		if (!haystack.includes(normalise(word))) return { ok: false, reason: `leaves out “${word}”` };
+	}
 	if (max && text.length > max) return { ok: false, reason: `too long (${text.length})` };
 	if (min && text.length < min) return { ok: false, reason: `too short (${text.length})` };
 	if (current && normalise(text) === normalise(current)) return { ok: false, reason: "unchanged" };
@@ -139,7 +147,7 @@ export function parseCandidates(raw) {
 // They are read from the live site rather than kept in a constant here, so
 // the style tracks whatever the site currently does instead of freezing on
 // whatever it did the day this was written.
-export function buildPrompt({ kind, page, queries = [], examples = [], gaps = [], steer = "", min, max }) {
+export function buildPrompt({ kind, page, queries = [], examples = [], gaps = [], steer = "", require = [], min, max }) {
 	const searched = queries
 		.slice(0, 12)
 		.map((entry) => entry.key)
@@ -148,10 +156,13 @@ export function buildPrompt({ kind, page, queries = [], examples = [], gaps = []
 	const wanted =
 		kind === "title"
 			? `a page title between ${min} and ${max} characters`
-			: `a meta description between ${min} and ${max} characters`;
+			: kind === "heading"
+				? `a main heading — the big line at the top of the page — between ${min} and ${max} characters`
+				: `a meta description between ${min} and ${max} characters`;
 
+	const field = kind === "title" ? "title" : kind === "heading" ? "h1" : "description";
 	const sample = examples
-		.map((example) => (kind === "title" ? example.title : example.description))
+		.map((example) => example[field])
 		.filter(Boolean)
 		.slice(0, 4);
 
@@ -174,7 +185,7 @@ export function buildPrompt({ kind, page, queries = [], examples = [], gaps = []
 				...(sample.length
 					? [
 							"",
-							`Match the voice of these, which are real ${kind === "title" ? "titles" : "descriptions"} from elsewhere on this site:`,
+							`Match the voice of these, which are real ${kind === "title" ? "titles" : kind === "heading" ? "headings" : "descriptions"} from elsewhere on this site:`,
 							...sample.map((text) => `- ${text}`),
 					  ]
 					: []),
@@ -200,6 +211,9 @@ export function buildPrompt({ kind, page, queries = [], examples = [], gaps = []
 							...gaps.slice(0, 5).map((gap) => `- ${gap.query} (missing: ${gap.missing.join(", ")}) — shown ${gap.impressions} times, position ${Math.round(gap.position)}`),
 					  ]
 					: []),
+				...(require.length
+					? ["", `Every option must contain the words: ${require.join(", ")}. An option without them is no use.`]
+					: []),
 				...(steer ? ["", `The person who owns this site asks specifically: ${String(steer).slice(0, 300)}`] : []),
 			].join("\n"),
 		},
@@ -209,8 +223,8 @@ export function buildPrompt({ kind, page, queries = [], examples = [], gaps = []
 // Returns { candidates, rejected } -- rejected is kept because a run where
 // everything was thrown away should say so rather than silently offering
 // nothing, which reads as a broken button.
-export async function suggest(env, { kind, page, queries = [], examples = [], gaps = [], steer = "", min, max, run } = {}) {
-	const messages = buildPrompt({ kind, page, queries, examples, gaps, steer, min, max });
+export async function suggest(env, { kind, page, queries = [], examples = [], gaps = [], steer = "", require = [], min, max, run } = {}) {
+	const messages = buildPrompt({ kind, page, queries, examples, gaps, steer, require, min, max });
 	const call = run || ((body) => env.AI.run(MODEL, body));
 	// Six asked for rather than three. Roughly half get thrown out by the
 	// checks below -- so asking for what should survive left the button
@@ -234,7 +248,7 @@ export async function suggest(env, { kind, page, queries = [], examples = [], ga
 		if (seen.has(fingerprint)) continue;
 		seen.add(fingerprint);
 
-		const verdict = validateSuggestion(candidate, { source, min, max, current });
+		const verdict = validateSuggestion(candidate, { source, min, max, current, require });
 		if (verdict.ok) candidates.push(candidate);
 		else rejected.push({ text: candidate, reason: verdict.reason });
 	}
@@ -247,8 +261,9 @@ export async function suggest(env, { kind, page, queries = [], examples = [], ga
 // link -- none of which a writing sample needs, and this runs against several
 // pages per suggestion.
 export async function extractMeta(response) {
-	const meta = { title: "", description: "" };
+	const meta = { title: "", description: "", h1: "" };
 	let inTitle = false;
+	let inH1 = false;
 
 	const rewriter = new HTMLRewriter()
 		.on("title", {
@@ -270,11 +285,66 @@ export async function extractMeta(response) {
 			element(element) {
 				if (!meta.description) meta.description = element.getAttribute("content") || "";
 			},
+		})
+		.on("h1", {
+			element(element) {
+				inH1 = !meta.h1;
+				try {
+					element.onEndTag(() => {
+						inH1 = false;
+					});
+				} catch {
+					inH1 = false;
+				}
+			},
+			text(chunk) {
+				if (inH1) meta.h1 += chunk.text;
+			},
 		});
 
 	await rewriter.transform(response).text();
 	meta.title = meta.title.trim();
+	meta.h1 = meta.h1.replace(/\s+/g, " ").trim();
 	return meta;
+}
+
+// A main heading is not length-limited the way a title is -- nothing truncates
+// it -- but this site's are short and declarative ("Pest control in Kambah.",
+// "Termites. Inspection, treatment, warranty."), and a heading that runs to
+// three lines stops being a heading.
+export const HEADING_MIN = 12;
+export const HEADING_MAX = 70;
+
+// Closing one specific gap, trying each place the words could go in turn.
+//
+// The order is the order a person would try: the title carries the most
+// weight and is what shows in the result, the description next, and the main
+// heading last -- which is also the one with room, when a phrase simply will
+// not fit inside 62 characters alongside everything the title already has to
+// say. Each is only attempted if the one before produced nothing that both
+// contains the words and survives the invention checks.
+export async function fixGap(env, { gap, page, examples = [], queries = [], limits, run } = {}) {
+	const attempts = [];
+
+	for (const kind of ["title", "description", "heading"]) {
+		const { min, max } = limits[kind];
+		const { candidates, rejected } = await suggest(env, {
+			kind,
+			page,
+			examples,
+			queries,
+			require: gap.missing,
+			min,
+			max,
+			run,
+		});
+		if (candidates.length) return { kind, candidates, rejected, attempts };
+		// Kept so the panel can say why the obvious place did not work --
+		// "it will not fit in the title" is a useful thing to be told.
+		attempts.push({ kind, rejected });
+	}
+
+	return { kind: null, candidates: [], rejected: [], attempts };
 }
 
 // Which pages to take writing samples from. Pages sharing a prefix are the

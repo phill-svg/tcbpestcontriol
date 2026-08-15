@@ -254,3 +254,92 @@ test("measured gaps reach the model, with the numbers that justify them", () => 
 
 	assert.doesNotMatch(buildPrompt({ kind: "title", page: PAGE, gaps: [], min: 30, max: 62 })[1].content, /never says the words/);
 });
+
+// --- fixing one measured gap -------------------------------------------------
+
+test("a suggestion that leaves the words out is not a fix", () => {
+	// The whole point of this path is the phrase Google already shows the page
+	// for. A candidate without it reads fine and fixes nothing.
+	assert.match(
+		validateSuggestion("Termite Treatment Canberra | TCB Pest Control", { ...LIMITS, require: ["borer"] }).reason,
+		/leaves out “borer”/
+	);
+	assert.deepEqual(validateSuggestion("Termite & Borer Treatment Canberra | TCB", { ...LIMITS, require: ["borer"] }), { ok: true });
+});
+
+test("a required word matches its plural on the page", () => {
+	// The gap reports the stem, and the wording will normally use the plural.
+	assert.deepEqual(validateSuggestion("White Ants & Termites Canberra | TCB Pest", { ...LIMITS, require: ["ant"] }), { ok: true });
+});
+
+test("the title is tried first, and the heading only when nothing else fits", async () => {
+	const { fixGap, HEADING_MIN, HEADING_MAX } = await import("../src/seo-suggest.js");
+	const asked = [];
+	const result = await fixGap(null, {
+		gap: { query: "borer control canberra", missing: ["borer"], impressions: 46 },
+		page: PAGE,
+		limits: {
+			title: { min: 30, max: 62 },
+			description: { min: 70, max: 165 },
+			heading: { min: HEADING_MIN, max: HEADING_MAX },
+		},
+		run: async (body) => {
+			// Which field is being asked for, in order.
+			const kind = /main heading/.test(body.messages[1].content)
+				? "heading"
+				: /page title/.test(body.messages[1].content)
+					? "title"
+					: "description";
+			asked.push(kind);
+			// The title cannot hold "borer" alongside everything it already
+			// carries, and the description that does fit invents a guarantee.
+			// Only the heading has room and stays honest.
+			if (kind === "title") return { response: "Termite and Borer Treatment and Inspection Services Across the Whole Canberra Region" };
+			if (kind === "description")
+				return { response: "Guaranteed borer and termite treatment across Canberra, with a written report after every single visit." };
+			// No "warranty" here — the page never claims one, and the
+			// invention check would rightly throw it out.
+			return { response: "Termites and borers. Inspection, treatment, written report." };
+		},
+	});
+
+	assert.deepEqual(asked, ["title", "description", "heading"], "in order of weight");
+	assert.equal(result.kind, "heading");
+	assert.deepEqual(result.candidates, ["Termites and borers. Inspection, treatment, written report."]);
+	// And it can say why the obvious places were skipped.
+	assert.deepEqual(result.attempts.map((attempt) => attempt.kind), ["title", "description"]);
+});
+
+test("a title that works stops the search there", async () => {
+	const { fixGap, HEADING_MIN, HEADING_MAX } = await import("../src/seo-suggest.js");
+	let calls = 0;
+	const result = await fixGap(null, {
+		gap: { query: "borer control canberra", missing: ["borer"], impressions: 46 },
+		page: PAGE,
+		limits: {
+			title: { min: 30, max: 62 },
+			description: { min: 70, max: 165 },
+			heading: { min: HEADING_MIN, max: HEADING_MAX },
+		},
+		run: async () => {
+			calls++;
+			return { response: "Termite & Borer Treatment Canberra | TCB Pest" };
+		},
+	});
+	assert.equal(calls, 1, "no point drafting a heading when the title took it");
+	assert.equal(result.kind, "title");
+	assert.deepEqual(result.attempts, []);
+});
+
+test("the model is told the words are compulsory, as well as being checked", () => {
+	const prompt = buildPrompt({ kind: "title", page: PAGE, require: ["borer"], min: 30, max: 62 })[1].content;
+	assert.match(prompt, /Every option must contain the words: borer/);
+});
+
+test("heading samples come from other pages' headings, not their titles", () => {
+	const examples = [{ title: "Spider Control Canberra | TCB", description: "Funnel-webs…", h1: "Spiders. Identified, treated, kept out." }];
+	const prompt = buildPrompt({ kind: "heading", page: PAGE, examples, min: 12, max: 70 })[1].content;
+	assert.match(prompt, /real headings from elsewhere on this site/);
+	assert.match(prompt, /Spiders\. Identified, treated, kept out\./);
+	assert.doesNotMatch(prompt, /Spider Control Canberra \| TCB/);
+});

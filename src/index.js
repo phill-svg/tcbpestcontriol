@@ -12,7 +12,7 @@ import { loadPageEdits, applyContentEdits, handleContentApi } from "./content-ed
 import { normalisePath } from "../assets/js/content-address.js";
 import { handleBlogApi } from "./blog-api.js";
 import { pathsFromSitemap, scanBatch, extractPageSummary } from "./seo-scan.js";
-import { suggest, extractContent, extractMeta, examplePaths } from "./seo-suggest.js";
+import { suggest, fixGap, extractContent, extractMeta, examplePaths, HEADING_MIN, HEADING_MAX } from "./seo-suggest.js";
 import { TITLE_MIN, TITLE_MAX, DESCRIPTION_MIN, DESCRIPTION_MAX } from "../assets/js/seo-check.js";
 import { findGaps, describeGap, fixForGap } from "./seo-gaps.js";
 import { fetchAsset, fetchNegotiatedImage } from "./assets.js";
@@ -232,6 +232,15 @@ export default {
 			if (!session) return new Response("Unauthorized", { status: 401 });
 			if (!session.isAdmin) return new Response("Forbidden", { status: 403 });
 			return handleSeoSuggest(request, url, env);
+		}
+
+		// Closing one measured gap: drafts wording that contains the phrase
+		// Google already shows the page for. Writes nothing itself.
+		if (url.pathname === "/api/seo/fix") {
+			const session = await getStaffSession(request, env);
+			if (!session) return new Response("Unauthorized", { status: 401 });
+			if (!session.isAdmin) return new Response("Forbidden", { status: 403 });
+			return handleSeoFix(request, url, env);
 		}
 
 		// Site-wide SEO scan. Batched: the browser asks for a slice at a time
@@ -771,7 +780,7 @@ function editorLauncherHtml({ editing, previewing }) {
 		// browsers by the old immutable rule -- a year-long cache entry cannot be
 		// revalidated away, only stepped around with a different URL. The
 		// no-cache rule in _headers is what stops it happening again.
-		`<link rel="stylesheet" href="/assets/css/editor.css?v=8">` +
+		`<link rel="stylesheet" href="/assets/css/editor.css?v=10">` +
 		`<script src="/assets/js/editor.js?v=1" type="module"></script>` +
 		`</div>`
 	);
@@ -916,25 +925,7 @@ async function handleSeoSuggest(request, url, env) {
 	// Writing samples from elsewhere on the site. Describing the house style
 	// in words produced copy that could have belonged to any pest controller
 	// anywhere; four real examples of it are worth more than any adjective.
-	let examples = [];
-	try {
-		const sitemapResponse = await env.ASSETS.fetch(new Request(new URL("/sitemap.xml", url), { method: "GET" }));
-		if (sitemapResponse.status === 200) {
-			const paths = pathsFromSitemap(await sitemapResponse.text());
-			examples = (
-				await Promise.all(
-					examplePaths(paths, path).map(async (samplePath) => {
-						const sampleUrl = new URL(samplePath, url);
-						const response = await fetchAsset(new Request(sampleUrl, { method: "GET" }), sampleUrl, env);
-						return response.status === 200 ? extractMeta(response) : null;
-					})
-				)
-			).filter(Boolean);
-		}
-	} catch {
-		// Style samples make the suggestions better; they are not required to
-		// produce one, and failing to read them is not worth failing over.
-	}
+	const examples = await styleExamples(request, url, env, path);
 
 	try {
 		const { candidates, rejected } = await suggest(env, {
@@ -952,6 +943,107 @@ async function handleSeoSuggest(request, url, env) {
 		});
 	} catch (error) {
 		return jsonError(502, `Could not draft a suggestion (${error.message}).`);
+	}
+}
+
+// Drafts wording that closes one specific gap.
+//
+// Different from /api/seo/suggest in what it is allowed to come back with:
+// there, a nicer title is the goal and anything readable will do. Here the
+// phrase Google already shows the page for has to actually appear, or nothing
+// has been fixed -- so a candidate without it is thrown out however well it
+// reads, and the request falls through to the next place the words could go.
+async function handleSeoFix(request, url, env) {
+	let body = {};
+	try {
+		body = await request.json();
+	} catch {
+		return jsonError(400, "Expected a JSON body.");
+	}
+
+	const path = typeof body.path === "string" && body.path.startsWith("/") ? normalisePath(body.path) : null;
+	const query = typeof body.query === "string" ? body.query.trim() : "";
+	if (!path || !query) return jsonError(400, "Which page, and which search?");
+	if (!isSearchConsoleConfigured(env)) return jsonError(409, searchConsoleSetupMessage());
+
+	const pageUrl = new URL(path, url);
+	const pageResponse = await fetchAsset(new Request(pageUrl, { method: "GET" }), pageUrl, env);
+	if (pageResponse.status !== 200) return jsonError(404, "That page could not be read.");
+
+	const [summary, content] = await Promise.all([
+		extractPageSummary(pageResponse.clone()),
+		extractContent(pageResponse),
+	]);
+	const edits = await loadPageEdits(env, path).catch(() => null);
+	if (edits) {
+		const title = edits.get("m:title");
+		const description = edits.get("m:description");
+		if (title !== undefined) summary.title = title;
+		if (description !== undefined) summary.description = description;
+	}
+
+	// The gap is recomputed rather than taken from the request. The browser
+	// could send anything, and the words to be worked in are the whole point.
+	let gap;
+	try {
+		const insight = await searchInsights(env, { hostname: url.hostname, path, withRankings: true });
+		const page = { title: summary.title, description: summary.description, h1: content.h1 };
+		gap = findGaps(insight.queries, page, { path, rankings: insight.rankings }).find((entry) => entry.query === query);
+		if (!gap) return jsonError(404, "That search is no longer a gap on this page — it may already be fixed.");
+		if (gap.verdict === "elsewhere") return jsonError(409, fixForGap(gap));
+	} catch (error) {
+		return jsonError(502, error.message);
+	}
+
+	const examples = await styleExamples(request, url, env, path);
+
+	try {
+		const result = await fixGap(env, {
+			gap,
+			page: { title: summary.title, description: summary.description, h1: content.h1, body: content.body },
+			examples,
+			limits: {
+				title: { min: TITLE_MIN, max: TITLE_MAX },
+				description: { min: DESCRIPTION_MIN, max: DESCRIPTION_MAX },
+				heading: { min: HEADING_MIN, max: HEADING_MAX },
+			},
+		});
+		return new Response(
+			JSON.stringify({
+				query,
+				missing: gap.missing,
+				kind: result.kind,
+				candidates: result.candidates,
+				// Why the more obvious places were skipped. "It will not fit in
+				// the title" is worth being told rather than left to infer.
+				skipped: result.attempts.map((attempt) => ({ kind: attempt.kind, count: attempt.rejected.length })),
+				current: { title: summary.title, description: summary.description, h1: content.h1 },
+			}),
+			{ headers: { "content-type": "application/json", "Cache-Control": "no-store" } }
+		);
+	} catch (error) {
+		return jsonError(502, `Could not draft a fix (${error.message}).`);
+	}
+}
+
+// Writing samples from elsewhere on the site, shared by the suggest and fix
+// endpoints. Failing to read them makes the drafts worse, not impossible.
+async function styleExamples(request, url, env, path) {
+	try {
+		const sitemapResponse = await env.ASSETS.fetch(new Request(new URL("/sitemap.xml", url), { method: "GET" }));
+		if (sitemapResponse.status !== 200) return [];
+		const paths = pathsFromSitemap(await sitemapResponse.text());
+		return (
+			await Promise.all(
+				examplePaths(paths, path).map(async (samplePath) => {
+					const sampleUrl = new URL(samplePath, url);
+					const response = await fetchAsset(new Request(sampleUrl, { method: "GET" }), sampleUrl, env);
+					return response.status === 200 ? extractMeta(response) : null;
+				})
+			)
+		).filter(Boolean);
+	} catch {
+		return [];
 	}
 }
 

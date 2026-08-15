@@ -9,6 +9,7 @@ import {
 	attrAddress,
 	isSafeHref,
 	isSafeImageSrc,
+	previewableImagePath,
 } from "../assets/js/content-address.js";
 import { decodeEntities, escapeHtmlText } from "../src/html-entities.js";
 import { bakeEdits, pathToFile } from "../src/bake-edits.js";
@@ -259,6 +260,46 @@ test("commented-out markup does not steal an ordinal", () => {
 	assert.deepEqual(missing, []);
 	assert.match(html, /<!-- <h1>Fast spider control<\/h1> -->/, "the comment is left alone");
 	assert.match(html, /<h1>Rapid spider control<\/h1>/, "the live heading is the one that changed");
+});
+
+test("the image preview guard rebuilds the path instead of trusting it", () => {
+	// The editor's live preview fires a real request on every keystroke, so it
+	// is held to a tighter rule than the save-time check: it must look like an
+	// image file on this site, and the value assigned to the <img> is the one
+	// this returns, never the one that was typed.
+	for (const good of [
+		"/assets/images/pest-ant-macro.webp",
+		"/assets/images/a_b-c~d.PNG",
+		"/favicon.png",
+	]) {
+		assert.equal(previewableImagePath(good), good, `should allow ${good}`);
+	}
+
+	for (const bad of [
+		"javascript:alert(1)",
+		"data:image/svg+xml,<svg onload=alert(1)>",
+		"//evil.example.com/x.png",
+		"https://evil.example.com/x.png",
+		"/api/staff/session", // same-origin, but nothing to do with images
+		"/assets/images/../../secret.png", // traversal
+		"/assets/images/x.png?a=1", // query strings are not paths to an image file
+		"assets/images/x.png", // must be root-relative
+		"/assets/images/x.php",
+		"",
+		"   ",
+		null,
+	]) {
+		assert.equal(previewableImagePath(bad), null, `should reject ${JSON.stringify(bad)}`);
+	}
+});
+
+test("the image preview guard has no catastrophic backtracking of its own", () => {
+	// It carries a nested quantifier, so it is worth pinning: the trailing "/"
+	// makes each repetition unambiguous, which is what keeps it linear.
+	const long = `/${"segment/".repeat(5000)}file.webp`;
+	const started = Date.now();
+	assert.equal(previewableImagePath(long), long);
+	assert.ok(Date.now() - started < 1000, "matching a very long path must stay fast");
 });
 
 test("a malformed tag cannot make the scanner backtrack exponentially", () => {

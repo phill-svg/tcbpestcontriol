@@ -27,6 +27,7 @@ import {
 	MAX_TEXT_LENGTH,
 	isSafeHref,
 	isSafeImageSrc,
+	previewableImagePath,
 } from "./content-address.js";
 
 // The call that actually starts all this is the very last statement in the
@@ -670,14 +671,16 @@ class Editor {
 		if (altInput) altInput.value = entry.element.getAttribute("alt") || "";
 
 		const preview = isImage ? el("img", { class: "tcb-preview", alt: "" }) : null;
-		// The preview only ever renders a path that would actually be accepted
-		// on save. That keeps whatever is half-typed in the box out of the DOM
-		// -- otherwise every keystroke fires a request at whatever the partial
-		// text happens to look like -- and it doubles as live validation: if
-		// the preview is blank, the path is wrong.
+		// The preview only ever shows a path rebuilt by previewableImagePath()
+		// -- the value assigned is the one it returns, never the one typed. It
+		// is stricter than the isSafeImageSrc() gate used on save, because the
+		// preview fires a real request on every keystroke; see the note in
+		// content-address.js. A blank preview therefore doubles as live
+		// validation that the path is wrong.
 		const showPreview = (value) => {
 			if (!preview) return;
-			if (isSafeImageSrc(value)) preview.src = value;
+			const safePath = previewableImagePath(value);
+			if (safePath) preview.src = safePath;
 			else preview.removeAttribute("src");
 		};
 		if (preview) {

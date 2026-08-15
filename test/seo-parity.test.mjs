@@ -182,11 +182,23 @@ test("browser and Worker read every page in the sitemap the same way", async (t)
 		// Only the fields the checks actually read, and compared the way the
 		// checks read them -- checkSeo trims the title, so a stray newline
 		// between <title> and its text is not a disagreement that matters.
+		// wordCount and the body sketch are left out: HTMLRewriter and the DOM
+		// chunk whitespace differently, and the checks that read those only
+		// care about the order of magnitude, not the exact figure.
 		const compare = (summary) => ({
 			title: String(summary.title || "").trim(),
 			description: String(summary.description || "").trim(),
 			h1Count: summary.h1Count,
+			h1: String(summary.h1 || "").replace(/\s+/g, " ").trim(),
 			hasCanonical: summary.hasCanonical,
+			canonicalHref: summary.canonicalHref ?? null,
+			robots: summary.robots ?? null,
+			ogTitle: summary.ogTitle ?? null,
+			ogDescription: summary.ogDescription ?? null,
+			hasOgImage: !!summary.hasOgImage,
+			schemaBlocks: summary.schemaBlocks,
+			schemaBroken: summary.schemaBroken,
+			orgMissing: summary.orgMissing ?? null,
 			altText: summary.images.map((image) => (image.hasAlt ? String(image.altText || "") : null)),
 			targets: summary.links.map((link) => linkTarget(link.href, pagePath)).filter((target) => target !== null),
 		});

@@ -98,6 +98,50 @@ test("a page in the sitemap that does not load is reported as a problem", async 
 	assert.match(gone.findings[0].message, /does not load \(404\)/);
 });
 
+test("a sitemap entry that redirects is not reported as failing to load", async () => {
+	// The earlier wording called this "does not load (301)", which is exactly
+	// wrong -- the page loads, the sitemap is just naming the old address.
+	const { paths, fetchPage } = fakeScan({ pages: { "/moved": {} }, failing: { "/moved": 301 } });
+	const batch = await scanBatch({ paths, offset: 0, limit: 10, fetchPage, extract: async (r) => r.__summary });
+	const moved = batch.results.find((result) => result.path === "/moved");
+	assert.equal(moved.findings[0].level, "worth a look");
+	assert.match(moved.findings[0].message, /redirects \(301\)/);
+	assert.doesNotMatch(moved.findings[0].message, /does not load/);
+});
+
+test("a published title override keeps the social tags in step, as serving does", async () => {
+	// Serving a published title rewrites og:title (src/content-edits.js), so
+	// the scan has to see the same pairing -- otherwise every page with an
+	// edited title would be reported as socially out of step.
+	const pages = {
+		"/edited": {
+			title: "Original title that is long enough to pass",
+			description: "y".repeat(100),
+			h1Count: 1,
+			images: [],
+			links: [],
+			hasCanonical: true,
+			ogTitle: "Original title that is long enough to pass",
+			ogDescription: "y".repeat(100),
+			hasOgImage: true,
+		},
+	};
+	const { paths, fetchPage } = fakeScan({ pages });
+	const batch = await scanBatch({
+		paths,
+		offset: 0,
+		limit: 10,
+		fetchPage,
+		extract: async (r) => ({ ...r.__summary }),
+		loadEdits: async () => new Map([["m:title", "A different but perfectly fine page title"]]),
+	});
+	assert.deepEqual(
+		batch.results.filter((result) => result.path === "/edited"),
+		[],
+		"an edited title is not social drift"
+	);
+});
+
 test("published overrides are what gets checked, not the file's wording", async () => {
 	// A description edited in the editor and published is what a visitor sees.
 	// Checking the file instead would report a problem that no longer exists,

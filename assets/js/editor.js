@@ -1403,8 +1403,18 @@ class Editor {
 			const value = row.draft ?? row.published;
 			if (value === null || value === undefined) continue;
 			page[label] = value;
+			// Publishing a title or description rewrites the matching og: tag
+			// at serve time (src/content-edits.js), so the social-drift check
+			// has to see the pair the visitor will get -- not a draft measured
+			// against a tag that will be rewritten the moment it is published.
+			const social = label === "title" ? "ogTitle" : "ogDescription";
+			if (page[social] !== null && page[social] !== undefined) page[social] = value;
 			if (row.draft !== null && row.draft !== undefined) draftFields.push(label);
 		}
+
+		// Which page this claims to be, for the canonical check.
+		page.path = PATH;
+		page.origin = location.origin;
 
 		const findings = checkSeo(page);
 
@@ -1438,6 +1448,12 @@ class Editor {
 				list,
 				this.buildSearchConsole(),
 				this.buildSiteScan(),
+				// Honest about scope: "SEO check" reads as more than it is, and
+				// somebody who assumes speed was checked would never find out.
+				el("p", {
+					class: "tcb-hint",
+					text: "This checks wording and structure — titles, descriptions, headings, links, and how pages relate. It does not measure speed; for that, put the address into pagespeed.web.dev.",
+				}),
 			],
 			null,
 			{ confirmLabel: null, cancelLabel: "Close" }
@@ -1833,6 +1849,7 @@ class Editor {
 	// because a silent thirty-second wait reads as a hang.
 	buildSiteScan() {
 		const status = el("p", { class: "tcb-hint" });
+		const history = el("p", { class: "tcb-hint" });
 		const siteResults = el("div", { class: "tcb-findings" });
 		const results = el("div", { class: "tcb-findings" });
 		const button = el("button", { type: "button", class: "tcb-btn", text: "Check every page" });
@@ -1875,6 +1892,8 @@ class Editor {
 			// in the sitemap was just read, so the leftovers are the PDFs, the
 			// odd unlisted page, and anything that no longer exists.
 			let broken = [];
+			let redirected = [];
+			let extraPages = [];
 			try {
 				// Pages that failed to load count as known too. They are already
 				// reported as "in the sitemap but does not load", and fetching
@@ -1891,15 +1910,22 @@ class Editor {
 						body: JSON.stringify({ targets: remaining.slice(at, at + 40) }),
 					});
 					broken.push(...(batch.broken || []));
+					redirected.push(...(batch.redirects || []));
+					// Everything sent to /api/seo/links is absent from the
+					// sitemap by construction, so a target that answered with a
+					// real page is a page the sitemap does not know about.
+					extraPages.push(...(batch.pages || []));
 				}
 			} catch {
 				// A failed link check should not throw away a completed page
 				// scan. The page findings are still worth showing, so this
 				// falls through with nothing reported rather than nothing at all.
 				broken = [];
+				redirected = [];
+				extraPages = [];
 			}
 
-			const siteFindings = checkSite({ pages: scanned, broken, complete });
+			const siteFindings = checkSite({ pages: scanned, broken, redirected, extraPages, complete });
 			if (siteFindings.length) {
 				siteResults.appendChild(el("p", { class: "tcb-sync-title", text: "Across the whole site" }));
 			}
@@ -1929,6 +1955,12 @@ class Editor {
 
 			button.disabled = false;
 			button.textContent = "Check again";
+
+			// What changed since last time. The scan's findings vanish when the
+			// dialog closes, and "is this getting better or worse" is the one
+			// question a list of findings cannot answer about itself. Stored in
+			// this browser only -- enough for the person who runs the scans.
+			this.noteScanHistory(history, pages, siteFindings);
 
 			if (!pages.length && !siteFindings.length) {
 				status.className = "tcb-hint";
@@ -1974,9 +2006,36 @@ class Editor {
 			}),
 			button,
 			status,
+			history,
 			siteResults,
 			results,
 		]);
+	}
+
+	// One line of memory between scans: what the last one counted, and whether
+	// this one is better or worse. localStorage rather than the server -- the
+	// numbers are only meaningful to whoever runs the scans, and this browser
+	// is where they run them.
+	noteScanHistory(element, pages, siteFindings) {
+		const count = (level) =>
+			pages.reduce((sum, page) => sum + page.findings.filter((finding) => finding.level === level).length, 0) +
+			siteFindings.filter((finding) => finding.level === level).length;
+		const now = { when: Date.now(), problems: count("problem"), looks: count("worth a look") };
+
+		try {
+			const last = JSON.parse(localStorage.getItem("tcb-seo-scan-history") || "null");
+			if (last && typeof last.problems === "number") {
+				const date = new Date(last.when).toLocaleDateString();
+				const shift =
+					now.problems === last.problems && now.looks === last.looks
+						? "no change"
+						: `now ${now.problems} and ${now.looks}`;
+				element.textContent = `Last scan (${date}): ${last.problems} to fix, ${last.looks} worth a look — ${shift}.`;
+			}
+			localStorage.setItem("tcb-seo-scan-history", JSON.stringify(now));
+		} catch {
+			// Private browsing or a full quota; the scan itself is unaffected.
+		}
 	}
 
 	// What the page is likely to look like in a result. A character count is

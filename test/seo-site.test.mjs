@@ -9,7 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { checkSite, linkTarget, unverifiedTargets } from "../assets/js/seo-site.js";
+import { checkSite, linkTarget, unverifiedTargets, bodySketch, sketchSimilarity, NEAR_DUPLICATE } from "../assets/js/seo-site.js";
 
 const page = (path, extra = {}) => ({
 	path,
@@ -167,6 +167,91 @@ test("only destinations nothing has confirmed are queued for a fetch", () => {
 		{ path: "/contact", targets: ["/", "/assets/documents/guide.pdf", "/gone"] },
 	];
 	assert.deepEqual(unverifiedTargets(pages, ["/", "/contact"]), ["/assets/documents/guide.pdf", "/gone"]);
+});
+
+test("two pages sharing a main heading are named together", () => {
+	const findings = checkSite({
+		pages: [
+			page("/a", { h1: "Pest control in Kambah.", targets: ["/b"] }),
+			page("/b", { h1: "Pest control in Kambah.", targets: ["/a"] }),
+		],
+	});
+	const shared = findings.find((finding) => /share the same main heading/.test(finding.message));
+	assert.ok(shared);
+	assert.equal(shared.level, "worth a look");
+	assert.deepEqual(shared.pages, ["/a", "/b"]);
+
+	// Older scans carry no h1 field; that is not 134 pages sharing "".
+	assert.deepEqual(
+		checkSite({ pages: [page("/a", { targets: ["/b"] }), page("/b", { targets: ["/a"] })] }).filter((finding) =>
+			/main heading/.test(finding.message)
+		),
+		[]
+	);
+});
+
+test("a business block missing a field is one finding, not one per page", () => {
+	// The block is a shared template: on the real site all 134 pages carry an
+	// org with no address, and that is one fact.
+	const findings = checkSite({
+		pages: [
+			page("/a", { orgMissing: ["address"], targets: ["/b"] }),
+			page("/b", { orgMissing: ["address"], targets: ["/a"] }),
+		],
+	});
+	const org = findings.filter((finding) => /business details block/.test(finding.message));
+	assert.equal(org.length, 1);
+	assert.match(org[0].message, /missing address — on every page/);
+});
+
+test("a redirected internal link is worth a look, with the destination named", () => {
+	const findings = checkSite({
+		pages: [page("/a", { targets: ["/old-name", "/b"] }), page("/b", { targets: ["/a"] })],
+		redirected: [{ target: "/old-name", location: "/new-name" }],
+	});
+	const hop = findings.find((finding) => /redirects/.test(finding.message));
+	assert.ok(hop);
+	assert.equal(hop.level, "worth a look", "the redirect works; this is not a broken link");
+	assert.match(hop.message, /\/old-name.*redirects to \/new-name/);
+	assert.deepEqual(hop.pages, ["/a"]);
+});
+
+test("a linked page missing from the sitemap is surfaced", () => {
+	const findings = checkSite({
+		pages: [page("/", { targets: ["/hidden", "/contact"] }), page("/contact", { targets: ["/"] })],
+		extraPages: ["/hidden"],
+	});
+	const hidden = findings.find((finding) => /not in the sitemap/.test(finding.message));
+	assert.ok(hidden);
+	assert.deepEqual(hidden.pages, ["/hidden"]);
+});
+
+test("body sketches: copies read as copies, and the location pages do not", () => {
+	const words = (seed) =>
+		Array.from({ length: 300 }, (unused, at) => `${seed}word${at % 90}`).join(" ");
+	const same = sketchSimilarity(bodySketch(words("a")), bodySketch(words("a")));
+	const different = sketchSimilarity(bodySketch(words("a")), bodySketch(words("b")));
+	assert.equal(same, 1);
+	assert.equal(different, 0);
+	// The real location pages measure ~0.25 against each other; the threshold
+	// has to sit far enough above that they never read as copies.
+	assert.ok(NEAR_DUPLICATE >= 0.5);
+});
+
+test("near-identical bodies are grouped into one finding", () => {
+	const text = Array.from({ length: 200 }, (unused, at) => `word${at}`).join(" ");
+	const nearly = `${text} with a couple of extra words`;
+	const other = Array.from({ length: 200 }, (unused, at) => `entirely${at} different${at}`).join(" ");
+	const findings = checkSite({
+		pages: [
+			page("/a", { sketch: bodySketch(text), targets: ["/b", "/c"] }),
+			page("/b", { sketch: bodySketch(nearly), targets: ["/a"] }),
+			page("/c", { sketch: bodySketch(other), targets: ["/a"] }),
+		],
+	});
+	const copies = findings.filter((finding) => /nearly identical body text/.test(finding.message));
+	assert.equal(copies.length, 1);
+	assert.deepEqual(copies[0].pages.sort(), ["/a", "/b"]);
 });
 
 test("findings are ordered worst first", () => {

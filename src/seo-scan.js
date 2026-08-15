@@ -11,10 +11,10 @@
 // a slice at a time and shows progress. That also means a slow scan degrades
 // into a longer scan rather than a failed one.
 
-import { checkSeo } from "../assets/js/seo-check.js";
+import { checkSeo, analyseSchema, countWords } from "../assets/js/seo-check.js";
 import { normalisePath } from "../assets/js/content-address.js";
 import { decodeEntities } from "./html-entities.js";
-import { linkTarget } from "../assets/js/seo-site.js";
+import { linkTarget, bodySketch } from "../assets/js/seo-site.js";
 
 // Pulled out of the <loc> elements. Only the path is kept -- the scan asks the
 // assets binding for pages, not the public internet.
@@ -48,12 +48,27 @@ export async function extractPageSummary(response) {
 		title: "",
 		description: "",
 		h1Count: 0,
+		h1: "",
 		images: [],
 		links: [],
 		hasCanonical: false,
+		canonicalHref: null,
+		robots: null,
+		ogTitle: null,
+		ogDescription: null,
+		hasOgImage: false,
+		wordCount: 0,
+		sketch: [],
 	};
 
 	let inTitle = false;
+	let inH1 = false;
+	// Whether the stream is currently inside an <a>, so the alt text of an
+	// image link can count towards the link's name -- the way a screen reader
+	// and the browser-side collector both see it.
+	let inLink = false;
+	let bodyText = "";
+	const schemaBlocks = [];
 
 	const rewriter = new HTMLRewriter()
 		.on("title", {
@@ -78,30 +93,92 @@ export async function extractPageSummary(response) {
 				if (!summary.description) summary.description = element.getAttribute("content") || "";
 			},
 		})
-		.on('link[rel="canonical"]', {
+		.on('meta[name="robots"]', {
+			element(element) {
+				if (summary.robots === null) summary.robots = element.getAttribute("content") || "";
+			},
+		})
+		.on('meta[property="og:title"]', {
+			element(element) {
+				if (summary.ogTitle === null) summary.ogTitle = element.getAttribute("content") || "";
+			},
+		})
+		.on('meta[property="og:description"]', {
+			element(element) {
+				if (summary.ogDescription === null) summary.ogDescription = element.getAttribute("content") || "";
+			},
+		})
+		.on('meta[property="og:image"]', {
 			element() {
+				summary.hasOgImage = true;
+			},
+		})
+		.on('link[rel="canonical"]', {
+			element(element) {
 				summary.hasCanonical = true;
+				if (summary.canonicalHref === null) summary.canonicalHref = element.getAttribute("href") || "";
+			},
+		})
+		.on('script[type="application/ld+json"]', {
+			element() {
+				schemaBlocks.push("");
+			},
+			text(chunk) {
+				if (schemaBlocks.length) schemaBlocks[schemaBlocks.length - 1] += chunk.text;
 			},
 		})
 		.on("h1", {
-			element() {
+			element(element) {
 				summary.h1Count++;
+				// Only the first one's text; the count already covers the rest.
+				inH1 = summary.h1Count === 1;
+				try {
+					element.onEndTag(() => {
+						inH1 = false;
+					});
+				} catch {
+					inH1 = false;
+				}
+			},
+			text(chunk) {
+				if (inH1) summary.h1 += chunk.text;
+			},
+		})
+		.on("p, h2, li", {
+			text(chunk) {
+				// Capped: word counts and similarity sketches stop changing long
+				// before a page runs out of paragraphs.
+				if (bodyText.length < 30000) bodyText += `${chunk.text} `;
 			},
 		})
 		.on("img", {
 			element(element) {
+				const altText = element.getAttribute("alt");
 				summary.images.push({
 					src: element.getAttribute("src") || "",
 					hasAlt: element.hasAttribute("alt"),
-					altText: element.getAttribute("alt"),
+					altText,
 				});
+				if (inLink && altText) {
+					const last = summary.links[summary.links.length - 1];
+					if (last) last.text += ` ${altText}`;
+				}
 			},
 		})
 		.on("a[href]", {
 			element(element) {
 				// Link text arrives as separate chunks after the element, so the
-				// last-pushed entry is the one being filled.
-				summary.links.push({ href: element.getAttribute("href") || "", text: "" });
+				// last-pushed entry is the one being filled. The aria-label
+				// counts as text: it is the name assistive tech announces.
+				summary.links.push({ href: element.getAttribute("href") || "", text: element.getAttribute("aria-label") || "" });
+				inLink = true;
+				try {
+					element.onEndTag(() => {
+						inLink = false;
+					});
+				} catch {
+					inLink = false;
+				}
 			},
 			text(chunk) {
 				const last = summary.links[summary.links.length - 1];
@@ -116,6 +193,11 @@ export async function extractPageSummary(response) {
 	// what the file happens to encode.
 	summary.title = decodeEntities(summary.title).trim();
 	summary.description = decodeEntities(summary.description);
+	summary.h1 = decodeEntities(summary.h1).replace(/\s+/g, " ").trim();
+	if (summary.robots !== null) summary.robots = decodeEntities(summary.robots);
+	if (summary.ogTitle !== null) summary.ogTitle = decodeEntities(summary.ogTitle);
+	if (summary.ogDescription !== null) summary.ogDescription = decodeEntities(summary.ogDescription);
+	if (summary.canonicalHref !== null) summary.canonicalHref = decodeEntities(summary.canonicalHref);
 	for (const image of summary.images) {
 		if (image.altText !== null && image.altText !== undefined) image.altText = decodeEntities(image.altText);
 	}
@@ -126,6 +208,12 @@ export async function extractPageSummary(response) {
 		// is the one a browser would act on.
 		link.href = decodeEntities(link.href);
 	}
+
+	const readable = decodeEntities(bodyText);
+	summary.wordCount = countWords(readable);
+	summary.sketch = bodySketch(readable);
+	// Script contents are not HTML and arrive unencoded; parse them as they are.
+	Object.assign(summary, analyseSchema(schemaBlocks));
 	return summary;
 }
 
@@ -149,6 +237,21 @@ export async function scanBatch({ paths, offset, limit, fetchPage, loadEdits, ex
 		let summary;
 		try {
 			const response = await fetchPage(path);
+			if (response && [301, 302, 307, 308].includes(response.status)) {
+				// It loads -- after a hop. Reported honestly: the earlier wording
+				// called this "does not load (301)", which is exactly wrong. The
+				// page loads; the sitemap is just naming the old address.
+				results.push({
+					path,
+					findings: [
+						{
+							level: "worth a look",
+							message: `This page is in the sitemap under an address that redirects (${response.status}). The sitemap should name where pages actually live.`,
+						},
+					],
+				});
+				continue;
+			}
 			if (!response || response.status !== 200) {
 				results.push({
 					path,
@@ -173,15 +276,32 @@ export async function scanBatch({ paths, offset, limit, fetchPage, loadEdits, ex
 			if (edits) {
 				const title = edits.get("m:title");
 				const description = edits.get("m:description");
-				if (title !== undefined) summary.title = title;
-				if (description !== undefined) summary.description = description;
+				if (title !== undefined) {
+					summary.title = title;
+					// Serving a published title rewrites og:title and
+					// twitter:title to match (src/content-edits.js), so the
+					// drift check has to see the same thing a visitor gets --
+					// or every edited page would read as out of step.
+					if (summary.ogTitle !== null && summary.ogTitle !== undefined) summary.ogTitle = title;
+				}
+				if (description !== undefined) {
+					summary.description = description;
+					if (summary.ogDescription !== null && summary.ogDescription !== undefined) summary.ogDescription = description;
+				}
 			}
 		}
+
+		// The canonical check needs to know which page this claims to be.
+		summary.path = path;
+		summary.origin = origin;
 
 		pages.push({
 			path,
 			title: summary.title,
 			description: summary.description,
+			h1: summary.h1,
+			orgMissing: summary.orgMissing,
+			sketch: summary.sketch,
 			// Deduplicated per page: a header, a footer and a body paragraph
 			// all linking to /contact is one relationship, not three.
 			targets: [

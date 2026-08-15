@@ -524,4 +524,85 @@ body.tcb-editing-mode .tcb-has-edit {
 
 body.tcb-editing-mode {
 	padding-bottom: 8rem;
+/* SEO check ---------------------------------------------------------------- */
+
+.tcb-findings {
+	display: grid;
+	gap: 0.5rem;
+}
+
+.tcb-finding {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 0.6rem;
+	align-items: start;
+	padding: 0.55rem;
+	border: 1px solid #e6e6ea;
+	border-radius: 0.35rem;
+}
+
+.tcb-finding-level {
+	font-size: 0.6875rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	padding: 0.2rem 0.4rem;
+	border-radius: 0.2rem;
+	white-space: nowrap;
+}
+
+.tcb-finding-problem .tcb-finding-level {
+	background: #fee2e2;
+	color: #c41613;
+}
+
+.tcb-finding-worth-a-look .tcb-finding-level {
+	background: #fef3c7;
+	color: #92400e;
+}
+
+.tcb-finding-good .tcb-finding-level {
+	background: #dcfce7;
+	color: #15803d;
+}
+
+.tcb-finding-message {
+	margin: 0;
+	font-size: 0.875rem;
+}
+
+/* A rough imitation of a Google result, so a length limit means something
+ * concrete. Deliberately not pixel-exact -- it is a sanity check, not a
+ * simulator. */
+.tcb-serp {
+	border: 1px solid #e6e6ea;
+	border-radius: 0.35rem;
+	padding: 0.7rem;
+	background: #ffffff;
+}
+
+.tcb-serp-url {
+	margin: 0.2rem 0 0;
+	font-size: 0.75rem;
+	color: #15803d;
+	overflow-wrap: anywhere;
+}
+
+.tcb-serp-title {
+	margin: 0.15rem 0 0;
+	font-size: 1.0625rem;
+	line-height: 1.3;
+	color: #1a0dab;
+}
+
+.tcb-serp-desc {
+	margin: 0.2rem 0 0;
+	font-size: 0.8125rem;
+	line-height: 1.4;
+	color: #4d5156;
+}
+
+.tcb-serp-cut {
+	border-right: 2px solid #c41613;
+	padding-right: 0.25rem;
 }

@@ -12,6 +12,7 @@ import { loadPageEdits, applyContentEdits, handleContentApi } from "./content-ed
 import { normalisePath } from "../assets/js/content-address.js";
 import { handleBlogApi } from "./blog-api.js";
 import { pathsFromSitemap, scanBatch } from "./seo-scan.js";
+import { fetchAsset } from "./assets.js";
 
 export default {
 	async fetch(request, env, ctx) {
@@ -711,20 +712,6 @@ function jsonError(status, message) {
 	return new Response(JSON.stringify({ error: message }), { status, headers: { "content-type": "application/json" } });
 }
 
-async function fetchAsset(request, url, env) {
-	const lastSegment = url.pathname.split("/").pop();
-	const looksLikeDirectory = url.pathname === "/" || !lastSegment.includes(".");
-
-	if (looksLikeDirectory) {
-		const indexPath = url.pathname === "/" ? "/index.html" : `${url.pathname}/index.html`;
-		const indexResponse = await env.ASSETS.fetch(new Request(new URL(indexPath, url), request));
-		if (indexResponse.status !== 404) {
-			return indexResponse;
-		}
-	}
-
-	return env.ASSETS.fetch(request);
-}
 
 // True if the request even carries a staff session cookie. Verifying a
 // session costs an HMAC, and the overwhelming majority of traffic is
@@ -856,7 +843,11 @@ async function handleSeoLinks(request, url, env) {
 	const broken = [];
 	for (const target of wanted) {
 		try {
-			const response = await fetchAsset(request, new URL(target, url), env);
+			// A fresh GET rather than the incoming POST. Its body has already
+			// been read, and a link is followed with a GET or it is not being
+			// followed the way a visitor would follow it.
+			const targetUrl = new URL(target, url);
+			const response = await fetchAsset(new Request(targetUrl, { method: "GET" }), targetUrl, env);
 			if (response.status >= 400) broken.push(target);
 			// Nothing here reads the body, and an unread one holds the
 			// connection open for the rest of the invocation.

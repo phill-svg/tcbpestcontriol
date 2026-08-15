@@ -81,6 +81,23 @@ is worth fixing, with a rough preview of how it would appear in a Google
 result. It checks the title and description lengths, that there is one main
 heading, that images have descriptions, and that links say where they go.
 
+Every finding says what to do about it, not just what is wrong — the line
+under each one is the instruction. A few are not fixable from the editor (the
+canonical tag is a line of code); those say so rather than leaving you looking
+for a button that isn't there.
+
+**Suggest one**, next to the title and description boxes in **Page title &
+description**, drafts three options for you. They are written from what the
+page already says, and from the real searches people used to find it once
+Search Console is connected. Clicking one fills the box — it does not save.
+It is still a draft you edit, save and publish like anything else.
+
+It will not invent things about the business. Any suggestion containing a
+number or a claim the page does not already make — a price, a response time,
+"licensed", "guaranteed", "free" — is thrown away before you see it, even if
+it reads well. Occasionally that means all three are thrown out and it asks
+you to try again. That is the rule doing its job, not a fault.
+
 Under **The whole site** there is a **Check every page** button. It goes
 through every page in the sitemap — the same list Google crawls — and lists
 only the ones with something worth looking at, each linking straight into

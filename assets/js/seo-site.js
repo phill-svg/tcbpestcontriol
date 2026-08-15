@@ -88,6 +88,7 @@ export function checkSite({ pages = [], broken = [], complete = true } = {}) {
 			level: "problem",
 			message: `${group.paths.length} pages share the same title, so they compete with each other in Google.`,
 			detail: group.value,
+			fix: "Give each one a title naming what makes it different — usually the suburb or the pest. Two pages called the same thing are asking Google to choose between them, and it will pick one and drop the rest.",
 			pages: group.paths,
 		});
 	}
@@ -97,6 +98,7 @@ export function checkSite({ pages = [], broken = [], complete = true } = {}) {
 			level: "worth a look",
 			message: `${group.paths.length} pages share the same description.`,
 			detail: group.value,
+			fix: "Worth a sentence each that is actually about that page. Not urgent — Google often writes its own description anyway — but a repeated one wastes the chance to say something specific.",
 			pages: group.paths,
 		});
 	}
@@ -115,6 +117,7 @@ export function checkSite({ pages = [], broken = [], complete = true } = {}) {
 		findings.push({
 			level: "problem",
 			message: `${target} is linked to but does not exist, so anyone clicking it lands on the 404 page.`,
+			fix: "Either point the link at the page that replaced it, or take the link out. A dead link on a service page costs an enquiry, not just a ranking.",
 			detail: sources.length ? `Linked from ${sources.slice(0, 5).join(", ")}` : undefined,
 			pages: sources,
 		});
@@ -132,6 +135,7 @@ export function checkSite({ pages = [], broken = [], complete = true } = {}) {
 				level: "worth a look",
 				message: `${orphans.length} ${orphans.length === 1 ? "page has" : "pages have"} nothing linking to them, so the only way in is a search result.`,
 				detail: orphans.slice(0, 5).join(", "),
+				fix: "Add a link to it from a page people do reach — the relevant service page, or the list it belongs on. Google treats a page nothing links to as one the site does not think much of.",
 				pages: orphans,
 			});
 		}

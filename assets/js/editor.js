@@ -1416,6 +1416,7 @@ class Editor {
 					el("div", {}, [
 						el("p", { class: "tcb-finding-message", text: finding.message }),
 						...(finding.detail ? [el("p", { class: "tcb-hint", text: finding.detail })] : []),
+						...(finding.fix ? [el("p", { class: "tcb-finding-fix", text: finding.fix })] : []),
 					]),
 				])
 			);
@@ -1691,6 +1692,7 @@ class Editor {
 						el("div", {}, [
 							el("p", { class: "tcb-finding-message", text: finding.message }),
 							...(finding.detail ? [el("p", { class: "tcb-hint", text: finding.detail })] : []),
+							...(finding.fix ? [el("p", { class: "tcb-finding-fix", text: finding.fix })] : []),
 							...(finding.pages && finding.pages.length
 								? [
 										el(
@@ -1813,7 +1815,9 @@ class Editor {
 			[
 				el("p", { class: "tcb-hint", text: "This is what shows up as the heading and blurb in Google results." }),
 				el("label", { class: "tcb-label" }, [el("span", { text: "Page title" }), titleInput]),
+				this.buildSuggestions("title", titleInput, refreshPreview),
 				el("label", { class: "tcb-label" }, [el("span", { text: "Description" }), descriptionInput]),
+				this.buildSuggestions("description", descriptionInput, refreshPreview),
 				counts,
 				serp,
 			],
@@ -1831,6 +1835,68 @@ class Editor {
 				if (descriptionMeta) descriptionMeta.setAttribute("content", description);
 			}
 		);
+	}
+
+	// "Suggest one" next to the title and description fields.
+	//
+	// Clicking a suggestion fills the field. It does not save: the field is
+	// still a field, still editable, and still has to be saved and published
+	// like anything else. Nothing written here reaches the site without going
+	// through the same two deliberate steps as a hand-typed change.
+	buildSuggestions(kind, input, onPick) {
+		const status = el("p", { class: "tcb-hint" });
+		const options = el("div", { class: "tcb-suggestions" });
+		const button = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Suggest one" });
+
+		button.addEventListener("click", async () => {
+			button.disabled = true;
+			options.replaceChildren();
+			status.className = "tcb-hint";
+			status.textContent = "Writing a few options…";
+
+			let result;
+			try {
+				result = await api("/api/seo/suggest", { method: "POST", body: JSON.stringify({ kind, path: PATH }) });
+			} catch (error) {
+				button.disabled = false;
+				status.className = "tcb-hint tcb-hint-warn";
+				status.textContent = error.message;
+				return;
+			}
+
+			button.disabled = false;
+			button.textContent = "Suggest more";
+
+			if (!result.candidates.length) {
+				// Never silently empty. Everything having been thrown out is a
+				// real outcome with a real reason, and "nothing happened" reads
+				// as a broken button.
+				status.className = "tcb-hint tcb-hint-warn";
+				status.textContent = result.rejected.length
+					? `Every suggestion was thrown out — ${result.rejected[0].reason}. Worth trying again.`
+					: "Nothing came back. Worth trying again.";
+				return;
+			}
+
+			status.textContent = result.usedSearches
+				? `Written from this page and the ${result.usedSearches} searches people used to find it. Click one to use it.`
+				: "Written from what this page already says. Click one to use it.";
+
+			for (const candidate of result.candidates) {
+				const option = el("button", { type: "button", class: "tcb-suggestion" }, [
+					el("span", { class: "tcb-suggestion-text", text: candidate }),
+					el("span", { class: "tcb-suggestion-count", text: `${candidate.length}` }),
+				]);
+				option.addEventListener("click", () => {
+					input.value = candidate;
+					onPick();
+					input.focus();
+				});
+				options.appendChild(option);
+			}
+		});
+
+		return el("div", { class: "tcb-suggest-row" }, [button, status, options]);
 	}
 
 	async saveMeta(address, value, original) {

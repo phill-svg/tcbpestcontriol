@@ -27,26 +27,37 @@ export const DESCRIPTION_MAX = 165;
 // where images is [{ src, hasAlt, altText }] and links is [{ href, text }].
 //
 // Returns findings ordered worst-first. Each carries `level` ("problem" |
-// "worth a look" | "good"), a plain-English `message`, and `detail` where
-// there is something specific to point at.
+// "worth a look" | "good"), a plain-English `message`, `detail` where there
+// is something specific to point at, and `fix` -- what to actually do.
+//
+// The `fix` line matters more than the message. "The title is 80 characters"
+// is a fact; it does not tell someone who has never thought about a page
+// title what a good one looks like or which end to cut. Every finding that
+// can be acted on says how, in terms of this site rather than in general.
 export function checkSeo(page) {
 	const findings = [];
 	const title = String(page.title || "").trim();
 	const description = String(page.description || "").trim();
 
 	if (!title) {
-		findings.push({ level: "problem", message: "This page has no title. Google will invent one." });
+		findings.push({
+			level: "problem",
+			message: "This page has no title. Google will invent one.",
+			fix: "Write one in Page settings. The shape that works here is what you do, then where, then the business: “Spider Control Canberra | TCB Pest Control”.",
+		});
 	} else if (title.length > TITLE_MAX) {
 		findings.push({
 			level: "worth a look",
 			message: `The title is ${title.length} characters — Google will cut it off around ${TITLE_MAX}.`,
 			detail: title,
+			fix: `Cut ${title.length - TITLE_MAX} characters from the middle rather than the front. The first few words are what someone reads, and the business name on the end is what they look for to recognise you.`,
 		});
 	} else if (title.length < TITLE_MIN) {
 		findings.push({
 			level: "worth a look",
 			message: `The title is only ${title.length} characters. There is room to say more.`,
 			detail: title,
+			fix: "Add the suburb or city, or the specific pest. Somebody searching “termite inspection Kambah” is looking for those words in the result.",
 		});
 	} else {
 		findings.push({ level: "good", message: `Title length is fine (${title.length} characters).` });
@@ -56,29 +67,37 @@ export function checkSeo(page) {
 		findings.push({
 			level: "problem",
 			message: "This page has no description, so Google will pick a sentence from the page itself.",
+			fix: "Write one or two sentences in Page settings that would make someone pick you over the result above and below: what you treat, where, and what is different about how you do it.",
 		});
 	} else if (description.length > DESCRIPTION_MAX) {
 		findings.push({
 			level: "worth a look",
 			message: `The description is ${description.length} characters — it will be cut off around ${DESCRIPTION_MAX}.`,
 			detail: description,
+			fix: `Put the part that would win the click in the first ${DESCRIPTION_MAX} characters. Everything after that is only read by Google.`,
 		});
 	} else if (description.length < DESCRIPTION_MIN) {
 		findings.push({
 			level: "worth a look",
 			message: `The description is only ${description.length} characters. A fuller one gets more clicks.`,
 			detail: description,
+			fix: "There is room for another clause. Same-week availability, a written report, family-safe products — whichever is true of this job.",
 		});
 	} else {
 		findings.push({ level: "good", message: `Description length is fine (${description.length} characters).` });
 	}
 
 	if (page.h1Count === 0) {
-		findings.push({ level: "problem", message: "This page has no main heading." });
+		findings.push({
+			level: "problem",
+			message: "This page has no main heading.",
+			fix: "The main heading is the big line at the top of the page. Without one, Google has to guess what the page is about from the body text.",
+		});
 	} else if (page.h1Count > 1) {
 		findings.push({
 			level: "worth a look",
 			message: `There are ${page.h1Count} main headings. A page should normally have one.`,
+			fix: "Keep the one at the top and turn the others into sub-headings, so it is clear which is the subject of the page.",
 		});
 	}
 
@@ -89,6 +108,7 @@ export function checkSeo(page) {
 			level: "problem",
 			message: `${missingAlt.length} ${missingAlt.length === 1 ? "image has" : "images have"} no description, so screen readers and Google cannot tell what they show.`,
 			detail: missingAlt.map((image) => image.src).slice(0, 3).join(", "),
+			fix: "Click the image in the editor and describe what it shows — “a technician spraying along a skirting board”, not “pest control”.",
 		});
 	}
 
@@ -100,6 +120,7 @@ export function checkSeo(page) {
 			level: "worth a look",
 			message: `${filenameAlt.length} image ${filenameAlt.length === 1 ? "description is" : "descriptions are"} just a filename. Describe what the picture shows.`,
 			detail: filenameAlt.map((image) => image.altText).slice(0, 3).join(", "),
+			fix: "Replace the filename with a sentence about the picture. Somebody using a screen reader hears this read out.",
 		});
 	}
 
@@ -113,11 +134,16 @@ export function checkSeo(page) {
 			level: "worth a look",
 			message: `${vagueLinks.length} ${vagueLinks.length === 1 ? "link says" : "links say"} something like "click here". Say where it goes instead.`,
 			detail: vagueLinks.map((link) => link.href).slice(0, 3).join(", "),
+			fix: "Say where it goes: “Book a termite inspection” rather than “click here”. Google reads link wording as a description of the page it points at.",
 		});
 	}
 
 	if (page.hasCanonical === false) {
-		findings.push({ level: "problem", message: "This page has no canonical tag." });
+		findings.push({
+			level: "problem",
+			message: "This page has no canonical tag.",
+			fix: "This one is not editable here — it is a line in the page's code that tells Google which address is the real one. Worth passing on to whoever maintains the site.",
+		});
 	}
 
 	const order = { problem: 0, "worth a look": 1, good: 2 };

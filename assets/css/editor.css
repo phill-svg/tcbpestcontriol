@@ -635,6 +635,71 @@ body.tcb-editing-mode {
 	color: #92400e;
 }
 
+/* What to do about a finding. Set apart from the message above it, because
+   the message is the diagnosis and this is the instruction — running them
+   together as one paragraph makes the actionable half easy to skim past. */
+.tcb-finding-fix {
+	margin-top: 0.35rem;
+	padding-left: 0.6rem;
+	border-left: 2px solid #d4d4d8;
+	font-size: 0.8125rem;
+	line-height: 1.5;
+	color: #3f3f46;
+}
+
+/* Drafted titles and descriptions ------------------------------------------- */
+
+.tcb-suggest-row {
+	margin: -0.35rem 0 0.6rem;
+	display: grid;
+	gap: 0.35rem;
+	justify-items: start;
+}
+
+.tcb-btn-small {
+	padding: 0.3rem 0.6rem;
+	font-size: 0.75rem;
+}
+
+.tcb-suggestions {
+	width: 100%;
+	display: grid;
+	gap: 0.3rem;
+}
+
+/* Each option is a button, not a line of text: it is clickable, and it has to
+   look clickable or nobody discovers that it is. */
+.tcb-suggestion {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.75rem;
+	width: 100%;
+	padding: 0.45rem 0.6rem;
+	border: 1px solid #e6e6ea;
+	border-radius: 0.35rem;
+	background: #ffffff;
+	font: inherit;
+	font-size: 0.875rem;
+	line-height: 1.4;
+	text-align: left;
+	color: #111114;
+	cursor: pointer;
+}
+
+.tcb-suggestion:hover,
+.tcb-suggestion:focus-visible {
+	border-color: #1d4ed8;
+	background: #f5f7ff;
+}
+
+.tcb-suggestion-count {
+	flex-shrink: 0;
+	font-variant-numeric: tabular-nums;
+	font-size: 0.75rem;
+	color: #8a8a92;
+}
+
 /* Search Console figures ---------------------------------------------------- */
 
 /* Four columns: the search phrase takes what is left, the three numbers get

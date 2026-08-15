@@ -18,15 +18,27 @@
 import { readFile, commitFiles } from "./github-sync.js";
 
 // Matches BLOG-GUIDE.md: existing posts are all folders named blog-<slug>.
+//
+// The trimming is done by splitting rather than with /^-+|-+$/, which CodeQL
+// flags as able to backtrack on a long run of dashes. In practice it could not
+// -- the preceding replace collapses every run to a single dash, so `-+` never
+// has more than one to chew on, and 80,000 characters of punctuation slugged
+// in about a millisecond. But that safety lived on a different line from the
+// pattern it protected, so a later edit could have removed it without anything
+// looking wrong. Splitting on the separator has no backtracking to reason
+// about at all, and does the trimming and de-duplication in one pass.
 export function slugify(title) {
 	const slug = String(title || "")
 		.toLowerCase()
 		.replace(/['’]/g, "")
 		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-+|-+$/g, "")
-		.slice(0, 80)
-		.replace(/-+$/, "");
-	return slug ? `blog-${slug}` : "";
+		.split("-")
+		.filter(Boolean)
+		.join("-")
+		.slice(0, 80);
+	// Slicing can leave a trailing dash if the cut lands on one.
+	const trimmed = slug.endsWith("-") ? slug.slice(0, slug.lastIndexOf("-")) : slug;
+	return trimmed ? `blog-${trimmed}` : "";
 }
 
 // ~220 words a minute is the figure the guide uses. Rounded up, never zero:

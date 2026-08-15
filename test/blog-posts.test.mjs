@@ -201,3 +201,36 @@ test("renderSections drops empty rows rather than emitting blank headings", () =
 	]);
 	assert.equal((html.match(/<h2/g) || []).length, 1);
 });
+
+test("slugify stays fast however hostile the title", () => {
+	// CodeQL flagged the old /^-+|-+$/ trim as able to backtrack on a long run
+	// of dashes. It could not, because the replace before it collapsed runs --
+	// but that reasoning lived on a different line, so the trim no longer uses
+	// a quantifier at all. This pins the property locally.
+	for (const evil of ["!".repeat(50000), "-".repeat(50000), "a-".repeat(25000), "-a".repeat(25000)]) {
+		const started = Date.now();
+		const slug = slugify(evil);
+		assert.ok(Date.now() - started < 500, `slugging ${evil.length} characters must stay fast`);
+		assert.doesNotMatch(slug, /--/, "runs are collapsed");
+		assert.doesNotMatch(slug, /-$/, "and never left trailing");
+	}
+});
+
+test("post content cannot introduce an HTML comment", () => {
+	// The comment stripper runs on the template, before any post content is
+	// inserted, and content is escaped on the way in. So a title containing
+	// <!-- cannot produce a comment in the output -- which is the thing that
+	// would matter if the stripper were a sanitiser rather than a formatter.
+	const html = renderPost(TEMPLATE, {
+		...POST,
+		title: "Ants <!-- and --> friends",
+		intro: "An intro with <!-- a comment --> inside it.",
+		sections: [{ heading: "<!-- heading -->", paragraph: "<!-- paragraph -->" }],
+	});
+
+	// Only the template's own functional comments should remain.
+	for (const comment of html.match(/<!--[\s\S]*?-->/g) || []) {
+		assert.match(comment, /Google|Deferred/, `unexpected comment survived: ${comment.slice(0, 60)}`);
+	}
+	assert.ok(html.includes("&lt;!-- and --&gt;"), "the title's angle brackets are escaped");
+});

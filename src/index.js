@@ -12,7 +12,7 @@ import { loadPageEdits, applyContentEdits, handleContentApi } from "./content-ed
 import { normalisePath } from "../assets/js/content-address.js";
 import { handleBlogApi } from "./blog-api.js";
 import { pathsFromSitemap, scanBatch, extractPageSummary } from "./seo-scan.js";
-import { suggest, extractContent } from "./seo-suggest.js";
+import { suggest, extractContent, extractMeta, examplePaths } from "./seo-suggest.js";
 import { TITLE_MIN, TITLE_MAX, DESCRIPTION_MIN, DESCRIPTION_MAX } from "../assets/js/seo-check.js";
 import { fetchAsset } from "./assets.js";
 import {
@@ -764,7 +764,7 @@ function editorLauncherHtml({ editing, previewing }) {
 		// browsers by the old immutable rule -- a year-long cache entry cannot be
 		// revalidated away, only stepped around with a different URL. The
 		// no-cache rule in _headers is what stops it happening again.
-		`<link rel="stylesheet" href="/assets/css/editor.css?v=4">` +
+		`<link rel="stylesheet" href="/assets/css/editor.css?v=5">` +
 		`<script src="/assets/js/editor.js?v=1" type="module"></script>` +
 		`</div>`
 	);
@@ -891,15 +891,40 @@ async function handleSeoSuggest(request, url, env) {
 		}
 	}
 
+	// Writing samples from elsewhere on the site. Describing the house style
+	// in words produced copy that could have belonged to any pest controller
+	// anywhere; four real examples of it are worth more than any adjective.
+	let examples = [];
+	try {
+		const sitemapResponse = await env.ASSETS.fetch(new Request(new URL("/sitemap.xml", url), { method: "GET" }));
+		if (sitemapResponse.status === 200) {
+			const paths = pathsFromSitemap(await sitemapResponse.text());
+			examples = (
+				await Promise.all(
+					examplePaths(paths, path).map(async (samplePath) => {
+						const sampleUrl = new URL(samplePath, url);
+						const response = await fetchAsset(new Request(sampleUrl, { method: "GET" }), sampleUrl, env);
+						return response.status === 200 ? extractMeta(response) : null;
+					})
+				)
+			).filter(Boolean);
+		}
+	} catch {
+		// Style samples make the suggestions better; they are not required to
+		// produce one, and failing to read them is not worth failing over.
+	}
+
 	try {
 		const { candidates, rejected } = await suggest(env, {
 			kind,
 			page: { title: summary.title, description: summary.description, h1: content.h1, body: content.body },
 			queries,
+			examples,
+			steer: typeof body.steer === "string" ? body.steer : "",
 			min: kind === "title" ? TITLE_MIN : DESCRIPTION_MIN,
 			max: kind === "title" ? TITLE_MAX : DESCRIPTION_MAX,
 		});
-		return new Response(JSON.stringify({ kind, candidates, rejected, usedSearches: queries.length }), {
+		return new Response(JSON.stringify({ kind, candidates, rejected, usedSearches: queries.length, usedExamples: examples.length }), {
 			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
 		});
 	} catch (error) {

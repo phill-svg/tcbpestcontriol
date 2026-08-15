@@ -13,6 +13,7 @@
 
 import { checkSeo } from "../assets/js/seo-check.js";
 import { normalisePath } from "../assets/js/content-address.js";
+import { decodeEntities } from "./html-entities.js";
 
 // Pulled out of the <loc> elements. Only the path is kept -- the scan asks the
 // assets binding for pages, not the public internet.
@@ -33,6 +34,14 @@ export function pathsFromSitemap(xml) {
 // writes `<meta content="..." name="description">` with the attributes in that
 // order, and a pattern expecting the opposite reported all 134 pages as having
 // no description at all. A real parser has no opinion about attribute order.
+//
+// Everything read here is then entity-decoded, because HTMLRewriter hands
+// back the raw source. A reader sees "Termite Treatment & Inspections"; the
+// file says "Termite Treatment &amp; Inspections", which is four characters
+// longer. Measured raw, that title came to 63 characters and was reported as
+// too long for Google -- while the browser-side check on the same page, which
+// reads the decoded DOM, correctly said 59 and found nothing wrong. The
+// scanner was the one that was wrong.
 export async function extractPageSummary(response) {
 	const summary = {
 		title: "",
@@ -101,6 +110,15 @@ export async function extractPageSummary(response) {
 
 	// The body has to be drained for the handlers to run.
 	await rewriter.transform(response).text();
+
+	// Everything measured or matched against must be what a reader sees, not
+	// what the file happens to encode.
+	summary.title = decodeEntities(summary.title).trim();
+	summary.description = decodeEntities(summary.description);
+	for (const image of summary.images) {
+		if (image.altText !== null && image.altText !== undefined) image.altText = decodeEntities(image.altText);
+	}
+	for (const link of summary.links) link.text = decodeEntities(link.text);
 	return summary;
 }
 

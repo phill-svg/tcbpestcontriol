@@ -131,6 +131,27 @@ test("a wrong or damaged key is named for what it is", () => {
 	assert.throws(() => readServiceAccount(""), /No service account key/);
 });
 
+test("an OAuth client ID is recognised as the wrong turn it is", () => {
+	// This one happened. "Create credentials" lists OAuth client ID above
+	// service account, and the file it downloads is JSON with a client_id in
+	// it -- close enough to look right. It contains no email of any kind, so
+	// the instruction to "find the client_email" sends people looking for
+	// something that was never in the file.
+	const oauthClient = JSON.stringify({
+		web: {
+			client_id: "199708213829-example.apps.googleusercontent.com",
+			project_id: "tcb-website-505616",
+			token_uri: "https://oauth2.googleapis.com/token",
+			client_secret: "not-a-real-secret",
+		},
+	});
+	assert.throws(() => readServiceAccount(oauthClient), /OAuth client ID, not a service account key/);
+	// The message has to say where to go instead, not just what is wrong.
+	assert.throws(() => readServiceAccount(oauthClient), /Create credentials → Service account/);
+	// A desktop-app client downloads under "installed" rather than "web".
+	assert.throws(() => readServiceAccount(JSON.stringify({ installed: { client_id: "x" } })), /OAuth client ID/);
+});
+
 test("the sign-in assertion is a real RS256 JWT that verifies against its key", async () => {
 	// The part with no visible failure mode. A malformed or wrongly signed
 	// assertion comes back from Google as "invalid_grant", which reads exactly

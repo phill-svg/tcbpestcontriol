@@ -1427,6 +1427,7 @@ class Editor {
 						el("p", { class: "tcb-finding-message", text: finding.message }),
 						...(finding.detail ? [el("p", { class: "tcb-hint", text: finding.detail })] : []),
 						...(finding.fix ? [el("p", { class: "tcb-finding-fix", text: finding.fix })] : []),
+						...(finding.action ? [this.buildFindingFix(PATH, finding.action)] : []),
 					]),
 				])
 			);
@@ -1988,6 +1989,11 @@ class Editor {
 					findings.appendChild(
 						el("p", { class: `tcb-finding-message tcb-scan-${finding.level.replace(/\s+/g, "-")}`, text: finding.message })
 					);
+					// Findings that carry an action can be fixed from right here,
+					// without opening the page -- the scan is where these appear
+					// eight at a time, and eight page visits is how a list of
+					// chores stays a list of chores.
+					if (finding.action) findings.appendChild(this.buildFindingFix(page.path, finding.action));
 				}
 				results.appendChild(
 					el("div", { class: "tcb-scan-page" }, [
@@ -2010,6 +2016,36 @@ class Editor {
 			siteResults,
 			results,
 		]);
+	}
+
+	// The Fix button on a finding that carries an action. Today the only kind
+	// is "social" -- a stale og:title or og:description -- and the fix runs
+	// server-side: /api/seo/fix-social publishes the page's own current
+	// wording, which the serving layer rewrites the social tags to match.
+	// Nothing a visitor reads changes, which is why this needs no review step
+	// the way a suggestion does.
+	buildFindingFix(path, action) {
+		if (action.kind !== "social") return el("span");
+		const status = el("span", { class: "tcb-hint" });
+		const button = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Fix" });
+		button.addEventListener("click", async () => {
+			button.disabled = true;
+			status.textContent = "Fixing…";
+			try {
+				const result = await api("/api/seo/fix-social", {
+					method: "POST",
+					body: JSON.stringify({ path, field: action.field }),
+				});
+				button.remove();
+				status.textContent = result.already
+					? `Nothing to do — ${result.already}.`
+					: "Fixed. Shares now match the page.";
+			} catch (error) {
+				button.disabled = false;
+				status.textContent = error.message;
+			}
+		});
+		return el("div", { class: "tcb-suggest-row" }, [button, status]);
 	}
 
 	// One line of memory between scans: what the last one counted, and whether

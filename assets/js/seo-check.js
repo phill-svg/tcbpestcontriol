@@ -305,12 +305,16 @@ export function checkSeo(page) {
 	// layer rewrites og:title and twitter:title to match -- so drift can only
 	// come from the file itself being edited by hand. Real, and worth catching:
 	// the first run of this check found eight pages sharing an old title.
+	// `action` is machine-readable: the editor renders a Fix button for it,
+	// wired to /api/seo/fix-social, which republishes the page's own current
+	// wording so the social tags get rewritten to match.
 	if (page.ogTitle !== undefined && page.ogTitle !== null && title && !sameWording(page.ogTitle, title)) {
 		findings.push({
 			level: "worth a look",
 			message: "The title shown when this page is shared is out of step with the page title.",
 			detail: `Shared as: ${page.ogTitle}`,
-			fix: "The og:title line in the page's code still says the old wording. Editing the title here and publishing brings it back into step automatically; otherwise it needs changing in the code.",
+			fix: "The og:title line in the page's code still says the old wording. Fix brings it into step with the page title — nothing a visitor reads changes.",
+			action: { kind: "social", field: "title" },
 		});
 	}
 	if (
@@ -323,7 +327,8 @@ export function checkSeo(page) {
 			level: "worth a look",
 			message: "The description shown when this page is shared is out of step with the page description.",
 			detail: `Shared as: ${page.ogDescription}`,
-			fix: "The og:description line in the page's code still says the old wording. Editing the description here and publishing brings it back into step automatically; otherwise it needs changing in the code.",
+			fix: "The og:description line in the page's code still says the old wording. Fix brings it into step with the page description — nothing a visitor reads changes.",
+			action: { kind: "social", field: "description" },
 		});
 	}
 	if (page.hasOgImage === false) {

@@ -199,6 +199,13 @@ test("social tags out of step with the page are caught", () => {
 	assert.match(noImage[0].message, /No picture/);
 });
 
+test("drift findings carry the action the Fix button is built from", () => {
+	const title = looks({ ...HEALTHY_FULL, ogTitle: "Stale old title from last year" });
+	assert.deepEqual(title[0].action, { kind: "social", field: "title" });
+	const description = looks({ ...HEALTHY_FULL, ogDescription: "A stale description" });
+	assert.deepEqual(description[0].action, { kind: "social", field: "description" });
+});
+
 test("structured data that does not parse is a problem; none at all is worth a look", () => {
 	assert.match(problems({ ...HEALTHY_FULL, schemaBroken: 1 })[0].message, /does not parse/);
 	assert.match(looks({ ...HEALTHY_FULL, schemaBlocks: 0 })[0].message, /no structured data/);

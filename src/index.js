@@ -8,7 +8,7 @@ import { handleIndexJson } from "./index-json.js";
 import { renderMarkdown } from "./markdown.js";
 import { isBookableService, SERVICE_LABELS, HORIZON_DAYS, computePrice } from "./booking-config.js";
 import { computeSlots } from "./availability.js";
-import { loadPageEdits, applyContentEdits, handleContentApi } from "./content-edits.js";
+import { loadPageEdits, applyContentEdits, handleContentApi, handleSeoSocialFix } from "./content-edits.js";
 import { normalisePath } from "../assets/js/content-address.js";
 import { handleBlogApi } from "./blog-api.js";
 import { pathsFromSitemap, scanBatch, extractPageSummary } from "./seo-scan.js";
@@ -241,6 +241,26 @@ export default {
 			if (!session) return new Response("Unauthorized", { status: 401 });
 			if (!session.isAdmin) return new Response("Forbidden", { status: 403 });
 			return handleSeoFix(request, url, env);
+		}
+
+		// One-click repair for a stale og:title / og:description: publishes the
+		// page's own current wording as an override, which the serving layer
+		// (and the next "Sync to code") rewrites the social tags to match.
+		// Nothing a visitor reads changes -- see handleSeoSocialFix.
+		if (url.pathname === "/api/seo/fix-social") {
+			const session = await getStaffSession(request, env);
+			if (!session) return new Response("Unauthorized", { status: 401 });
+			if (!session.isAdmin) return new Response("Forbidden", { status: 403 });
+			return handleSeoSocialFix(request, env, session, {
+				// A fresh GET rather than the incoming POST -- fetching an asset
+				// with the API request's method is the exact bug documented in
+				// src/assets.js.
+				fetchPage: (path) => {
+					const targetUrl = new URL(path, url);
+					return fetchAsset(new Request(targetUrl, { method: "GET" }), targetUrl, env);
+				},
+				extract: extractPageSummary,
+			});
 		}
 
 		// Site-wide SEO scan. Batched: the browser asks for a slice at a time

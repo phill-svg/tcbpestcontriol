@@ -678,32 +678,34 @@ class Editor {
 		// content-address.js. A blank preview therefore doubles as live
 		// validation that the path is wrong.
 		//
-		// CodeQL reports js/xss-through-dom here and it is a false positive, so
-		// the alert is suppressed on the assignment below. Recording why, since
-		// "we suppressed a high-severity security alert" deserves an argument
-		// rather than a shrug:
+		// CodeQL reports js/xss-through-dom on the assignment below and it is a
+		// false positive. It cannot be silenced from here: GitHub's default
+		// code-scanning setup ignores inline `// codeql[...]` markers, so the
+		// alert has to be dismissed once in the repository's Security tab
+		// (Code scanning -> the alert -> Dismiss -> False positive). Recording
+		// the argument here so whoever does that is not taking it on trust:
 		//
-		//  1. Its taint tracking follows the string out of the regex match and
-		//     does not model that an anchored pattern constrains what can come
-		//     back. Regex sanitisers are a known blind spot for it -- the same
-		//     alert appeared when the guard was a boolean helper, and rewriting
-		//     it to return its own match did not change the verdict.
+		//  1. CodeQL's taint tracking follows the string out of the regex match
+		//     and does not model that an anchored pattern constrains what comes
+		//     back. Regex sanitisers are a known blind spot -- the same alert
+		//     appeared when the guard was a boolean helper, and rewriting it to
+		//     return its own match did not change the verdict.
 		//  2. The returned string cannot express a scheme, a host, a quote, an
 		//     angle bracket, whitespace, a query or a fragment: the pattern
 		//     admits only [A-Za-z0-9._~-] and "/", must start with a single
-		//     "/", and must end in an image extension. test/content-edits
-		//     pins that, and it was additionally fuzzed over ~138,000 inputs
-		//     covering every metacharacter in every position, with no escapes.
-		//  3. The sink is an <img src>, which cannot execute script in any
-		//     case -- not even via a data: SVG, which browsers load in a
-		//     non-scripting mode. That is a second, independent reason this
-		//     could not be XSS even if the guard were removed entirely.
+		//     "/", and must end in an image extension. test/content-edits.test
+		//     fuzzes exactly that over ~138,000 inputs, covering every
+		//     metacharacter in every position, and nothing escapes.
+		//  3. The sink is an <img src>, which cannot execute script in any case
+		//     -- not even via a data: SVG, which browsers load in a
+		//     non-scripting mode. A second, independent reason this could not
+		//     be XSS even with the guard removed entirely.
 		//
-		// If the guard is ever loosened, delete the suppression with it.
+		// If the guard is ever loosened, the dismissal should be revisited.
 		const showPreview = (value) => {
 			if (!preview) return;
 			const safePath = previewableImagePath(value);
-			if (safePath) preview.src = safePath; // codeql[js/xss-through-dom]
+			if (safePath) preview.src = safePath;
 			else preview.removeAttribute("src");
 		};
 		if (preview) {

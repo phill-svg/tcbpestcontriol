@@ -56,6 +56,19 @@ export function readServiceAccount(raw) {
 	} catch {
 		throw new Error("The service account key is not valid JSON — paste the whole downloaded file, including the braces.");
 	}
+	// The easy wrong turn. "Create credentials" offers OAuth client ID first
+	// and service account second, and an OAuth client downloads as a JSON
+	// file that looks close enough to be worth trying. It has no email in it
+	// at all, which leaves whoever is following the instructions hunting for
+	// a client_email that was never going to be there.
+	if (parsed.web || parsed.installed) {
+		throw new Error(
+			"That file is an OAuth client ID, not a service account key — it has a client_secret rather than a client_email. " +
+				"In Google Cloud go to APIs & Services → Credentials → Create credentials → Service account (not OAuth client ID), " +
+				"then open it, and under Keys choose Add key → Create new key → JSON. That file is the one to paste here. " +
+				"Delete the OAuth client while you are there; nothing needs it."
+		);
+	}
 	if (parsed.type && parsed.type !== "service_account") {
 		throw new Error(`That key is a "${parsed.type}" key. Search Console needs a service account key.`);
 	}

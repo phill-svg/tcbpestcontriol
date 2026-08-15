@@ -1544,26 +1544,64 @@ class Editor {
 			// is a plausible answer for these phrases, and the page does not
 			// use the words. Both halves of that are observed.
 			if (page.gaps && page.gaps.length) {
-				const list = el("div", { class: "tcb-findings" });
-				for (const gap of page.gaps) {
-					list.appendChild(el("p", { class: "tcb-finding-message", text: gap.sentence }));
+				// Split by what to actually do, because they lead somewhere
+				// genuinely different. Lumping them together was the first
+				// version's mistake: the homepage is shown for "bird control
+				// canberra" and never says "bird", but /bird-control answers
+				// it better, and working "bird" into the homepage would set
+				// the two competing.
+				const groups = [
+					{
+						verdict: "add",
+						level: "worth doing",
+						heading: "Searches this page is shown for that nothing else answers:",
+						fix: "Work the missing words into this page's title, description or main heading — but only where they are honestly true of it. “Suggest one” in Page settings already uses these.",
+					},
+					{
+						verdict: "strengthen",
+						level: "worth a look",
+						heading: "Searches where the right page exists but is behind this one:",
+						fix: "The work belongs on that page, not this one. Open it and give it the words, then link to it from here.",
+					},
+					{
+						verdict: "elsewhere",
+						level: "no action",
+						heading: "Searches another page already answers better:",
+						fix: "Nothing to do. Listed only so it is clear why they are not in the list above — adding these words here would set two of your own pages competing.",
+					},
+				];
+
+				for (const group of groups) {
+					const rows = page.gaps.filter((gap) => gap.verdict === group.verdict);
+					if (!rows.length) continue;
+
+					const list = el("div", { class: "tcb-findings" });
+					for (const gap of rows) {
+						list.appendChild(
+							el("div", {}, [
+								el("p", { class: "tcb-finding-message", text: gap.sentence }),
+								...(gap.rival
+									? [
+											el("div", { class: "tcb-scan-pages" }, [
+												el("a", { class: "tcb-scan-link", href: `${gap.rival.path}?edit=1`, text: gap.rival.path }),
+											]),
+									  ]
+									: []),
+							])
+						);
+					}
+
+					results.appendChild(
+						el("div", { class: `tcb-finding tcb-finding-${group.verdict === "add" ? "problem" : "worth-a-look"}` }, [
+							el("span", { class: "tcb-finding-level", text: group.level }),
+							el("div", {}, [
+								el("p", { class: "tcb-finding-message", text: group.heading }),
+								list,
+								el("p", { class: "tcb-finding-fix", text: group.fix }),
+							]),
+						])
+					);
 				}
-				results.appendChild(
-					el("div", { class: "tcb-finding tcb-finding-problem" }, [
-						el("span", { class: "tcb-finding-level", text: "worth doing" }),
-						el("div", {}, [
-							el("p", {
-								class: "tcb-finding-message",
-								text: "Searches this page is shown for but never mentions:",
-							}),
-							list,
-							el("p", {
-								class: "tcb-finding-fix",
-								text: "Work the missing words into the title, description or main heading — but only where they are honestly true of the page. This is the one change here with evidence behind it rather than judgement. “Suggest one” in Page settings now uses these.",
-							}),
-						]),
-					])
-				);
 			}
 
 			// Where rewriting a title would pay. This is the whole reason the

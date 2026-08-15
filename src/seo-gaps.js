@@ -35,6 +35,12 @@ const STOPWORDS = new Set([
 	"it",
 	"me",
 	"my",
+	// "pest control near me" cannot be answered by putting the word "near"
+	// in a title -- Google resolves those from where the searcher is, not
+	// from the page's wording. Left in, it produces advice that is not merely
+	// useless but slightly deranged.
+	"near",
+	"nearby",
 	"of",
 	"on",
 	"or",
@@ -95,12 +101,33 @@ export function missingWords(query, page) {
 	return [...new Set(contentWords(query))].filter((word) => !said.has(word));
 }
 
-// `queries` are this page's rows from Search Console.
+// Whether some other page on the site is the better answer for this search,
+// and how it is doing. `rankings` maps a search phrase to every page of this
+// site that Google shows for it.
+//
+// This is the question the first version of this module forgot to ask, and
+// forgetting it made the advice actively harmful. The homepage was shown 165
+// times for "bird control canberra", never says "bird", and the obvious
+// conclusion -- work "bird" into the homepage -- would have set the homepage
+// competing against /bird-control, which is the exact problem the duplicate
+// title check elsewhere warns about. A gap is only an instruction to change
+// *this* page once you know no better page exists.
+export function betterPageFor(query, path, rankings) {
+	const rows = (rankings && rankings[query]) || [];
+	const others = rows
+		.filter((row) => row.path && row.path !== path)
+		.sort((a, b) => (a.position || 999) - (b.position || 999));
+	return others[0] || null;
+}
+
+// `queries` are this page's rows from Search Console. `rankings` is optional
+// and, when present, is what stops a gap being read as "put these words on
+// this page" when another page is the one that should have them.
 //
 // Returned worst-gap-first, where "worst" weighs how often Google shows the
 // page against how far down it puts it. A phrase shown 2,000 times at
 // position 15 is a bigger miss than one shown 40 times at position 5.
-export function findGaps(queries, page) {
+export function findGaps(queries, page, { path = null, rankings = null } = {}) {
 	const gaps = [];
 
 	for (const row of queries || []) {
@@ -115,15 +142,28 @@ export function findGaps(queries, page) {
 		const missing = missingWords(query, page);
 		if (!missing.length) continue;
 
+		const position = row.position || 0;
+		const better = rankings ? betterPageFor(query, path, rankings) : null;
+
+		// Three different situations wearing the same clothes.
+		let verdict = "add";
+		if (better && better.position <= position) verdict = "elsewhere";
+		else if (better) verdict = "strengthen";
+
 		gaps.push({
 			query,
 			impressions: row.impressions || 0,
 			clicks: row.clicks || 0,
-			position: row.position || 0,
+			position,
 			missing,
+			verdict,
+			rival: better ? { path: better.path, position: better.position } : null,
 			// Roughly "how much is being left on the table": shown often, and
-			// sitting far enough down that almost nobody scrolls to it.
-			weight: (row.impressions || 0) * Math.min(1, (row.position || 0) / 10),
+			// sitting far enough down that almost nobody scrolls to it. A
+			// phrase another page already answers better is worth nothing
+			// here, so it sinks rather than being hidden -- it is still worth
+			// knowing that Google is offering this page for it.
+			weight: (row.impressions || 0) * Math.min(1, position / 10) * (verdict === "elsewhere" ? 0.05 : 1),
 		});
 	}
 
@@ -133,11 +173,30 @@ export function findGaps(queries, page) {
 // One line a person can act on, per gap. The numbers are the argument -- the
 // point is not that a phrase is missing, it is that a specific number of
 // people saw this page offered for it and it does not mention it.
-export function describeGap(gap) {
+//
+// The three verdicts lead somewhere genuinely different, and collapsing them
+// into "mention this phrase" is what made the first version wrong.
+export function describeGap(gap, path = "this page") {
 	const shown = gap.impressions.toLocaleString();
 	const missing = gap.missing.map((word) => `“${word}”`).join(", ");
+	const seen = `Google showed this page ${shown} times for “${gap.query}” at position ${gap.position.toFixed(1)}`;
+
+	if (gap.verdict === "elsewhere") {
+		return (
+			`${seen}, but ${gap.rival.path} already answers it better at position ${gap.rival.position.toFixed(1)}. ` +
+			`Nothing to do here — adding ${missing} to this page would only set the two competing.`
+		);
+	}
+
+	if (gap.verdict === "strengthen") {
+		return (
+			`${seen}. ${gap.rival.path} is the page that should own this and is behind at position ` +
+			`${gap.rival.position.toFixed(1)} — the work belongs there, not here. Linking to it from this page helps too.`
+		);
+	}
+
 	return (
-		`Google showed this page ${shown} times for “${gap.query}” and it sits at position ${gap.position.toFixed(1)}, ` +
-		`but the page's title, description and heading never say ${missing}.`
+		`${seen}, no other page on the site ranks for it, and this page's title, description and heading never say ` +
+		`${missing}. Either work them in here, or it may deserve a page of its own.`
 	);
 }

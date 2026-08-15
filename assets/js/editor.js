@@ -1554,20 +1554,17 @@ class Editor {
 					{
 						verdict: "add",
 						level: "worth doing",
-						heading: "Searches this page is shown for that nothing else answers:",
-						fix: "Work the missing words into this page's title, description or main heading — but only where they are honestly true of it. “Suggest one” in Page settings already uses these.",
+						heading: "Searches this page is shown for that no page on the site is about:",
 					},
 					{
 						verdict: "strengthen",
 						level: "worth a look",
-						heading: "Searches where the right page exists but is behind this one:",
-						fix: "The work belongs on that page, not this one. Open it and give it the words, then link to it from here.",
+						heading: "Searches where the right page exists but is not winning:",
 					},
 					{
 						verdict: "elsewhere",
 						level: "no action",
 						heading: "Searches another page already answers better:",
-						fix: "Nothing to do. Listed only so it is clear why they are not in the list above — adding these words here would set two of your own pages competing.",
 					},
 				];
 
@@ -1575,15 +1572,25 @@ class Editor {
 					const rows = page.gaps.filter((gap) => gap.verdict === group.verdict);
 					if (!rows.length) continue;
 
+					// The instruction sits with the search it is about, rather
+					// than once at the bottom of the group. Each row is a
+					// different page to open and a different phrase to use, so
+					// a single shared line underneath could only be vague --
+					// which is exactly how the first version read.
 					const list = el("div", { class: "tcb-findings" });
 					for (const gap of rows) {
 						list.appendChild(
-							el("div", {}, [
+							el("div", { class: "tcb-gap" }, [
 								el("p", { class: "tcb-finding-message", text: gap.sentence }),
+								el("p", { class: "tcb-finding-fix", text: gap.fix }),
 								...(gap.rival
 									? [
 											el("div", { class: "tcb-scan-pages" }, [
-												el("a", { class: "tcb-scan-link", href: `${gap.rival.path}?edit=1`, text: gap.rival.path }),
+												el("a", {
+													class: "tcb-scan-link",
+													href: `${gap.rival.path}?edit=1`,
+													text: `Open ${gap.rival.path}`,
+												}),
 											]),
 									  ]
 									: []),
@@ -1594,11 +1601,7 @@ class Editor {
 					results.appendChild(
 						el("div", { class: `tcb-finding tcb-finding-${group.verdict === "add" ? "problem" : "worth-a-look"}` }, [
 							el("span", { class: "tcb-finding-level", text: group.level }),
-							el("div", {}, [
-								el("p", { class: "tcb-finding-message", text: group.heading }),
-								list,
-								el("p", { class: "tcb-finding-fix", text: group.fix }),
-							]),
+							el("div", {}, [el("p", { class: "tcb-finding-message", text: group.heading }), list]),
 						])
 					);
 				}

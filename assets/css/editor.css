@@ -783,3 +783,11 @@ body.tcb-editing-mode {
 	flex-wrap: wrap;
 	gap: 0.15rem 0.5rem;
 }
+
+/* One search gap: what was observed, then what to do about it. Separated so
+   the instruction is not read as more description. */
+.tcb-gap {
+	padding: 0.5rem 0.6rem;
+	border: 1px solid #e6e6ea;
+	border-radius: 0.35rem;
+}

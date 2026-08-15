@@ -66,6 +66,10 @@ export const MIN_IMPRESSIONS = 20;
 // is not usually what is standing in the way.
 export const BEST_POSITION = 3;
 export const WORST_POSITION = 20;
+// Two pages within this of each other are not really ahead or behind. Google
+// shuffles by more than that week to week, and "beating it by 0.2" is not a
+// fact worth building an instruction on.
+export const LEVEL_MARGIN = 2;
 
 // Crude singularisation, deliberately. "ants" and "ant", "termites" and
 // "termite", "cockroaches" and "cockroach" have to match or every plural
@@ -112,12 +116,38 @@ export function missingWords(query, page) {
 // competing against /bird-control, which is the exact problem the duplicate
 // title check elsewhere warns about. A gap is only an instruction to change
 // *this* page once you know no better page exists.
+// Words every path on this site contains, and which therefore say nothing
+// about what a page is for. Without these removed, /locations-pest-control-
+// tuggeranong looks related to every pest search ever made.
+const GENERIC = new Set(["pest", "control", "canberra", "location", "locations", "act", "treatment", "service", "services"]);
+
+export function distinctiveWords(text) {
+	return contentWords(String(text || "").replace(/[-/]/g, " ")).filter((word) => !GENERIC.has(word));
+}
+
+// Is this page plausibly *about* the search, or does it merely happen to turn
+// up for it?
+//
+// This is the check whose absence produced the worst line the panel has
+// printed: "/locations-pest-control-tuggeranong is the page that should own
+// borer control". Tuggeranong ranked at 20.0 for it, so the code called it
+// the rightful owner. It is a suburb page. Ranking next is not the same as
+// being the right answer, and a page is only the right answer for a search
+// when it is actually on that subject.
+export function isAbout(query, path) {
+	const wanted = distinctiveWords(query);
+	if (!wanted.length) return false;
+	const has = new Set(distinctiveWords(path));
+	return wanted.some((word) => has.has(word));
+}
+
+// The page on this site that is genuinely about this search, if there is one.
 export function betterPageFor(query, path, rankings) {
 	const rows = (rankings && rankings[query]) || [];
-	const others = rows
-		.filter((row) => row.path && row.path !== path)
+	const related = rows
+		.filter((row) => row.path && row.path !== path && isAbout(query, row.path))
 		.sort((a, b) => (a.position || 999) - (b.position || 999));
-	return others[0] || null;
+	return related[0] || null;
 }
 
 // `queries` are this page's rows from Search Console. `rankings` is optional
@@ -145,9 +175,12 @@ export function findGaps(queries, page, { path = null, rankings = null } = {}) {
 		const position = row.position || 0;
 		const better = rankings ? betterPageFor(query, path, rankings) : null;
 
-		// Three different situations wearing the same clothes.
+		// Three different situations wearing the same clothes. "Clearly ahead"
+		// needs a real margin: a page beating another by 0.2 places has not
+		// settled anything, and calling that "already answers it better" tells
+		// somebody to leave alone a page that is not actually winning.
 		let verdict = "add";
-		if (better && better.position <= position) verdict = "elsewhere";
+		if (better && better.position < position - LEVEL_MARGIN) verdict = "elsewhere";
 		else if (better) verdict = "strengthen";
 
 		gaps.push({
@@ -170,33 +203,41 @@ export function findGaps(queries, page, { path = null, rankings = null } = {}) {
 	return gaps.sort((a, b) => b.weight - a.weight).slice(0, 8);
 }
 
-// One line a person can act on, per gap. The numbers are the argument -- the
-// point is not that a phrase is missing, it is that a specific number of
-// people saw this page offered for it and it does not mention it.
+// What was observed, and separately, what to actually do about it.
 //
-// The three verdicts lead somewhere genuinely different, and collapsing them
-// into "mention this phrase" is what made the first version wrong.
-export function describeGap(gap, path = "this page") {
+// Two fields rather than one paragraph, because they are different kinds of
+// sentence and the first version blurred them into a shrug. "The work belongs
+// there, not here" is not an instruction -- it does not say what work, on
+// which words, or what to do afterwards. Whoever reads this has a page open
+// and wants to know what to type.
+export function describeGap(gap) {
 	const shown = gap.impressions.toLocaleString();
-	const missing = gap.missing.map((word) => `“${word}”`).join(", ");
-	const seen = `Google showed this page ${shown} times for “${gap.query}” at position ${gap.position.toFixed(1)}`;
+	return `Google showed this page ${shown} times for “${gap.query}”, at position ${gap.position.toFixed(1)}.`;
+}
+
+export function fixForGap(gap) {
+	const phrase = `“${gap.query}”`;
 
 	if (gap.verdict === "elsewhere") {
 		return (
-			`${seen}, but ${gap.rival.path} already answers it better at position ${gap.rival.position.toFixed(1)}. ` +
-			`Nothing to do here — adding ${missing} to this page would only set the two competing.`
+			`Nothing to do. ${gap.rival.path} is the page for this and already does better at position ` +
+			`${gap.rival.position.toFixed(1)}. Putting ${phrase} in this page's title would set your own two pages ` +
+			`competing for the same result.`
 		);
 	}
 
 	if (gap.verdict === "strengthen") {
+		const level = Math.abs(gap.rival.position - gap.position) < LEVEL_MARGIN;
 		return (
-			`${seen}. ${gap.rival.path} is the page that should own this and is behind at position ` +
-			`${gap.rival.position.toFixed(1)} — the work belongs there, not here. Linking to it from this page helps too.`
+			`${gap.rival.path} is the page for this and is ${level ? `neck and neck with this one at ${gap.rival.position.toFixed(1)}` : `further back at ${gap.rival.position.toFixed(1)}`}. ` +
+			`Open ${gap.rival.path}, and make sure the words ${phrase} appear in its page title, its description and its ` +
+			`main heading. Then add a link to it from this page, using those words as the link text rather than “click here”.`
 		);
 	}
 
+	const missing = gap.missing.map((word) => `“${word}”`).join(" and ");
 	return (
-		`${seen}, no other page on the site ranks for it, and this page's title, description and heading never say ` +
-		`${missing}. Either work them in here, or it may deserve a page of its own.`
+		`No page on the site is about this. Either work ${missing} into this page's title and description, or — since ` +
+		`${gap.impressions.toLocaleString()} people a month search it and nothing here covers it — give it a page of its own.`
 	);
 }

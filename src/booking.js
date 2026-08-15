@@ -213,21 +213,20 @@ async function bookScheduledSlot(env, ctx, f, sourceLabel, opts) {
 	const pricing = opts.pricing || {};
 
 	// f.service is already the human label (index.js sets it from
-	// SERVICE_LABELS before calling in) -- fold the chosen modifier and price
-	// into the same "Service:" line rather than emitting it twice.
-	const serviceLine =
-		!pricing.quote && pricing.modifierLabel ? `Service: ${f.service} (${pricing.modifierLabel})` : `Service: ${f.service}`;
+	// SERVICE_LABELS before calling in) -- fold the chosen modifier in so the
+	// service and what was picked read as one line. No "Service:" prefix: this
+	// is the job's headline in ServiceM8, so it's just the service itself.
+	const serviceLine = !pricing.quote && pricing.modifierLabel ? `${f.service} (${pricing.modifierLabel})` : f.service;
 	const descPriceLine = pricing.quote
 		? "Customer requested a CUSTOM QUOTE (no fixed price) — please quote."
 		: pricing.amount != null
 			? `Fixed online price: $${pricing.amount} inc GST`
 			: "";
 
-	// Same description shape the lead path builds (source + service + preferred
-	// + notes), with the price line folded in so staff see it at a glance.
-	const description = [sourceLabel, serviceLine, descPriceLine, f.date || f.time ? `Preferred: ${[f.date, f.time].filter(Boolean).join(" ")}` : "", "", f.message || "(no additional notes)"]
-		.filter((l) => l !== "")
-		.join("\n");
+	// Service first (it's the headline), then price, then where it came from.
+	// No "Preferred" line on this path -- the slot is already booked in, so the
+	// scheduled time on the job is the answer and a preferred date just muddies it.
+	const description = [serviceLine, descPriceLine, sourceLabel, "", f.message || "(no additional notes)"].filter((l) => l !== "").join("\n");
 
 	const confirmedTime = formatConfirmedTime(slot.startIso);
 	const id = crypto.randomUUID();

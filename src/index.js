@@ -713,7 +713,11 @@ function editorLauncherHtml({ editing, previewing }) {
 	const mode = editing ? "edit" : previewing ? "preview" : "browse";
 	return (
 		`<div data-tcb-injected data-tcb-editor="root" data-tcb-mode="${mode}">` +
-		`<link rel="stylesheet" href="/assets/css/editor.css?v=1">` +
+	// The version is bumped once here to get past copies already frozen in
+		// browsers by the old immutable rule -- a year-long cache entry cannot be
+		// revalidated away, only stepped around with a different URL. The
+		// no-cache rule in _headers is what stops it happening again.
+		`<link rel="stylesheet" href="/assets/css/editor.css?v=2">` +
 		`<script src="/assets/js/editor.js?v=1" type="module"></script>` +
 		`</div>`
 	);

@@ -934,9 +934,14 @@ class Editor {
 		for (const row of rows) {
 			const pending = row.draft !== null && row.draft !== undefined;
 			const value = pending ? row.draft : row.published;
+			// A synced row is live *and* written into the files, which is the
+			// end state -- worth distinguishing from one that is only live.
+			const inCode = !pending && row.synced_at;
+			const tagText = pending ? "Draft" : inCode ? "In code" : "Live";
+			const tagClass = pending ? "tcb-tag-draft" : inCode ? "tcb-tag-code" : "tcb-tag-live";
 			list.appendChild(
 				el("div", { class: "tcb-change" }, [
-					el("span", { class: `tcb-tag ${pending ? "tcb-tag-draft" : "tcb-tag-live"}`, text: pending ? "Draft" : "Live" }),
+					el("span", { class: `tcb-tag ${tagClass}`, text: tagText }),
 					el("div", { class: "tcb-change-body" }, [
 						el("p", { class: "tcb-change-was", text: row.original || "(page setting)" }),
 						el("p", {
@@ -966,7 +971,65 @@ class Editor {
 			);
 		}
 
-		this.openDialog("Changes on this page", [list], null, { confirmLabel: null, cancelLabel: "Close" });
+		this.openDialog("Changes on this page", [list, this.buildSyncPanel()], null, {
+			confirmLabel: null,
+			cancelLabel: "Close",
+		});
+	}
+
+	// "Sync to code" lives here rather than in the toolbar for two reasons: the
+	// toolbar is already full, and this acts on every published edit across the
+	// whole site, not just this page -- so it belongs next to the change list
+	// rather than next to the per-page Publish button.
+	buildSyncPanel() {
+		const status = el("p", { class: "tcb-hint" });
+		const button = el("button", { type: "button", class: "tcb-btn", text: "Sync to code" });
+
+		const setBusy = (busy, label) => {
+			button.disabled = busy;
+			button.textContent = label || "Sync to code";
+		};
+
+		button.addEventListener("click", async () => {
+			setBusy(true, "Syncing…");
+			status.className = "tcb-hint";
+			status.textContent = "Writing your published changes into the site's code…";
+			try {
+				const result = await api("sync", { method: "POST", body: JSON.stringify({}) });
+				if (!result.files) {
+					status.textContent = result.message || "Everything is already in the code.";
+				} else {
+					status.textContent = `Done — ${result.edits} ${result.edits === 1 ? "change" : "changes"} written into ${
+						result.files
+					} ${result.files === 1 ? "file" : "files"}. The site itself doesn't change; the code just caught up.`;
+				}
+				if (result.problems && result.problems.length) {
+					// Anything unmatched is left live on purpose, so say so rather
+					// than reporting a clean sweep.
+					status.className = "tcb-hint tcb-hint-warn";
+					status.textContent += ` ${result.problems.length} ${
+						result.problems.length === 1 ? "change was" : "changes were"
+					} left alone because the wording in the code had already been altered by hand — they're still live on the site.`;
+				}
+			} catch (error) {
+				status.className = "tcb-hint tcb-hint-warn";
+				status.textContent = error.message;
+			} finally {
+				setBusy(false);
+			}
+		});
+
+		return el("div", { class: "tcb-sync" }, [
+			el("p", { class: "tcb-sync-title", text: "Keep the code in step" }),
+			el("p", {
+				class: "tcb-hint",
+				text:
+					"Your published changes are live already. This folds them into the site's underlying files so the two " +
+					"don't drift apart. It changes nothing visitors can see — run it whenever you think of it.",
+			}),
+			button,
+			status,
+		]);
 	}
 
 	// -- publishing -----------------------------------------------------------

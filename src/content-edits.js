@@ -30,6 +30,8 @@ import {
 	META_DESCRIPTION_ADDRESS,
 } from "../assets/js/content-address.js";
 import { decodeEntities, escapeHtmlText } from "./html-entities.js";
+import { bakeEdits, pathToFile } from "./bake-edits.js";
+import { isConfigured, SETUP_MESSAGE, readFile, commitFiles, decodeBase64Utf8 } from "./github-sync.js";
 
 const TABLE_DDL = `CREATE TABLE IF NOT EXISTS content_edits (
   path         TEXT NOT NULL,
@@ -41,8 +43,12 @@ const TABLE_DDL = `CREATE TABLE IF NOT EXISTS content_edits (
   updated_by   TEXT NOT NULL,
   updated_at   INTEGER NOT NULL,
   published_at INTEGER,
+  synced_at    INTEGER,
   PRIMARY KEY (path, address)
 )`;
+
+// Added after the table shipped, so existing deployments need it bolted on.
+const TABLE_COLUMNS = [["synced_at", "INTEGER"]];
 
 // Published copy shows up within this long at the outside. Every HTML page
 // view would otherwise cost a D1 round trip, which is a real latency tax on
@@ -78,6 +84,16 @@ function invalidateCaches() {
 async function ensureTable(env) {
 	if (tableReady) return;
 	await env.DB.prepare(TABLE_DDL).run();
+	// CREATE TABLE IF NOT EXISTS does nothing for a table that already exists,
+	// so columns added later have to be bolted on separately. Duplicates throw
+	// and are ignored -- there is no "ADD COLUMN IF NOT EXISTS" in SQLite.
+	for (const [column, type] of TABLE_COLUMNS) {
+		try {
+			await env.DB.prepare(`ALTER TABLE content_edits ADD COLUMN ${column} ${type}`).run();
+		} catch (error) {
+			if (!String(error && error.message).includes("duplicate column")) throw error;
+		}
+	}
 	tableReady = true;
 	tableMissingUntil = 0;
 }
@@ -401,7 +417,7 @@ export async function handleContentApi(request, url, env, session) {
 		const path = normalisePath(url.searchParams.get("path") || "/");
 		await ensureTable(env);
 		const result = await env.DB.prepare(
-			"SELECT address, kind, original, draft, published, updated_by, updated_at, published_at FROM content_edits WHERE path = ? ORDER BY updated_at DESC"
+			"SELECT address, kind, original, draft, published, updated_by, updated_at, published_at, synced_at FROM content_edits WHERE path = ? ORDER BY updated_at DESC"
 		)
 			.bind(path)
 			.all();
@@ -513,6 +529,85 @@ export async function handleContentApi(request, url, env, session) {
 		return json({ exportedAt: Date.now(), edits: result.results || [] });
 	}
 
+	// One-click "Sync to code": bakes every published edit into the HTML files
+	// on GitHub and pushes a single commit. See src/github-sync.js for why the
+	// Worker does this itself rather than handing it to a scheduled job.
+	if (route === "sync" && request.method === "POST") {
+		if (!isConfigured(env)) return json({ error: SETUP_MESSAGE }, 501);
+		await ensureTable(env);
+
+		const result = await env.DB.prepare(
+			"SELECT path, address, original, published FROM content_edits WHERE published IS NOT NULL AND synced_at IS NULL ORDER BY path, address"
+		).all();
+		const rows = result.results || [];
+		if (!rows.length) return json({ ok: true, files: 0, edits: 0, message: "Everything is already in the code." });
+
+		const branch = env.GITHUB_BRANCH || "main";
+		const byPath = new Map();
+		for (const row of rows) {
+			if (!byPath.has(row.path)) byPath.set(row.path, []);
+			byPath.get(row.path).push(row);
+		}
+
+		const files = [];
+		const problems = [];
+		const synced = [];
+
+		for (const [pagePath, edits] of byPath) {
+			const filePath = pathToFile(pagePath);
+			let file;
+			try {
+				file = await readFile(env, filePath, branch);
+			} catch (error) {
+				problems.push(`${pagePath}: could not read ${filePath} (${error.status || "error"})`);
+				continue;
+			}
+
+			const html = decodeBase64Utf8(file.content);
+			const { html: updated, applied, missing } = bakeEdits(html, new Map(edits.map((e) => [e.address, e.published])));
+
+			for (const address of missing) {
+				const edit = edits.find((candidate) => candidate.address === address);
+				// Left unsynced on purpose, so the override keeps serving the live
+				// site and the mismatch stays visible instead of being swallowed.
+				problems.push(`${pagePath}: could not find ${JSON.stringify(edit ? edit.original : address)} in the file`);
+			}
+			if (updated !== html) files.push({ path: filePath, content: updated });
+			for (const address of applied) synced.push({ path: pagePath, address });
+		}
+
+		if (!files.length) {
+			return json({ ok: true, files: 0, edits: 0, problems, message: "Nothing needed changing in the code." });
+		}
+
+		let commit;
+		try {
+			commit = await commitFiles(
+				env,
+				branch,
+				files,
+				`Sync published copy edits\n\n${synced.length} ${synced.length === 1 ? "edit" : "edits"} across ${files.length} ${
+					files.length === 1 ? "file" : "files"
+				}, from the visual editor.`
+			);
+		} catch (error) {
+			console.error("Content sync commit failed:", error && (error.stack || error.message));
+			return json({ error: `Could not push the commit: ${error.message}` }, 502);
+		}
+
+		// Marked, never deleted -- and this is the ordering that matters. The
+		// commit only reaches visitors once Cloudflare finishes redeploying,
+		// which takes a minute or two. Deleting the overrides now would leave a
+		// window where the files are not live yet and the overrides are already
+		// gone, so the site would briefly serve the *old* wording. Marked rows
+		// carry on applying, become inert the moment the deploy lands (their
+		// original text is no longer in the file, so they match nothing), and
+		// are harmless from then on.
+		await markEditsSynced(env, synced);
+
+		return json({ ok: true, files: files.length, edits: synced.length, commit, problems });
+	}
+
 	// Called by scripts/sync-content-edits.js once it has written the edits
 	// into the HTML files and the change is committed. Dropping the rows is
 	// tidiness rather than correctness -- a baked-in edit no longer matches
@@ -521,24 +616,30 @@ export async function handleContentApi(request, url, env, session) {
 	if (route === "mark-synced" && request.method === "POST") {
 		const body = await readJsonBody(request);
 		if (!body || !Array.isArray(body.entries)) return json({ error: "Invalid request." }, 400);
-		const cleared = await clearSyncedEdits(env, body.entries);
+		const cleared = await markEditsSynced(env, body.entries);
 		return json({ ok: true, cleared });
 	}
 
 	return json({ error: "Not found." }, 404);
 }
 
-// Clearing overrides after they have been baked into the HTML files. The
-// sync script reports exactly which addresses it wrote, and only those are
-// dropped -- anything it could not match stays put so the site keeps showing
-// the edit until the mismatch is sorted out.
-export async function clearSyncedEdits(env, entries) {
+// Records that an edit's wording now lives in the HTML file as well.
+//
+// Deliberately a flag rather than a delete. A synced override carries on
+// applying, which is what covers the gap between the commit landing and the
+// deploy going out; once the file is live it matches nothing and costs a map
+// lookup. Only addresses that were actually written are marked -- anything
+// the bake could not match stays unsynced, so the site keeps showing it and
+// the mismatch stays visible.
+export async function markEditsSynced(env, entries) {
 	if (!Array.isArray(entries) || !entries.length) return 0;
 	await ensureTable(env);
+	const now = Date.now();
 	const statements = entries
 		.filter((entry) => entry && typeof entry.path === "string" && typeof entry.address === "string")
 		.map((entry) =>
-			env.DB.prepare("DELETE FROM content_edits WHERE path = ? AND address = ? AND published IS NOT NULL").bind(
+			env.DB.prepare("UPDATE content_edits SET synced_at = ? WHERE path = ? AND address = ? AND published IS NOT NULL").bind(
+				now,
 				normalisePath(entry.path),
 				entry.address
 			)

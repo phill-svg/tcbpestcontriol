@@ -95,6 +95,98 @@ export const SKIPPED_ELEMENTS = new Set(["script", "style", "noscript", "svg", "
 // injection would disagree.
 export const IGNORED_SUBTREE_ATTR = "data-tcb-injected";
 
+// ---------------------------------------------------------------------------
+// Styling a run of text
+// ---------------------------------------------------------------------------
+
+// A styled run is addressed by the same content hash as its text, in its own
+// namespace, so a single sentence can carry both a wording change and a
+// styling change without the two colliding.
+export function styleAddress(text, ordinal) {
+	return `s:${hashValue(normaliseText(text))}:${ordinal}`;
+}
+
+// The complete set of properties the editor may set, each with a pattern its
+// value must match exactly. Nothing outside this table can ever reach the
+// page: values are not passed through, they are re-built from what matched.
+//
+// Every property here is non-compounding on purpose. The style is applied by
+// wrapping the run in a <span>, and if a run somehow ended up wrapped twice,
+// a relative unit like `em` would multiply -- text would grow a little every
+// time. `rem` is relative to the document root, so a double wrap is merely
+// redundant rather than wrong. Colour, weight, style and family cannot
+// compound at all.
+export const STYLE_PROPERTIES = {
+	// Order matters: it is the order they are written out in, which keeps the
+	// stored string canonical so the same styling always compares equal.
+	"font-family": /^var\(--font-(sans|display|mono)\)$/,
+	"font-size": /^(0\.[5-9]\d?|[1-7](\.\d\d?)?|8)rem$/,
+	"font-weight": /^(400|500|600|700)$/,
+	"font-style": /^(normal|italic)$/,
+	"text-transform": /^(none|uppercase)$/,
+	color: /^#([0-9a-f]{3}|[0-9a-f]{6})$/i,
+};
+
+// Parses a declaration string and rebuilds it from only what is recognised.
+// Anything unknown, malformed, or carrying stray punctuation is dropped
+// rather than corrected, so the result is always a strict subset of the
+// table above -- which is what makes it safe to write into a style attribute.
+export function sanitiseStyle(css) {
+	const found = new Map();
+	for (const part of String(css == null ? "" : css).split(";")) {
+		const colon = part.indexOf(":");
+		if (colon === -1) continue;
+		const property = part.slice(0, colon).trim().toLowerCase();
+		const value = part.slice(colon + 1).trim();
+		const pattern = STYLE_PROPERTIES[property];
+		if (!pattern || !pattern.test(value)) continue;
+		found.set(property, value);
+	}
+	return Object.keys(STYLE_PROPERTIES)
+		.filter((property) => found.has(property))
+		.map((property) => `${property}:${found.get(property)}`)
+		.join(";");
+}
+
+// Convenience pair for the editor: CSS text in, property map out, and back.
+// Both run through sanitiseStyle, so a map built from either is always
+// canonical and always inside the allowlist.
+export function parseStyleParts(css) {
+	const parts = {};
+	for (const declaration of sanitiseStyle(css).split(";")) {
+		if (!declaration) continue;
+		const colon = declaration.indexOf(":");
+		parts[declaration.slice(0, colon)] = declaration.slice(colon + 1);
+	}
+	return parts;
+}
+
+export function buildStyleString(parts) {
+	return sanitiseStyle(
+		Object.entries(parts || {})
+			.map(([property, value]) => `${property}:${value}`)
+			.join(";")
+	);
+}
+
+// The colours offered in the editor: the site's own palette, plus black and
+// white. Free-form hex is accepted too -- this is just what the swatches show.
+export const STYLE_COLOURS = [
+	{ label: "Default", value: "" },
+	{ label: "Red", value: "#e5251a" },
+	{ label: "Deep red", value: "#c41613" },
+	{ label: "Black", value: "#111114" },
+	{ label: "Grey", value: "#5a5a62" },
+	{ label: "White", value: "#ffffff" },
+];
+
+export const STYLE_FONTS = [
+	{ label: "Default", value: "" },
+	{ label: "Body", value: "var(--font-sans)" },
+	{ label: "Display", value: "var(--font-display)" },
+	{ label: "Mono", value: "var(--font-mono)" },
+];
+
 // Page paths are the other half of an edit's identity. Normalise them the
 // same way the site's own routing does (no trailing slash, no query string,
 // no fragment) so "/about", "/about/" and "/about?x=1" are one page and not

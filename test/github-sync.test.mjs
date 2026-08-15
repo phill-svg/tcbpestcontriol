@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { isConfigured, commitFiles, readFile, decodeBase64Utf8, SETUP_MESSAGE } from "../src/github-sync.js";
+import { isConfigured, missingConfig, setupMessage, commitFiles, readFile, decodeBase64Utf8 } from "../src/github-sync.js";
 
 const ENV = { GITHUB_TOKEN: "test-token", GITHUB_REPO: "owner/repo" };
 
@@ -52,12 +52,22 @@ test("isConfigured needs both the token and the repo", () => {
 	assert.equal(isConfigured(ENV), true);
 });
 
-test("the setup message tells a non-developer what to actually do", () => {
-	// This string is shown verbatim in the editor when the token is missing,
-	// so it has to name the secret and where it goes.
-	assert.match(SETUP_MESSAGE, /GITHUB_TOKEN/);
-	assert.match(SETUP_MESSAGE, /GITHUB_REPO/);
-	assert.match(SETUP_MESSAGE, /Contents/i);
+test("the setup message names only the piece that is actually missing", () => {
+	// Saying "not set up" when one of the two is already in place sends people
+	// to redo the part that was already right -- which is exactly what happened
+	// the first time this was used for real.
+	assert.deepEqual(missingConfig({}), ["GITHUB_TOKEN", "GITHUB_REPO"]);
+	assert.deepEqual(missingConfig({ GITHUB_TOKEN: "x" }), ["GITHUB_REPO"]);
+	assert.deepEqual(missingConfig({ GITHUB_TOKEN: "x", GITHUB_REPO: "o/r" }), []);
+
+	const tokenOnly = setupMessage(["GITHUB_TOKEN"]);
+	assert.match(tokenOnly, /GITHUB_TOKEN/);
+	assert.match(tokenOnly, /Contents/i);
+	assert.doesNotMatch(tokenOnly, /fine-grained[\s\S]*GITHUB_REPO should already/, "must not explain the part that is fine");
+
+	const repoOnly = setupMessage(["GITHUB_REPO"]);
+	assert.match(repoOnly, /GITHUB_REPO/);
+	assert.match(repoOnly, /older deployment/, "the likely cause is a stale deploy, so say so");
 });
 
 test("commitFiles builds one commit from blobs, tree, commit, ref", async () => {

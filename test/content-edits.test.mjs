@@ -10,6 +10,10 @@ import {
 	isSafeHref,
 	isSafeImageSrc,
 	previewableImagePath,
+	sanitiseStyle,
+	parseStyleParts,
+	buildStyleString,
+	styleAddress,
 } from "../assets/js/content-address.js";
 import { decodeEntities, escapeHtmlText } from "../src/html-entities.js";
 import { bakeEdits, pathToFile } from "../src/bake-edits.js";
@@ -259,6 +263,67 @@ test("commented-out markup does not steal an ordinal", () => {
 	assert.deepEqual(missing, []);
 	assert.match(html, /<!-- <h1>Fast spider control<\/h1> -->/, "the comment is left alone");
 	assert.match(html, /<h1>Rapid spider control<\/h1>/, "the live heading is the one that changed");
+});
+
+// ---------------------------------------------------------------------------
+// Styling a run of text
+// ---------------------------------------------------------------------------
+
+test("sanitiseStyle keeps only what the allowlist recognises", () => {
+	assert.equal(sanitiseStyle("color:#e5251a"), "color:#e5251a");
+	assert.equal(sanitiseStyle("font-size:2rem;color:#fff"), "font-size:2rem;color:#fff");
+	assert.equal(sanitiseStyle("font-weight:700;font-style:italic"), "font-weight:700;font-style:italic");
+	assert.equal(sanitiseStyle("font-family:var(--font-display)"), "font-family:var(--font-display)");
+	assert.equal(sanitiseStyle("text-transform:uppercase"), "text-transform:uppercase");
+});
+
+test("sanitiseStyle output is canonical regardless of input order", () => {
+	// Same styling has to compare equal however it was typed, or the change
+	// list would show edits that changed nothing.
+	assert.equal(sanitiseStyle("color:#fff;font-size:2rem"), sanitiseStyle("font-size:2rem;  COLOR : #fff "));
+});
+
+test("sanitiseStyle drops anything not on the allowlist", () => {
+	// The list is deliberately tiny. Everything else is discarded rather than
+	// corrected, so what gets stored is always a subset of what is permitted.
+	assert.equal(sanitiseStyle("position:fixed;top:0"), "");
+	assert.equal(sanitiseStyle("background:url(https://evil.example.com/x)"), "");
+	assert.equal(sanitiseStyle("display:none"), "");
+	assert.equal(sanitiseStyle("font-size:99rem"), "", "out of range");
+	assert.equal(sanitiseStyle("font-size:2px"), "", "only rem, which cannot compound");
+	assert.equal(sanitiseStyle("font-size:2em"), "", "em would multiply if ever applied twice");
+	assert.equal(sanitiseStyle("color:red"), "", "named colours are not in the pattern");
+	assert.equal(sanitiseStyle("font-family:Comic Sans"), "", "only the site's own fonts");
+	assert.equal(sanitiseStyle(""), "");
+	assert.equal(sanitiseStyle(null), "");
+});
+
+test("a style value cannot break out of the attribute or inject a rule", () => {
+	// The values never reach the page as written -- they are rebuilt from what
+	// matched -- so an injection attempt loses everything, not just the bad part.
+	assert.equal(sanitiseStyle('color:#fff" onload="alert(1)'), "");
+	assert.equal(sanitiseStyle("color:#fff;}body{display:none"), "color:#fff");
+	assert.equal(sanitiseStyle("color:expression(alert(1))"), "");
+	assert.equal(sanitiseStyle("font-family:var(--x);background:url(javascript:alert(1))"), "");
+	assert.doesNotMatch(sanitiseStyle('font-size:2rem;color:#fff"><script>'), /[<>"]/);
+});
+
+test("style parts round-trip through the editor's map form", () => {
+	const css = "font-family:var(--font-display);font-size:2.5rem;font-weight:700;color:#e5251a";
+	const parts = parseStyleParts(css);
+	assert.equal(parts["font-size"], "2.5rem");
+	assert.equal(parts.color, "#e5251a");
+	assert.equal(buildStyleString(parts), css, "rebuilding must give back the canonical string");
+	// A map carrying junk is sanitised on the way back out.
+	assert.equal(buildStyleString({ ...parts, position: "fixed" }), css);
+});
+
+test("the API stores styling only after sanitising it", () => {
+	const parsed = parseAddress("s:abc:0");
+	assert.deepEqual(parsed, { kind: "style" });
+	assert.equal(validateValue(parsed, "font-size:2rem;position:fixed").value, "font-size:2rem");
+	assert.equal(validateValue(parsed, "position:fixed").value, "", "nothing recognised means no styling");
+	assert.equal(validateValue(parsed, "").value, "", "clearing styling is allowed");
 });
 
 test("an empty text value is a deletion, not an error", () => {

@@ -1594,6 +1594,11 @@ class Editor {
 											]),
 									  ]
 									: []),
+								// Only where the work is on this page. A Fix
+								// button that quietly rewrote a different page
+								// than the one on screen would be the one thing
+								// in this editor you could not see happening.
+								...(gap.verdict === "add" ? [this.buildGapFix(gap)] : []),
 							])
 						);
 					}
@@ -1673,6 +1678,141 @@ class Editor {
 			status,
 			results,
 		]);
+	}
+
+	// "Fix this" on a single measured gap.
+	//
+	// It does the typing, not the deciding. Options come back, one gets
+	// clicked, and it lands as a draft like any other edit -- reviewable in
+	// the change list, revertable, and invisible to visitors until published.
+	// Nothing here writes to the live site, which matters more than usual
+	// given this feature has twice given confidently wrong advice.
+	//
+	// Title first, then description, then the main heading. That is the order
+	// of weight, and the heading is the one with room left when a phrase will
+	// not fit into 62 characters alongside everything a title already carries.
+	buildGapFix(gap) {
+		const status = el("p", { class: "tcb-hint" });
+		const options = el("div", { class: "tcb-suggestions" });
+		const button = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Fix this" });
+
+		const WHERE = { title: "page title", description: "description", heading: "main heading" };
+
+		button.addEventListener("click", async () => {
+			button.disabled = true;
+			options.replaceChildren();
+			status.className = "tcb-hint";
+			status.textContent = "Working out where the words fit…";
+
+			let result;
+			try {
+				result = await api("/api/seo/fix", {
+					method: "POST",
+					body: JSON.stringify({ path: PATH, query: gap.query }),
+				});
+			} catch (error) {
+				button.disabled = false;
+				status.className = "tcb-hint tcb-hint-warn";
+				status.textContent = error.message;
+				return;
+			}
+
+			button.disabled = false;
+			button.textContent = "Try again";
+
+			if (!result.kind || !result.candidates.length) {
+				status.className = "tcb-hint tcb-hint-warn";
+				status.textContent =
+					"Nothing came back that both used the words and passed the checks. Worth trying again, or writing it yourself.";
+				return;
+			}
+
+			// Say where it landed and why, because "it went in the heading"
+			// is surprising unless you know the title was tried first.
+			const skipped = (result.skipped || []).map((entry) => WHERE[entry.kind]).filter(Boolean);
+			const lead = skipped.length
+				? `The words would not fit in the ${skipped.join(" or the ")}, so these are for the ${WHERE[result.kind]}.`
+				: `Suggestions for the ${WHERE[result.kind]}.`;
+
+			// A heading built out of several pieces cannot be replaced in one
+			// move without losing what splits it. On this site that is a line
+			// break on one page and a coloured phrase on another -- both
+			// deliberate, and neither worth destroying to save a click. So the
+			// wording is still offered; applying it is left to a human who can
+			// see which part is which.
+			const splitHeading = result.kind === "heading" && !this.headingEntry();
+			status.textContent = splitHeading
+				? `${lead} Your heading is in more than one piece — there is a line break or a coloured phrase in it — so this can't be dropped in without flattening that. Click the heading on the page and edit it by hand:`
+				: `${lead} Click one to use it.`;
+
+			for (const candidate of result.candidates) {
+				if (splitHeading) {
+					options.appendChild(el("p", { class: "tcb-suggestion tcb-suggestion-plain", text: candidate }));
+					continue;
+				}
+				const option = el("button", { type: "button", class: "tcb-suggestion" }, [
+					el("span", { class: "tcb-suggestion-text", text: candidate }),
+					el("span", { class: "tcb-suggestion-count", text: `${candidate.length}` }),
+				]);
+				option.addEventListener("click", async () => {
+					option.disabled = true;
+					try {
+						await this.applyFix(result.kind, candidate);
+						status.className = "tcb-hint";
+						status.textContent = `Saved as a draft on the ${WHERE[result.kind]}. Publish when you're ready.`;
+						options.replaceChildren();
+					} catch (error) {
+						option.disabled = false;
+						status.className = "tcb-hint tcb-hint-warn";
+						status.textContent = error.message;
+					}
+				});
+				options.appendChild(option);
+			}
+		});
+
+		return el("div", { class: "tcb-suggest-row" }, [button, status, options]);
+	}
+
+	// Applies one accepted suggestion. The title and description are metadata;
+	// the heading is ordinary page text and goes through the same save path as
+	// clicking on it and typing.
+	async applyFix(kind, value) {
+		if (kind === "title") {
+			await this.saveMeta(META_TITLE_ADDRESS, value, document.title || "");
+			document.title = value;
+			return;
+		}
+
+		if (kind === "description") {
+			const meta = document.querySelector('meta[name="description"]');
+			await this.saveMeta(META_DESCRIPTION_ADDRESS, value, (meta && meta.getAttribute("content")) || "");
+			if (meta) meta.setAttribute("content", value);
+			return;
+		}
+
+		const entry = this.headingEntry();
+		if (!entry) {
+			throw new Error("This page's main heading is split across several pieces, so it can't be replaced in one go. Click it and edit it directly.");
+		}
+		const previous = entry.node.nodeValue;
+		this.renderValue(entry, value);
+		await this.save(entry, value, previous);
+	}
+
+	// The editable text of the first <h1>, when it is a single piece.
+	//
+	// Several headings on this site wrap part of themselves in a span for the
+	// accent colour, which splits them into two text nodes with two separate
+	// addresses. Replacing one half would mangle the heading, so this returns
+	// nothing rather than guessing, and the caller says so plainly.
+	headingEntry() {
+		const heading = document.querySelector("h1");
+		if (!heading) return null;
+		const inside = [...this.entries.values()].filter(
+			(entry) => entry.kind === "text" && entry.node.parentElement && heading.contains(entry.node)
+		);
+		return inside.length === 1 ? inside[0] : null;
 	}
 
 	// Checks every page in sitemap.xml, a slice at a time.

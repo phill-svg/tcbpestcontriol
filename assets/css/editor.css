@@ -791,3 +791,10 @@ body.tcb-editing-mode {
 	border: 1px solid #e6e6ea;
 	border-radius: 0.35rem;
 }
+
+/* A suggestion that cannot be applied in one click — offered as wording to
+   copy rather than as a button, so it never looks clickable and inert. */
+.tcb-suggestion-plain {
+	cursor: default;
+	color: #3f3f46;
+}

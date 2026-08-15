@@ -143,6 +143,31 @@ It shows three things:
 - **Just off the first page** — searches where you sit around position 8 to 20.
   Google already thinks you are relevant and almost nobody is seeing you.
 
+And the most useful part: **searches this page is shown for but never
+mentions**. If Google has shown a page 2,340 times for "white ants canberra"
+and put it at position 12, and the page's title, description and heading never
+say "white ant", that is a gap worth closing. It is not a prediction — nothing
+here can tell you what will rank, and anything claiming to is guessing. It is
+two facts that both already exist, side by side.
+
+Those gaps are split three ways, because they lead somewhere different:
+
+- **Worth doing** — nothing else on the site ranks for it, so the words belong
+  on this page, or the subject may deserve a page of its own.
+- **Worth a look** — the right page exists but is behind this one. The work
+  belongs on that page; there is a link straight to it.
+- **No action** — another page already answers it better. Listed only so it is
+  clear why it is not in the first group. Adding those words here would set
+  two of your own pages competing for the same result, which is the thing to
+  avoid.
+
+That distinction matters. Your homepage gets shown for "bird control canberra"
+without ever saying "bird" — but you have a `/bird-control` page, and putting
+"bird" in the homepage title would make them fight each other rather than help.
+
+**Suggest one** uses the first group only. That is the difference between a
+suggestion that rewords what you have and one with a reason behind it.
+
 Google's own numbers stop two or three days short of today, so the window ends
 a few days back. That is Google, not a delay here.
 

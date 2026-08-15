@@ -1539,6 +1539,74 @@ class Editor {
 				])
 			);
 
+			// The strongest thing in this panel. Not an opinion about the
+			// wording and not a forecast: Google has already decided this page
+			// is a plausible answer for these phrases, and the page does not
+			// use the words. Both halves of that are observed.
+			if (page.gaps && page.gaps.length) {
+				// Split by what to actually do, because they lead somewhere
+				// genuinely different. Lumping them together was the first
+				// version's mistake: the homepage is shown for "bird control
+				// canberra" and never says "bird", but /bird-control answers
+				// it better, and working "bird" into the homepage would set
+				// the two competing.
+				const groups = [
+					{
+						verdict: "add",
+						level: "worth doing",
+						heading: "Searches this page is shown for that no page on the site is about:",
+					},
+					{
+						verdict: "strengthen",
+						level: "worth a look",
+						heading: "Searches where the right page exists but is not winning:",
+					},
+					{
+						verdict: "elsewhere",
+						level: "no action",
+						heading: "Searches another page already answers better:",
+					},
+				];
+
+				for (const group of groups) {
+					const rows = page.gaps.filter((gap) => gap.verdict === group.verdict);
+					if (!rows.length) continue;
+
+					// The instruction sits with the search it is about, rather
+					// than once at the bottom of the group. Each row is a
+					// different page to open and a different phrase to use, so
+					// a single shared line underneath could only be vague --
+					// which is exactly how the first version read.
+					const list = el("div", { class: "tcb-findings" });
+					for (const gap of rows) {
+						list.appendChild(
+							el("div", { class: "tcb-gap" }, [
+								el("p", { class: "tcb-finding-message", text: gap.sentence }),
+								el("p", { class: "tcb-finding-fix", text: gap.fix }),
+								...(gap.rival
+									? [
+											el("div", { class: "tcb-scan-pages" }, [
+												el("a", {
+													class: "tcb-scan-link",
+													href: `${gap.rival.path}?edit=1`,
+													text: `Open ${gap.rival.path}`,
+												}),
+											]),
+									  ]
+									: []),
+							])
+						);
+					}
+
+					results.appendChild(
+						el("div", { class: `tcb-finding tcb-finding-${group.verdict === "add" ? "problem" : "worth-a-look"}` }, [
+							el("span", { class: "tcb-finding-level", text: group.level }),
+							el("div", {}, [el("p", { class: "tcb-finding-message", text: group.heading }), list]),
+						])
+					);
+				}
+			}
+
 			// Where rewriting a title would pay. This is the whole reason the
 			// panel exists: the shortlist is actionable in this editor.
 			if (site.opportunities.missed.length) {
@@ -1847,6 +1915,14 @@ class Editor {
 		const status = el("p", { class: "tcb-hint" });
 		const options = el("div", { class: "tcb-suggestions" });
 		const button = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Suggest one" });
+		// Somewhere to push back. Without this the only response to a weak
+		// suggestion is to press the button again and hope, which is a poor
+		// way to spend anyone's afternoon.
+		const steer = el("input", {
+			type: "text",
+			class: "tcb-input tcb-input-small",
+			placeholder: "Anything to mention? e.g. mention Tuggeranong, lead with termites",
+		});
 
 		button.addEventListener("click", async () => {
 			button.disabled = true;
@@ -1856,7 +1932,10 @@ class Editor {
 
 			let result;
 			try {
-				result = await api("/api/seo/suggest", { method: "POST", body: JSON.stringify({ kind, path: PATH }) });
+				result = await api("/api/seo/suggest", {
+					method: "POST",
+					body: JSON.stringify({ kind, path: PATH, steer: steer.value.trim() }),
+				});
 			} catch (error) {
 				button.disabled = false;
 				status.className = "tcb-hint tcb-hint-warn";
@@ -1878,9 +1957,12 @@ class Editor {
 				return;
 			}
 
-			status.textContent = result.usedSearches
-				? `Written from this page and the ${result.usedSearches} searches people used to find it. Click one to use it.`
-				: "Written from what this page already says. Click one to use it.";
+			// Says what it was actually working from, because "it just made
+			// something up" is the reasonable default assumption otherwise.
+			const from = [`this page`, `${result.usedExamples} others for the house style`];
+			if (result.usedSearches) from.push(`the ${result.usedSearches} searches people used to find it`);
+			if (result.usedGaps) from.push(`${result.usedGaps} phrases Google shows it for but it never mentions`);
+			status.textContent = `Written from ${from.join(", ")}. Click one to use it.`;
 
 			for (const candidate of result.candidates) {
 				const option = el("button", { type: "button", class: "tcb-suggestion" }, [
@@ -1894,9 +1976,23 @@ class Editor {
 				});
 				options.appendChild(option);
 			}
+
+			// What was thrown away and why. Hidden behind a summary because it
+			// is not usually interesting -- but when the survivors are dull,
+			// the reason is often that the good ones broke the no-invention
+			// rule, and there is no way to know that without being shown.
+			if (result.rejected.length) {
+				const details = el("details", { class: "tcb-rejected" }, [
+					el("summary", { text: `${result.rejected.length} thrown out` }),
+					...result.rejected.map((entry) =>
+						el("p", { class: "tcb-hint", text: `“${entry.text}” — ${entry.reason}` })
+					),
+				]);
+				options.appendChild(details);
+			}
 		});
 
-		return el("div", { class: "tcb-suggest-row" }, [button, status, options]);
+		return el("div", { class: "tcb-suggest-row" }, [button, steer, status, options]);
 	}
 
 	async saveMeta(address, value, original) {

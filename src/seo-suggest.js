@@ -126,7 +126,20 @@ export function parseCandidates(raw) {
 		.filter(Boolean);
 }
 
-export function buildPrompt({ kind, page, queries = [], min, max }) {
+// `examples` are real title/description pairs from elsewhere on the same
+// site. They matter more than any instruction in the system prompt.
+//
+// The first version of this described the house style in words -- "write
+// plainly, like a tradesperson" -- and produced exactly the bland copy you
+// would expect, because that sentence describes a thousand different websites.
+// This site actually writes "Funnel-webs in the back garden. White-tails along
+// the skirting." and titles everything "<Thing> <Place> | TCB Pest Control
+// Canberra". No description of a voice conveys that; four samples of it do.
+//
+// They are read from the live site rather than kept in a constant here, so
+// the style tracks whatever the site currently does instead of freezing on
+// whatever it did the day this was written.
+export function buildPrompt({ kind, page, queries = [], examples = [], gaps = [], steer = "", min, max }) {
 	const searched = queries
 		.slice(0, 12)
 		.map((entry) => entry.key)
@@ -137,30 +150,57 @@ export function buildPrompt({ kind, page, queries = [], min, max }) {
 			? `a page title between ${min} and ${max} characters`
 			: `a meta description between ${min} and ${max} characters`;
 
+	const sample = examples
+		.map((example) => (kind === "title" ? example.title : example.description))
+		.filter(Boolean)
+		.slice(0, 4);
+
 	return [
 		{
 			role: "system",
 			content:
 				"You write page titles and meta descriptions for a pest control company's website in Canberra, Australia. " +
-				"Use Australian spelling. Write plainly, the way a tradesperson would speak, with no marketing superlatives. " +
+				"Use Australian spelling. Be concrete: name the pest, the suburb, the standard, the product, the thing that " +
+				"is actually done. Prefer a specific detail over an adjective — never write that a service is professional, " +
+				"trusted, reliable or expert. " +
 				"You may only use facts that appear in the page content you are given. Never invent numbers, prices, years " +
-				"in business, response times, licences, guarantees or awards. Reply with three options, one per line, and " +
+				"in business, response times, licences, guarantees or awards. Reply with six options, one per line, and " +
 				"nothing else — no numbering, no quotes, no explanation.",
 		},
 		{
 			role: "user",
 			content: [
 				`Write ${wanted} for this page.`,
+				...(sample.length
+					? [
+							"",
+							`Match the voice of these, which are real ${kind === "title" ? "titles" : "descriptions"} from elsewhere on this site:`,
+							...sample.map((text) => `- ${text}`),
+					  ]
+					: []),
 				"",
 				`Current title: ${page.title || "(none)"}`,
 				`Current description: ${page.description || "(none)"}`,
 				`Main heading: ${page.h1 || "(none)"}`,
 				"",
 				"Page content:",
-				String(page.body || "").slice(0, 1500),
+				String(page.body || "").slice(0, 1800),
 				...(searched.length
 					? ["", "People reached this page by searching for:", searched.join(", "), "", "Work the strongest of those phrases in where it reads naturally."]
 					: []),
+				// The sharpest instruction available, and the only one backed
+				// by evidence rather than judgement: Google is already
+				// offering this page for these phrases and the page does not
+				// use the words. Rewriting to close that is the one change
+				// here with an observed reason behind it.
+				...(gaps.length
+					? [
+							"",
+							"Google already shows this page for these searches, but the page never says the words in brackets. Work them in if they fit honestly:",
+							...gaps.slice(0, 5).map((gap) => `- ${gap.query} (missing: ${gap.missing.join(", ")}) — shown ${gap.impressions} times, position ${Math.round(gap.position)}`),
+					  ]
+					: []),
+				...(steer ? ["", `The person who owns this site asks specifically: ${String(steer).slice(0, 300)}`] : []),
 			].join("\n"),
 		},
 	];
@@ -169,10 +209,13 @@ export function buildPrompt({ kind, page, queries = [], min, max }) {
 // Returns { candidates, rejected } -- rejected is kept because a run where
 // everything was thrown away should say so rather than silently offering
 // nothing, which reads as a broken button.
-export async function suggest(env, { kind, page, queries = [], min, max, run } = {}) {
-	const messages = buildPrompt({ kind, page, queries, min, max });
+export async function suggest(env, { kind, page, queries = [], examples = [], gaps = [], steer = "", min, max, run } = {}) {
+	const messages = buildPrompt({ kind, page, queries, examples, gaps, steer, min, max });
 	const call = run || ((body) => env.AI.run(MODEL, body));
-	const result = await call({ messages, max_tokens: 400, temperature: 0.7 });
+	// Six asked for rather than three. Roughly half get thrown out by the
+	// checks below -- so asking for what should survive left the button
+	// frequently offering one bland option, or none.
+	const result = await call({ messages, max_tokens: 700, temperature: 0.8 });
 	const raw = typeof result === "string" ? result : result.response || "";
 
 	// The page's own words are the yardstick, including the title and
@@ -183,13 +226,72 @@ export async function suggest(env, { kind, page, queries = [], min, max, run } =
 
 	const candidates = [];
 	const rejected = [];
+	const seen = new Set();
 	for (const candidate of parseCandidates(raw)) {
+		// Models given a temperature and asked for six will hand back the same
+		// line twice. Three options where two are identical looks broken.
+		const fingerprint = normalise(candidate).replace(/[^a-z0-9 ]/g, "");
+		if (seen.has(fingerprint)) continue;
+		seen.add(fingerprint);
+
 		const verdict = validateSuggestion(candidate, { source, min, max, current });
 		if (verdict.ok) candidates.push(candidate);
 		else rejected.push({ text: candidate, reason: verdict.reason });
 	}
 
-	return { candidates, rejected };
+	return { candidates: candidates.slice(0, 4), rejected };
+}
+
+// Just the title and description, for gathering house-style examples. A far
+// cheaper read than extractPageSummary, which also collects every image and
+// link -- none of which a writing sample needs, and this runs against several
+// pages per suggestion.
+export async function extractMeta(response) {
+	const meta = { title: "", description: "" };
+	let inTitle = false;
+
+	const rewriter = new HTMLRewriter()
+		.on("title", {
+			element(element) {
+				inTitle = !meta.title;
+				try {
+					element.onEndTag(() => {
+						inTitle = false;
+					});
+				} catch {
+					inTitle = false;
+				}
+			},
+			text(chunk) {
+				if (inTitle) meta.title += chunk.text;
+			},
+		})
+		.on('meta[name="description"]', {
+			element(element) {
+				if (!meta.description) meta.description = element.getAttribute("content") || "";
+			},
+		});
+
+	await rewriter.transform(response).text();
+	meta.title = meta.title.trim();
+	return meta;
+}
+
+// Which pages to take writing samples from. Pages sharing a prefix are the
+// closest thing this site has to a section -- all the locations- pages read
+// alike, and a location page written in the voice of a service page reads
+// wrong. Falls back to a spread across the site when there is no sibling.
+export function examplePaths(paths, path, wanted = 4) {
+	const prefix = String(path || "").split("-")[0];
+	const others = paths.filter((candidate) => candidate !== path && candidate !== "/");
+	const siblings = others.filter((candidate) => candidate.split("-")[0] === prefix);
+	const pool = siblings.length >= wanted ? siblings : [...siblings, ...others.filter((c) => !siblings.includes(c))];
+	// Evenly spaced rather than the first few, which on this site would be
+	// four consecutive suburbs beginning with A.
+	const step = Math.max(1, Math.floor(pool.length / wanted));
+	const picked = [];
+	for (let at = 0; at < pool.length && picked.length < wanted; at += step) picked.push(pool[at]);
+	return picked;
 }
 
 // The page's own words, for grounding. Separate from extractPageSummary in

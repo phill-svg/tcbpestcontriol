@@ -16,6 +16,7 @@
 // service account by hand.
 
 import { accessToken, readServiceAccount } from "./google-auth.js";
+import { normalisePath } from "../assets/js/content-address.js";
 
 const API = "https://searchconsole.googleapis.com/webmasters/v3";
 const SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
@@ -179,9 +180,49 @@ export function opportunities({ pages = [], queries = [], siteCtr = 0 } = {}) {
 	return { missed, nearlyThere };
 }
 
+// Which pages of the site Google shows for which searches.
+//
+// Needed to tell three very different situations apart when a page is shown
+// for a phrase it does not mention: another page already answers it better
+// (leave well alone), another page should answer it and is behind (fix that
+// page), or nothing answers it (this page, or a new one). Without this the
+// only available advice is "put the words here", which on a site with a
+// dedicated page per pest is frequently the wrong answer.
+export async function rankings(token, site, window) {
+	const rows = await queryAnalytics(token, site, {
+		startDate: window.startDate,
+		endDate: window.endDate,
+		type: "web",
+		dimensions: ["query", "page"],
+		rowLimit: 1000,
+	});
+
+	const byQuery = {};
+	for (const entry of rows) {
+		const [query, pageUrl] = entry.keys || [];
+		if (!query || !pageUrl) continue;
+		let pagePath;
+		try {
+			pagePath = normalisePath(new URL(pageUrl).pathname);
+		} catch {
+			continue;
+		}
+		if (!byQuery[query]) byQuery[query] = [];
+		byQuery[query].push({
+			path: pagePath,
+			position: entry.position || 0,
+			impressions: entry.impressions || 0,
+			clicks: entry.clicks || 0,
+		});
+	}
+	return byQuery;
+}
+
 // Everything the panel needs, in one call. `path` narrows the query list to
-// one page, for the SEO check on the page being edited.
-export async function insights(env, { hostname, path = null, today = new Date() } = {}) {
+// one page, for the SEO check on the page being edited. `withRankings` adds
+// the site-wide query-to-page map, which is only worth the extra request when
+// a single page is being looked at.
+export async function insights(env, { hostname, path = null, today = new Date(), withRankings = false } = {}) {
 	const account = readServiceAccount(env.GOOGLE_SERVICE_ACCOUNT);
 	const token = await accessToken(account, SCOPE);
 
@@ -221,6 +262,7 @@ export async function insights(env, { hostname, path = null, today = new Date() 
 		totals: siteTotals,
 		queries: queries.sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions).slice(0, 25),
 		opportunities: opportunities({ pages, queries, siteCtr: siteTotals.ctr }),
+		rankings: withRankings ? await rankings(token, site, window).catch(() => null) : null,
 	};
 }
 

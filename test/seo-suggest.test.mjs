@@ -11,7 +11,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { validateSuggestion, parseCandidates, buildPrompt, suggest, numbersIn, claimsIn } from "../src/seo-suggest.js";
+import { validateSuggestion, parseCandidates, buildPrompt, suggest, numbersIn, claimsIn, examplePaths } from "../src/seo-suggest.js";
 
 const PAGE = {
 	title: "Termite Treatment Canberra | TCB Pest Control",
@@ -156,4 +156,101 @@ test("the word lists behave on ordinary prose", () => {
 	assert.deepEqual([...numbersIn("call 6255 1234 or 0400 000 000")], ["6255", "1234", "0400", "000"]);
 	assert.ok(claimsIn("We are fully licensed and insured").has("licensed"));
 	assert.ok(claimsIn("Termite inspections across Canberra").size === 0);
+});
+
+test("writing samples from the site are put in front of the model", () => {
+	// The first version described the house style in words and produced copy
+	// that could have belonged to any pest controller anywhere. This site
+	// writes "Funnel-webs in the back garden. White-tails along the skirting."
+	// No adjective conveys that; four samples of it do.
+	const examples = [
+		{ title: "Spider Control Canberra | TCB Pest Control Canberra", description: "Funnel-webs in the back garden. White-tails along the skirting." },
+		{ title: "Rodent Control Canberra | TCB Pest Control Canberra", description: "Rat and mouse control for Canberra roofs, subfloors and wall cavities." },
+	];
+
+	const titlePrompt = buildPrompt({ kind: "title", page: PAGE, examples, min: 30, max: 62 })[1].content;
+	assert.match(titlePrompt, /real titles from elsewhere on this site/);
+	assert.match(titlePrompt, /- Spider Control Canberra \| TCB Pest Control Canberra/);
+	assert.doesNotMatch(titlePrompt, /Funnel-webs/, "a title request is not shown descriptions");
+
+	const descriptionPrompt = buildPrompt({ kind: "description", page: PAGE, examples, min: 70, max: 165 })[1].content;
+	assert.match(descriptionPrompt, /Funnel-webs in the back garden/);
+	assert.doesNotMatch(descriptionPrompt, /- Spider Control Canberra \|/, "and vice versa");
+});
+
+test("a steer from the owner reaches the model", () => {
+	const prompt = buildPrompt({ kind: "title", page: PAGE, steer: "lead with white ants", min: 30, max: 62 })[1].content;
+	assert.match(prompt, /asks specifically: lead with white ants/);
+	// And an empty one adds nothing rather than an empty instruction.
+	assert.doesNotMatch(buildPrompt({ kind: "title", page: PAGE, steer: "", min: 30, max: 62 })[1].content, /asks specifically/);
+});
+
+test("the same line twice is offered once", async () => {
+	// Six asked for at temperature will repeat itself, and two identical
+	// options out of three looks broken.
+	const { candidates } = await suggest(null, {
+		kind: "title",
+		page: PAGE,
+		min: 30,
+		max: 62,
+		run: async () => ({
+			response: [
+				"Termite Inspections & Treatment Canberra | TCB Pest",
+				"Termite Inspections & Treatment Canberra | TCB Pest",
+				"termite inspections & treatment canberra | tcb pest",
+				"Termite Barriers & Baits Canberra | TCB Pest Control",
+			].join("\n"),
+		}),
+	});
+	assert.deepEqual(candidates, [
+		"Termite Inspections & Treatment Canberra | TCB Pest",
+		"Termite Barriers & Baits Canberra | TCB Pest Control",
+	]);
+});
+
+test("style samples come from sibling pages where there are any", () => {
+	// A location page written in the voice of a service page reads wrong, and
+	// this site's sections are only distinguishable by path prefix.
+	const paths = [
+		"/",
+		"/spider-control",
+		"/termite-treatment",
+		"/locations-pest-control-kambah",
+		"/locations-pest-control-woden",
+		"/locations-pest-control-belconnen",
+		"/locations-pest-control-dickson",
+		"/locations-pest-control-curtin",
+	];
+	const picked = examplePaths(paths, "/locations-pest-control-kambah");
+	assert.ok(picked.length > 0);
+	assert.ok(picked.every((p) => p.startsWith("/locations-")), "siblings preferred");
+	assert.ok(!picked.includes("/locations-pest-control-kambah"), "not the page being rewritten");
+	assert.ok(!picked.includes("/"), "the homepage is not a style sample for anything");
+
+	// With no siblings it still finds something rather than sending none.
+	const alone = examplePaths(paths, "/termite-treatment");
+	assert.ok(alone.length > 0);
+	assert.ok(!alone.includes("/termite-treatment"));
+});
+
+test("measured gaps reach the model, with the numbers that justify them", () => {
+	// The one instruction in this prompt backed by evidence rather than
+	// judgement. It has to arrive with its impressions and position attached,
+	// because "mention white ants" and "Google showed this page 2,340 times
+	// for white ants and it sits at 12" are different instructions.
+	const prompt = buildPrompt({
+		kind: "title",
+		page: PAGE,
+		gaps: [{ query: "white ants canberra", missing: ["white", "ant"], impressions: 2340, position: 12.4 }],
+		min: 30,
+		max: 62,
+	})[1].content;
+
+	assert.match(prompt, /already shows this page for these searches/);
+	assert.match(prompt, /white ants canberra \(missing: white, ant\) — shown 2340 times, position 12/);
+	// And "if they fit honestly" stays attached: a gap is a reason to
+	// consider a phrase, not a licence to claim the page is about it.
+	assert.match(prompt, /if they fit honestly/);
+
+	assert.doesNotMatch(buildPrompt({ kind: "title", page: PAGE, gaps: [], min: 30, max: 62 })[1].content, /never says the words/);
 });

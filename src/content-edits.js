@@ -670,6 +670,79 @@ export async function handleContentApi(request, url, env, session) {
 	return json({ error: "Not found." }, 404);
 }
 
+// Fixing a stale social tag with one click, by publishing the page's own
+// current wording as an override.
+//
+// The og:title and twitter:title lines in a file drift when the <title> is
+// edited by hand and the social pair is forgotten -- the first run of the
+// drift check found eight pages doing exactly that. The machinery to fix it
+// already exists twice over: serving a published title override rewrites the
+// social tags to match (applyContentEdits above), and "Sync to code" bakes
+// the same rewrite into the HTML file. So the entire fix is publishing an
+// override equal to what the page already says. Not a single character a
+// visitor reads changes; the stale social tags snap into step, first served
+// and then, on the next sync, in the file itself.
+//
+// Published directly, skipping the draft stage, because there is no
+// editorial decision in it to review -- the value is, by construction, the
+// wording the page already has.
+//
+// `fetchPage` and `extract` are injected so this stays testable in Node;
+// the Worker wires in the assets binding and the HTMLRewriter extractor.
+export async function handleSeoSocialFix(request, env, session, { fetchPage, extract }) {
+	const body = await readJsonBody(request);
+	if (!body) return json({ error: "Invalid request." }, 400);
+	const path = normalisePath(body.path || "/");
+	const field = body.field === "title" || body.field === "description" ? body.field : null;
+	if (!field) return json({ error: "Expected field to be title or description." }, 400);
+	const address = field === "title" ? META_TITLE_ADDRESS : META_DESCRIPTION_ADDRESS;
+
+	const response = await fetchPage(path);
+	if (!response || response.status !== 200) {
+		return json({ error: `Could not read ${path} (${response ? response.status : "no response"}).` }, 502);
+	}
+	const summary = await extract(response);
+	const value = String(field === "title" ? summary.title : summary.description || "").trim();
+	if (!value) return json({ error: `The page has no ${field} to bring the social tags into step with.` }, 409);
+
+	await ensureTable(env);
+	// An existing override already keeps the social tags in step every time
+	// the page is served -- there is nothing stale left to fix, and quietly
+	// replacing somebody's edit with the file's wording would be a downgrade
+	// dressed up as a repair.
+	const existing = await env.DB.prepare("SELECT draft, published FROM content_edits WHERE path = ? AND address = ?")
+		.bind(path, address)
+		.first();
+	if (existing && (existing.draft !== null || existing.published !== null)) {
+		return json({ ok: true, path, field, already: "an override for this page already keeps them in step" });
+	}
+
+	// Nothing to do is a real answer: the button can be pressed on a page
+	// whose tags were fixed some other way since the scan ran.
+	const social = field === "title" ? summary.ogTitle : summary.ogDescription;
+	const same = (a, b) => String(a || "").replace(/\s+/g, " ").trim().toLowerCase() === String(b || "").replace(/\s+/g, " ").trim().toLowerCase();
+	if (social === null || social === undefined || same(social, value)) {
+		return json({ ok: true, path, field, already: "the social tags already match" });
+	}
+
+	const now = Date.now();
+	await env.DB.prepare(
+		`INSERT INTO content_edits (path, address, kind, original, draft, published, updated_by, updated_at, published_at)
+		 VALUES (?, ?, 'meta', ?, NULL, ?, ?, ?, ?)
+		 ON CONFLICT (path, address) DO UPDATE SET
+		   published = excluded.published,
+		   draft = NULL,
+		   updated_by = excluded.updated_by,
+		   updated_at = excluded.updated_at,
+		   published_at = excluded.published_at`
+	)
+		.bind(path, address, value, value, session.username, now, now)
+		.run();
+
+	invalidateCaches();
+	return json({ ok: true, path, field, value });
+}
+
 // Records that an edit's wording now lives in the HTML file as well.
 //
 // Deliberately a flag rather than a delete. A synced override carries on

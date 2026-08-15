@@ -32,11 +32,31 @@ function headers(token) {
 	};
 }
 
+// GitHub's own error bodies are terse and the status alone is ambiguous, so
+// the common causes are named. Whoever reads this is trying to work out what
+// to change in a settings page, not to debug an API.
+function explain(status, path) {
+	if (status === 401) return "the GITHUB_TOKEN is not valid (expired, revoked, or mistyped)";
+	if (status === 403) return "the GITHUB_TOKEN is valid but lacks 'Contents: read and write' on this repository";
+	if (status === 404) {
+		return path.includes("/contents/")
+			? "that file does not exist on the branch, or the token cannot see this repository"
+			: "the repository or branch in GITHUB_REPO could not be found (check the owner/name spelling)";
+	}
+	if (status === 409 || status === 422) return "the branch moved while the sync was being prepared -- try again";
+	return null;
+}
+
 async function call(token, path, options = {}) {
 	const response = await fetch(`${API}${path}`, { ...options, headers: headers(token) });
 	if (!response.ok) {
 		const detail = await response.text().catch(() => "");
-		const error = new Error(`GitHub ${options.method || "GET"} ${path} failed (${response.status}): ${detail.slice(0, 300)}`);
+		const reason = explain(response.status, path);
+		const error = new Error(
+			reason
+				? `GitHub returned ${response.status} -- ${reason}.`
+				: `GitHub ${options.method || "GET"} ${path} failed (${response.status}): ${detail.slice(0, 300)}`
+		);
 		error.status = response.status;
 		throw error;
 	}
@@ -150,3 +170,7 @@ export async function commitFiles(env, branch, files, message) {
 }
 
 export { decodeBase64Utf8 };
+
+// Exported for the tests: the status -> plain-English mapping is the part
+// worth pinning, and reaching it through a stubbed fetch proves less.
+export { explain as explainForTest };

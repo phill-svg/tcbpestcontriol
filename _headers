@@ -27,6 +27,21 @@
 /assets/css/editor.css
   Cache-Control: no-cache
 
+# Every script under /assets/js is requested with a ?v= that gets bumped when
+# the file changes -- the same arrangement style.css already relies on -- so a
+# year is safe. Without this rule they fell through to the default and were
+# re-downloaded on every page view; script.js is on all 138 pages, so that was
+# a fetch per navigation for a file that changes a few times a year.
+/assets/js/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# editor.js is the one script the Worker injects rather than the pages linking,
+# so its ?v= is as easy to forget as editor.css's was -- and it is admin-only,
+# where there is nothing to gain from freezing it. Must come after the glob to
+# win. See the editor.css note above for the incident this mirrors.
+/assets/js/editor.js
+  Cache-Control: no-cache
+
 /assets/favicon/*
   Cache-Control: public, max-age=31536000, immutable
 

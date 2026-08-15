@@ -21,8 +21,20 @@ const outFile = path.join(imagesDir, "manifest.json");
 // folder (a stray .psd, a README) stays out of the picker.
 const EXTENSIONS = new Set([".webp", ".jpg", ".jpeg", ".png", ".svg", ".avif", ".gif"]);
 
+const present = new Set(readdirSync(imagesDir));
+
+// An .avif that sits next to a .webp of the same name is not a picture in its
+// own right -- it is the compressed alternate scripts/build-avif.js generated,
+// which the Worker swaps in by itself. Listing it would show every photograph
+// in the picker twice, and picking that entry would hard-code the AVIF into the
+// page for browsers that cannot read it. A standalone .avif is still a real
+// choice and stays.
+const isGeneratedAvif = (name) =>
+	path.extname(name).toLowerCase() === ".avif" && present.has(`${name.slice(0, -".avif".length)}.webp`);
+
 const images = readdirSync(imagesDir)
 	.filter((name) => EXTENSIONS.has(path.extname(name).toLowerCase()))
+	.filter((name) => !isGeneratedAvif(name))
 	.filter((name) => statSync(path.join(imagesDir, name)).isFile())
 	.sort()
 	.map((name) => ({

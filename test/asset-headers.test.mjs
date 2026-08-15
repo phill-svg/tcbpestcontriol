@@ -13,7 +13,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,4 +40,45 @@ test("the injected stylesheet carries a version that has moved past the frozen o
 	const match = worker.match(/editor\.css\?v=(\d+)/);
 	assert.ok(match, "the editor stylesheet should be requested with a version");
 	assert.ok(Number(match[1]) >= 2, "v=1 is the version that got frozen in browsers");
+});
+
+test("editor.js is exempt from the immutable rule for scripts, and comes last", () => {
+	// Same shape as the editor.css exemption above, for the same reason: it is
+	// injected by the Worker, so nothing on the page forces its ?v= to be bumped.
+	const glob = headers.indexOf("/assets/js/*");
+	const specific = headers.indexOf("/assets/js/editor.js");
+
+	assert.ok(glob !== -1, "scripts need a cache lifetime -- without one they refetch every page view");
+	assert.ok(specific !== -1, "editor.js needs its own rule");
+	assert.ok(specific > glob, "_headers applies rules in order, so the exemption must come after the glob to win");
+
+	const rule = headers.slice(specific, headers.indexOf("\n\n", specific));
+	assert.match(rule, /Cache-Control:\s*no-cache/);
+	assert.doesNotMatch(rule, /immutable/);
+});
+
+test("every script a page links carries a version, since /assets/js/* is frozen for a year", () => {
+	// A script frozen at a URL with no ?v= can never be updated for anyone who
+	// has already loaded it. Whenever one of these files changes, bump its ?v=.
+	const pages = readdirSync(repoRoot, { recursive: true, withFileTypes: true })
+		.filter((entry) => entry.isFile() && entry.name.endsWith(".html"))
+		.map((entry) => path.join(entry.parentPath ?? entry.path, entry.name));
+
+	const unversioned = new Set();
+	for (const page of pages) {
+		for (const [, src] of readFileSync(page, "utf8").matchAll(/<script[^>]*\ssrc="([^"]*assets\/js\/[^"]+)"/g)) {
+			if (!/\?v=\d+$/.test(src)) unversioned.add(`${path.relative(repoRoot, page)}: ${src}`);
+		}
+	}
+
+	assert.deepEqual([...unversioned], [], "these script tags would be frozen at a URL that can never be refreshed");
+});
+
+test("the scripts the Worker injects carry a version too", () => {
+	// These never appear in the HTML files, so the check above cannot see them.
+	const worker = readFileSync(path.join(repoRoot, "src", "index.js"), "utf8");
+	for (const [, src] of worker.matchAll(/<script src="(\/assets\/js\/[^"]+)"/g)) {
+		const isExempt = src.startsWith("/assets/js/editor.js");
+		assert.ok(isExempt || /\?v=\d+$/.test(src), `${src} is served immutable and needs a ?v=`);
+	}
 });

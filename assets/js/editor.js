@@ -670,11 +670,19 @@ class Editor {
 		if (altInput) altInput.value = entry.element.getAttribute("alt") || "";
 
 		const preview = isImage ? el("img", { class: "tcb-preview", alt: "" }) : null;
+		// The preview only ever renders a path that would actually be accepted
+		// on save. That keeps whatever is half-typed in the box out of the DOM
+		// -- otherwise every keystroke fires a request at whatever the partial
+		// text happens to look like -- and it doubles as live validation: if
+		// the preview is blank, the path is wrong.
+		const showPreview = (value) => {
+			if (!preview) return;
+			if (isSafeImageSrc(value)) preview.src = value;
+			else preview.removeAttribute("src");
+		};
 		if (preview) {
-			preview.src = currentSrc;
-			valueInput.addEventListener("input", () => {
-				preview.src = valueInput.value;
-			});
+			showPreview(currentSrc);
+			valueInput.addEventListener("input", () => showPreview(valueInput.value));
 		}
 
 		const fields = [
@@ -714,27 +722,33 @@ class Editor {
 			if (altEntry && altInput) await this.saveDirect(altEntry, altInput.value.trim());
 		});
 
-		if (isImage) this.fillImagePicker(dialog.querySelector(".tcb-picker"), valueInput, preview);
+		if (isImage) this.fillImagePicker(dialog.querySelector(".tcb-picker"), valueInput, showPreview);
 	}
 
 	// The Worker can't list the assets directory at runtime, so the picker is
 	// driven by a manifest generated at author time by
 	// scripts/build-image-manifest.js. If it isn't there, the path box still
 	// works on its own.
-	async fillImagePicker(container, input, preview) {
+	async fillImagePicker(container, input, showPreview) {
 		if (!container) return;
 		try {
 			const response = await fetch("/assets/images/manifest.json", { credentials: "same-origin" });
 			if (!response.ok) return;
 			const { images } = await response.json();
+			// The manifest is generated from this repo, so this filter is belt
+			// and braces rather than a real threat -- but it means every path
+			// reaching an <img> in the editor has passed the same check, with no
+			// second route in that only happens to be safe today.
+			const usable = (Array.isArray(images) ? images : []).filter((image) => image && isSafeImageSrc(image.path));
+			if (!usable.length) return;
 			container.appendChild(el("p", { class: "tcb-hint", text: "Or pick one:" }));
 			const grid = el("div", { class: "tcb-picker-grid" });
-			for (const image of images) {
+			for (const image of usable) {
 				const button = el("button", { type: "button", class: "tcb-picker-item", title: image.path });
 				button.appendChild(el("img", { src: image.path, alt: "", loading: "lazy" }));
 				button.addEventListener("click", () => {
 					input.value = image.path;
-					if (preview) preview.src = image.path;
+					showPreview(image.path);
 				});
 				grid.appendChild(button);
 			}

@@ -30,7 +30,18 @@ const RAW_TEXT_ELEMENTS = new Set(["script", "style"]);
 // comment as ordinary text instead would give the run a content hash the
 // browser and the Worker never produce, and -- worse -- a commented-out block
 // of old markup would take an ordinal away from the live copy below it.
-const NODE_PATTERN = /<!--[\s\S]*?-->|<![^>]*>|<(\/?)([a-zA-Z][^\s/>]*)((?:"[^"]*"|'[^']*'|[^>])*?)(\/?)>/g;
+//
+// The attribute-text alternatives are deliberately disjoint: `[^"'>]` excludes
+// both quote characters, so a `"` can only ever be consumed by the
+// `"[^"]*"` branch. An earlier version used `[^>]` there, which meant a run of
+// quotes could be partitioned between the two branches in exponentially many
+// ways -- `<A` followed by 40 quote characters took 3.6 seconds to reject, and
+// each extra quote doubled it. CodeQL was right to flag it.
+//
+// The trade-off is that a tag containing an *unmatched* quote no longer
+// matches at all. That is the safe failure: the scanner leaves it as text and
+// applies no edit there, rather than mis-parsing it.
+const NODE_PATTERN = /<!--[\s\S]*?-->|<![^>]*>|<(\/?)([a-zA-Z][^\s/>]*)((?:"[^"]*"|'[^']*'|[^"'>])*?)(\/?)>/g;
 
 // Splits a tag's attribute text into name/value pairs, keeping the exact
 // source offsets so a value can be replaced without disturbing anything else

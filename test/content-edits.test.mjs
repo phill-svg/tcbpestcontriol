@@ -261,6 +261,28 @@ test("commented-out markup does not steal an ordinal", () => {
 	assert.match(html, /<h1>Rapid spider control<\/h1>/, "the live heading is the one that changed");
 });
 
+test("a malformed tag cannot make the scanner backtrack exponentially", () => {
+	// CodeQL caught this: the attribute-text alternation used to accept a `"`
+	// via two different branches, so a run of quotes could be split between
+	// them in exponentially many ways. `<A` plus 40 quotes took 3.6 seconds to
+	// reject, and every extra quote doubled it. 2000 quotes is far past the
+	// point where the old pattern would have run for longer than the universe.
+	const pathological = `<A${'"'.repeat(2000)}`;
+	const started = Date.now();
+	bakeEdits(pathological, new Map());
+	assert.ok(Date.now() - started < 1000, "scanning a pathological tag must stay fast");
+});
+
+test("an unmatched quote in a tag is left alone rather than mis-parsed", () => {
+	// The cost of making the pattern unambiguous: a tag with an odd number of
+	// quotes no longer matches. The scanner must treat it as text and change
+	// nothing, which is the safe failure.
+	const page = `<body><p title="unclosed>Fast spider control</p></body>`;
+	const { html, missing } = bakeEdits(page, new Map([[textAddress("Fast spider control", 0), "Rapid"]]));
+	assert.equal(html, page, "nothing is rewritten");
+	assert.equal(missing.length, 1, "and the edit is reported as unmatched");
+});
+
 test("pathToFile mirrors how the Worker serves a directory path", () => {
 	assert.equal(pathToFile("/"), "index.html");
 	assert.equal(pathToFile("/spider-control"), "spider-control/index.html");

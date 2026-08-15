@@ -104,6 +104,11 @@ tell you so instead of working.
 
 That's it. `GITHUB_REPO` is already set in `wrangler.jsonc`.
 
+**If the token ever disappears from that list**, check that `keep_vars: true`
+is still in `wrangler.jsonc`. Without it, every deploy deletes anything added
+through the dashboard — and every merge to the main branch triggers a deploy,
+so a token added by hand can vanish within minutes.
+
 ## Things worth knowing
 
 **One page at a time.** Publish applies to the page you're on. If you change

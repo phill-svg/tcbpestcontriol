@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:css": "node scripts/build-css.js"
+    "build:css": "node scripts/build-css.js",
+    "check:booking": "node scripts/check-booking-config.js",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "@pushforge/builder": "^2.0.5"

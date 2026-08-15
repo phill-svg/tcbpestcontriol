@@ -1425,7 +1425,9 @@ class Editor {
 					el("span", { class: "tcb-finding-level", text: finding.level }),
 					el("div", {}, [
 						el("p", { class: "tcb-finding-message", text: finding.message }),
-						...(finding.detail ? [el("p", { class: "tcb-hint", text: finding.detail })] : []),
+						// The fix block shows both sides of the change itself, so
+						// the detail line would say the stale wording twice.
+						...(finding.detail && !finding.action ? [el("p", { class: "tcb-hint", text: finding.detail })] : []),
 						...(finding.fix ? [el("p", { class: "tcb-finding-fix", text: finding.fix })] : []),
 						...(finding.action ? [this.buildFindingFix(PATH, finding.action)] : []),
 					]),
@@ -2024,6 +2026,12 @@ class Editor {
 	// wording, which the serving layer rewrites the social tags to match.
 	// Nothing a visitor reads changes, which is why this needs no review step
 	// the way a suggestion does.
+	//
+	// Both sides of the change are shown before the button. "Fix" with no
+	// before-and-after asks the person to trust the tool; showing the stale
+	// wording and its replacement lets them check it in the time it takes to
+	// read two lines -- and catch the one case where the tool has it
+	// backwards, because the wording somebody meant to change was the title.
 	buildFindingFix(path, action) {
 		if (action.kind !== "social") return el("span");
 		const status = el("span", { class: "tcb-hint" });
@@ -2045,7 +2053,11 @@ class Editor {
 				status.textContent = error.message;
 			}
 		});
-		return el("div", { class: "tcb-suggest-row" }, [button, status]);
+		return el("div", {}, [
+			...(action.from ? [el("p", { class: "tcb-hint", text: `Shares currently say: “${action.from}”` })] : []),
+			...(action.to ? [el("p", { class: "tcb-hint", text: `Fix changes that to the page's own ${action.field}: “${action.to}”` })] : []),
+			el("div", { class: "tcb-suggest-row" }, [button, status]),
+		]);
 	}
 
 	// One line of memory between scans: what the last one counted, and whether

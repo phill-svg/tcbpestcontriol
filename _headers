@@ -42,6 +42,24 @@
 /assets/js/editor.js
   Cache-Control: no-cache
 
+# ...and everything editor.js imports, for the same reason and more sharply.
+# editor.js at least carries a ?v=; an ES module import specifier does not,
+# so `import "./seo-check.js"` is fetched at a bare URL, matches the glob
+# above, and is frozen for a year. That is exactly what happened: the editor
+# script was being served fresh while the modules holding the actual checks
+# were served from a year-old cache, so changes to them appeared to do
+# nothing. Same trap as editor.css, one level further in. These are fetched
+# only in edit mode, by one admin, so there is nothing to gain by caching
+# them. Must come after the glob to win.
+/assets/js/content-address.js
+  Cache-Control: no-cache
+
+/assets/js/seo-check.js
+  Cache-Control: no-cache
+
+/assets/js/seo-site.js
+  Cache-Control: no-cache
+
 /assets/favicon/*
   Cache-Control: public, max-age=31536000, immutable
 

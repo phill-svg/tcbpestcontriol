@@ -82,3 +82,32 @@ test("the scripts the Worker injects carry a version too", () => {
 		assert.ok(isExempt || /\?v=\d+$/.test(src), `${src} is served immutable and needs a ?v=`);
 	}
 });
+
+test("every module the editor imports is exempt from the year-long freeze", () => {
+	// The same footgun as editor.css and editor.js, one level further in, and
+	// this one has no escape hatch at all: an ES module import specifier
+	// cannot carry a ?v=. `import "./seo-check.js"` is fetched at a bare URL,
+	// matches /assets/js/*, and is frozen for a year.
+	//
+	// It went off. editor.js was being served fresh while seo-check.js and
+	// seo-site.js -- which hold the checks themselves -- came from a year-old
+	// cache, so every change to them appeared to do nothing at all.
+	//
+	// Derived from the imports rather than a hand-written list, so a module
+	// added later is covered without anybody remembering this file exists.
+	const editor = readFileSync(path.join(repoRoot, "assets", "js", "editor.js"), "utf8");
+	const imported = [...editor.matchAll(/from\s+"\.\/([\w.-]+\.js)"/g)].map(([, name]) => name);
+	assert.ok(imported.length >= 3, `expected the editor's imports, found ${imported.length}`);
+
+	const headers = readFileSync(path.join(repoRoot, "_headers"), "utf8");
+	const glob = headers.indexOf("/assets/js/*");
+	assert.ok(glob !== -1);
+
+	for (const name of imported) {
+		const at = headers.indexOf(`/assets/js/${name}\n`);
+		assert.ok(at !== -1, `/assets/js/${name} has no rule, so it is frozen for a year and can never be updated`);
+		assert.ok(at > glob, `/assets/js/${name} must come after the glob to win`);
+		const rule = headers.slice(at, headers.indexOf("\n\n", at));
+		assert.match(rule, /Cache-Control:\s*no-cache/, `/assets/js/${name} is not exempt from the freeze`);
+	}
+});

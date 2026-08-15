@@ -10,6 +10,7 @@ import { isBookableService, SERVICE_LABELS, HORIZON_DAYS, computePrice } from ".
 import { computeSlots } from "./availability.js";
 import { loadPageEdits, applyContentEdits, handleContentApi } from "./content-edits.js";
 import { normalisePath } from "../assets/js/content-address.js";
+import { handleBlogApi } from "./blog-api.js";
 
 export default {
 	async fetch(request, env, ctx) {
@@ -200,6 +201,15 @@ export default {
 			forwardUrl.searchParams.set("username", session.username);
 			const id = env.CHAT_HUB.idFromName("global");
 			return env.CHAT_HUB.get(id).fetch(new Request(forwardUrl, request));
+		}
+
+		// Creating blog posts from the editor -- see src/blog-api.js. Same admin
+		// gate as the content API below: this writes to the repository.
+		if (url.pathname.startsWith("/api/blog/")) {
+			const session = await getStaffSession(request, env);
+			if (!session) return new Response("Unauthorized", { status: 401 });
+			if (!session.isAdmin) return new Response("Forbidden", { status: 403 });
+			return handleBlogApi(request, url, env, session);
 		}
 
 		// Visual editor API: saving, previewing and publishing copy changes

@@ -489,3 +489,39 @@ body.tcb-editing-mode .tcb-has-edit {
 		}
 	}
 }
+
+/* New-post form ------------------------------------------------------------ */
+
+.tcb-sections {
+	display: grid;
+	gap: 0.75rem;
+}
+
+.tcb-section {
+	display: grid;
+	gap: 0.4rem;
+	padding: 0.6rem;
+	border: 1px solid #e6e6ea;
+	border-radius: 0.35rem;
+	justify-items: start;
+}
+
+.tcb-section .tcb-input {
+	width: 100%;
+}
+
+/* Draft banner. Sits above the editing toolbar rather than replacing it --
+ * a draft post is still an ordinary page you can edit. */
+.tcb-bar-draft {
+	bottom: 3.5rem;
+	background: #92400e;
+}
+
+.tcb-bar-draft .tcb-bar-badge {
+	background: #ffffff;
+	color: #92400e;
+}
+
+body.tcb-editing-mode {
+	padding-bottom: 8rem;
+}

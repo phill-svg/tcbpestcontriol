@@ -292,6 +292,11 @@ the new wording, which the file never matches, and the change would vanish.
 
 - Image picker reads `assets/images/manifest.json`. Regenerate it after adding
   or removing images: `node scripts/build-image-manifest.js`.
+- After adding or replacing an image, also run `npm run build:avif`. It writes
+  an `.avif` next to each `.webp`, and the Worker serves that copy to browsers
+  whose `Accept` header says they can read it — about 30% fewer bytes, with no
+  change to the `<img>` tags. Forgetting it costs nothing but the saving: an
+  image with no `.avif` alongside it just keeps being served as `.webp`.
 - Editor CSS/JS are deliberately not part of `assets/css/style.css` — they only
   load for a signed-in admin.
 - `src/`, `scripts/`, `test/` and `schema.sql` are listed in `.assetsignore`.

@@ -15,7 +15,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { fetchAsset } from "../src/assets.js";
+import { fetchAsset, fetchNegotiatedImage } from "../src/assets.js";
 
 // Records every URL the binding is asked for. `present` is the set of paths
 // that exist; anything else 404s, the way not_found_handling does.
@@ -112,4 +112,80 @@ test("a missing page falls back from index.html to the path itself", async () =>
 		["/nope/index.html", "/nope"],
 		"index.html first, then the bare path"
 	);
+});
+
+// The AVIF swap. Pages only ever link the .webp; which file actually comes back
+// is decided here, from the Accept header. Same principle as the tests above --
+// what matters is which file the binding was asked for.
+const HERO = "/assets/images/tcb-pest-control-technicians-treating-home-9300e-sm.webp";
+const HERO_AVIF = "/assets/images/tcb-pest-control-technicians-treating-home-9300e-sm.avif";
+const CHROME_ACCEPT = "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8";
+
+const imageRequest = (path, accept) =>
+	new Request(`https://www.tcbpestcontrolcanberra.com.au${path}`, {
+		method: "GET",
+		headers: accept ? { Accept: accept } : {},
+	});
+
+const imageUrl = (path) => new URL(`https://www.tcbpestcontrolcanberra.com.au${path}`);
+
+test("a browser that accepts AVIF gets the AVIF copy of a webp", async () => {
+	const { asked, env } = bindingWith([HERO, HERO_AVIF]);
+	const response = await fetchNegotiatedImage(imageRequest(HERO, CHROME_ACCEPT), imageUrl(HERO), env);
+
+	assert.equal(response.status, 200);
+	assert.deepEqual(asked.map((entry) => entry.path), [HERO_AVIF], "the webp is never fetched");
+});
+
+test("a browser that does not accept AVIF gets the webp", async () => {
+	const { asked, env } = bindingWith([HERO, HERO_AVIF]);
+	const accept = "image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5";
+	const response = await fetchNegotiatedImage(imageRequest(HERO, accept), imageUrl(HERO), env);
+
+	assert.equal(response.status, 200);
+	assert.deepEqual(asked.map((entry) => entry.path), [HERO], "the AVIF is never offered to a browser that cannot read it");
+});
+
+test("both answers carry Vary: Accept", async () => {
+	// Without this a shared cache can store the AVIF under the .webp URL and
+	// then serve those bytes to a browser that cannot decode them -- the image
+	// silently fails to appear. It has to be on the webp reply too, or the
+	// webp is the one that gets stored unkeyed and handed to everyone.
+	for (const accept of [CHROME_ACCEPT, "image/webp,*/*"]) {
+		const { env } = bindingWith([HERO, HERO_AVIF]);
+		const response = await fetchNegotiatedImage(imageRequest(HERO, accept), imageUrl(HERO), env);
+		assert.equal(response.headers.get("Vary"), "Accept", `missing for Accept: ${accept}`);
+	}
+});
+
+test("an image with no AVIF alongside it falls back to the webp", async () => {
+	// build-avif.js skips images AVIF cannot beat, and an image added since the
+	// last run has no AVIF at all. Neither may 404.
+	const { asked, env } = bindingWith([HERO]);
+	const response = await fetchNegotiatedImage(imageRequest(HERO, CHROME_ACCEPT), imageUrl(HERO), env);
+
+	assert.equal(response.status, 200);
+	assert.deepEqual(asked.map((entry) => entry.path), [HERO_AVIF, HERO], "asks for the AVIF, then settles for the webp");
+});
+
+test("a missing image is still missing, rather than becoming a 200", async () => {
+	const { env } = bindingWith([]);
+	const path = "/assets/images/never-existed.webp";
+	const response = await fetchNegotiatedImage(imageRequest(path, CHROME_ACCEPT), imageUrl(path), env);
+	assert.equal(response.status, 404);
+});
+
+test("everything that is not a webp under /assets/images is left alone", async () => {
+	// Returning null is what hands the request back to the ordinary asset path.
+	const { env } = bindingWith(["/index.html", "/assets/css/style.css", "/assets/favicon/favicon-32x32.png"]);
+
+	for (const path of ["/", "/assets/css/style.css", "/assets/favicon/favicon-32x32.png", "/assets/images/manifest.json"]) {
+		assert.equal(await fetchNegotiatedImage(imageRequest(path, CHROME_ACCEPT), imageUrl(path), env), null, path);
+	}
+
+	const post = new Request(`https://www.tcbpestcontrolcanberra.com.au${HERO}`, {
+		method: "POST",
+		headers: { Accept: CHROME_ACCEPT },
+	});
+	assert.equal(await fetchNegotiatedImage(post, imageUrl(HERO), env), null, "and only GET/HEAD are negotiated");
 });

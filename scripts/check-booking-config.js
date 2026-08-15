@@ -39,6 +39,8 @@ async function readBrowserCopy() {
 	return new Function(`${block}\nreturn { PRICING, MODIFIER_LABELS, MODIFIER_OPTIONS };`)();
 }
 
+const ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" };
+
 // The service <select> on /book. Values are service keys, text is the label.
 async function readServiceOptions() {
 	const html = await readFile(join(ROOT, "book/index.html"), "utf8");
@@ -50,13 +52,11 @@ async function readServiceOptions() {
 	for (const m of select[0].matchAll(/<option value="([^"]*)"[^>]*>([\s\S]*?)<\/option>/g)) {
 		const value = m[1];
 		if (!value) continue; // the disabled "Select a service…" placeholder
-		labels[value] = m[2]
-			.replace(/&amp;/g, "&")
-			.replace(/&lt;/g, "<")
-			.replace(/&gt;/g, ">")
-			.replace(/&quot;/g, '"')
-			.replace(/&#39;/g, "'")
-			.trim();
+		// One pass, not a chain of .replace()s: unescaping "&amp;" first and
+		// "&lt;" after would turn a literal "&amp;lt;" into "<" (CodeQL flags
+		// exactly this as double-unescaping). Matching every entity in a single
+		// regex means each one is expanded once, from the original text.
+		labels[value] = m[2].replace(/&(amp|lt|gt|quot|#39);/g, (_, entity) => ENTITIES[entity]).trim();
 	}
 	return labels;
 }

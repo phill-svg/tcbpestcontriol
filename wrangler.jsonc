@@ -29,6 +29,15 @@
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["ChatHub"] }
   ],
+  // Keep variables and secrets that were added in the Cloudflare dashboard.
+  //
+  // This defaults to false, which means every deploy wipes anything not
+  // listed in this file -- and every merge to main triggers a deploy. That is
+  // how GITHUB_TOKEN disappeared minutes after being added by hand: it was
+  // added in the dashboard, the next merge deployed, and the deploy removed
+  // it. Anything set outside this file needs this to survive.
+  "keep_vars": true,
+
   "vars": {
     // Which repository the editor's "Sync to code" button commits to. The
     // token that authorises it is a secret (GITHUB_TOKEN), never a var --

@@ -73,14 +73,19 @@ function duplicates(pages, field) {
 }
 
 // `pages` is [{ path, title, description, targets }] gathered by the scan,
-// where `targets` are internal link destinations as paths. `broken` is the
-// subset of those destinations that were checked and did not load.
+// where `targets` are internal link destinations as paths. Newer scans add
+// `h1`, `orgMissing`, `wordCount` and `sketch` to each record; the checks
+// that read those skip pages that do not carry them, so older callers and
+// the tests keep working unchanged. `broken` is the subset of destinations
+// that were checked and did not load; `redirected` the ones that answered
+// with a redirect, as { target, location }; `extraPages` the ones that
+// loaded as real pages despite not being in the sitemap.
 //
 // `complete` matters for orphans and only for orphans: a page looks unlinked
 // until the page that links to it has been read, so a half-finished scan
 // would invent orphans that do not exist. Duplicates have no such problem --
 // two pages sharing a title share it whether or not the rest were read.
-export function checkSite({ pages = [], broken = [], complete = true } = {}) {
+export function checkSite({ pages = [], broken = [], redirected = [], extraPages = [], complete = true } = {}) {
 	const findings = [];
 
 	for (const group of duplicates(pages, "title")) {
@@ -100,6 +105,38 @@ export function checkSite({ pages = [], broken = [], complete = true } = {}) {
 			detail: group.value,
 			fix: "Worth a sentence each that is actually about that page. Not urgent — Google often writes its own description anyway — but a repeated one wastes the chance to say something specific.",
 			pages: group.paths,
+		});
+	}
+
+	// Main headings, same logic as titles but softer: a heading is not
+	// competing in a search result, it is just a sign two pages were copied
+	// and one never got its own words.
+	for (const group of duplicates(pages, "h1")) {
+		findings.push({
+			level: "worth a look",
+			message: `${group.paths.length} pages share the same main heading.`,
+			detail: group.value,
+			fix: "Usually one page copied from another and never reworded. Give each a heading naming what makes it different — the suburb or the pest.",
+			pages: group.paths,
+		});
+	}
+
+	// The business block in the structured data is one shared template, so a
+	// field missing from it is missing everywhere at once -- one fact, one
+	// finding, however many pages carry the block.
+	const orgGroups = new Map();
+	for (const page of pages) {
+		if (!Array.isArray(page.orgMissing) || !page.orgMissing.length) continue;
+		const key = [...page.orgMissing].sort().join(", ");
+		if (!orgGroups.has(key)) orgGroups.set(key, []);
+		orgGroups.get(key).push(page.path);
+	}
+	for (const [missing, paths] of orgGroups) {
+		findings.push({
+			level: "worth a look",
+			message: `The business details block (structured data) is missing ${missing} — on ${paths.length === pages.length ? "every page" : `${paths.length} pages`}.`,
+			fix: "It is one shared block in the page code, so this is one fix, not one per page. Google's local results lean on the business schema, and an address is the field that anchors it to Canberra. Worth passing to whoever maintains the site.",
+			pages: paths.slice(0, 6),
 		});
 	}
 
@@ -123,6 +160,50 @@ export function checkSite({ pages = [], broken = [], complete = true } = {}) {
 		});
 	}
 
+	// A link that lands after a redirect is not broken -- _redirects keeps old
+	// addresses alive on purpose -- but it is a link written to the old name.
+	// Visitors survive the hop; internal links should still say where things
+	// actually are.
+	for (const hop of redirected) {
+		const sources = linkedFrom.get(hop.target) || [];
+		findings.push({
+			level: "worth a look",
+			message: `${hop.target} is linked to but redirects${hop.location ? ` to ${hop.location}` : ""}.`,
+			fix: `The redirect keeps the old address working, so nothing is broken — but the links are written to a name the page no longer lives at. Point them at ${hop.location || "the final address"} directly.`,
+			detail: sources.length ? `Linked from ${sources.slice(0, 5).join(", ")}` : undefined,
+			pages: sources,
+		});
+	}
+
+	// Pages that load fine but are not in the sitemap. The scan's universe is
+	// the sitemap, so these are pages the whole tool -- and Google's crawl
+	// list -- cannot see past a link. Deliberate for a private page; for
+	// anything else it is a page competing with one hand tied.
+	if (extraPages.length) {
+		findings.push({
+			level: "worth a look",
+			message: `${extraPages.length} linked ${extraPages.length === 1 ? "page is" : "pages are"} not in the sitemap, so Google is not being told ${extraPages.length === 1 ? "it exists" : "they exist"}.`,
+			detail: extraPages.slice(0, 5).join(", "),
+			fix: "If a page is meant to be found, it belongs in sitemap.xml — that is the list Google works from, and the list this scan checks. If it is meant to be private, this is fine as it is.",
+			pages: extraPages,
+		});
+	}
+
+	// Two pages saying the same thing in the same words. Titles compete in a
+	// search result; whole bodies compete for being worth indexing at all --
+	// Google folds near-identical pages together and picks one. Measured on
+	// sketches rather than full text so 134 pages can be compared in the
+	// browser without shipping every body across the wire.
+	for (const group of nearDuplicateBodies(pages)) {
+		findings.push({
+			level: "worth a look",
+			message: `${group.length} pages have nearly identical body text.`,
+			detail: group.join(", "),
+			fix: "Google folds near-copies together and shows only one. A few sentences that are true of one suburb and not the other — the street names, the pest pressure, the job that keeps coming up — is what keeps them distinct.",
+			pages: group,
+		});
+	}
+
 	if (complete) {
 		// A link from a page to itself does not rescue it, or every page would
 		// look reachable through its own canonical link.
@@ -143,6 +224,83 @@ export function checkSite({ pages = [], broken = [], complete = true } = {}) {
 
 	const order = { problem: 0, "worth a look": 1, good: 2 };
 	return findings.sort((a, b) => order[a.level] - order[b.level]);
+}
+
+// -- near-duplicate bodies ---------------------------------------------------
+//
+// A page's body reduced to a small sketch that two pages can be compared on.
+// The scan cannot ship 134 full bodies to the browser, and does not need to:
+// eight-word shingles hashed, keeping the SKETCH_SIZE smallest hashes, is a
+// standard minhash sketch -- the overlap of two sketches estimates the
+// overlap of the texts. The location pages, which genuinely share a template
+// voice, measure around 0.25 against each other; the threshold sits at 0.6 so
+// only real copy-paste trips it.
+
+const SKETCH_SIZE = 64;
+const SHINGLE_WORDS = 8;
+export const NEAR_DUPLICATE = 0.6;
+
+function hashShingle(text) {
+	// FNV-1a, 32-bit. Nothing about this needs to be cryptographic; it needs
+	// to be the same in the Worker and the browser.
+	let hash = 0x811c9dc5;
+	for (let at = 0; at < text.length; at++) {
+		hash ^= text.charCodeAt(at);
+		hash = Math.imul(hash, 0x01000193);
+	}
+	return hash >>> 0;
+}
+
+export function bodySketch(text) {
+	const words = (String(text || "").toLowerCase().match(/[a-z0-9']+/g) || []);
+	if (words.length < SHINGLE_WORDS) return [];
+	const hashes = new Set();
+	for (let at = 0; at + SHINGLE_WORDS <= words.length; at++) {
+		hashes.add(hashShingle(words.slice(at, at + SHINGLE_WORDS).join(" ")));
+	}
+	return [...hashes].sort((a, b) => a - b).slice(0, SKETCH_SIZE);
+}
+
+// Estimated Jaccard similarity of the two original texts, from their
+// sketches: of the smallest SKETCH_SIZE hashes across both, how many are in
+// both. Standard bottom-k minhash.
+export function sketchSimilarity(a, b) {
+	if (!a || !b || !a.length || !b.length) return 0;
+	const setA = new Set(a);
+	const setB = new Set(b);
+	const union = [...new Set([...a, ...b])].sort((x, y) => x - y).slice(0, SKETCH_SIZE);
+	let shared = 0;
+	for (const hash of union) if (setA.has(hash) && setB.has(hash)) shared++;
+	return shared / union.length;
+}
+
+// Groups of pages whose bodies are nearly the same, transitively -- if A
+// matches B and B matches C, the three are one group and one finding.
+function nearDuplicateBodies(pages) {
+	const sketched = pages.filter((page) => Array.isArray(page.sketch) && page.sketch.length);
+	const groupOf = new Map();
+	for (let a = 0; a < sketched.length; a++) {
+		for (let b = a + 1; b < sketched.length; b++) {
+			if (sketchSimilarity(sketched[a].sketch, sketched[b].sketch) < NEAR_DUPLICATE) continue;
+			const pathA = sketched[a].path;
+			const pathB = sketched[b].path;
+			const group = groupOf.get(pathA) || groupOf.get(pathB) || [];
+			// If both already sit in different groups, this pair joins them.
+			const other = groupOf.get(pathA) && groupOf.get(pathB) && groupOf.get(pathA) !== groupOf.get(pathB) ? groupOf.get(pathB) : null;
+			if (other) {
+				for (const path of other) {
+					group.push(path);
+					groupOf.set(path, group);
+				}
+				other.length = 0;
+			}
+			for (const path of [pathA, pathB]) {
+				if (!group.includes(path)) group.push(path);
+				groupOf.set(path, group);
+			}
+		}
+	}
+	return [...new Set(groupOf.values())].filter((group) => group.length > 1);
 }
 
 // Which link destinations still need checking. Anything that was scanned and

@@ -1173,6 +1173,13 @@ async function handleSeoLinks(request, url, env) {
 	const wanted = [...new Set(targets.filter((target) => typeof target === "string" && target.startsWith("/")))].slice(0, 40);
 
 	const broken = [];
+	// Not broken, but worth distinguishing: a destination that answers with a
+	// redirect is a link written to an old name, and one that answers with a
+	// real page is a page the sitemap does not know about -- everything sent
+	// here is by construction absent from the sitemap, or the scan would have
+	// read it already.
+	const redirects = [];
+	const pagesFound = [];
 	for (const target of wanted) {
 		try {
 			// A fresh GET rather than the incoming POST. Its body has already
@@ -1181,6 +1188,17 @@ async function handleSeoLinks(request, url, env) {
 			const targetUrl = new URL(target, url);
 			const response = await fetchAsset(new Request(targetUrl, { method: "GET" }), targetUrl, env);
 			if (response.status >= 400) broken.push(target);
+			else if ([301, 302, 307, 308].includes(response.status)) {
+				let location = response.headers.get("location") || "";
+				try {
+					location = new URL(location, targetUrl).pathname;
+				} catch {
+					// A relative or odd Location header is still worth showing raw.
+				}
+				redirects.push({ target, location });
+			} else if ((response.headers.get("content-type") || "").includes("text/html")) {
+				pagesFound.push(target);
+			}
 			// Nothing here reads the body, and an unread one holds the
 			// connection open for the rest of the invocation.
 			if (response.body) await response.body.cancel().catch(() => {});
@@ -1189,7 +1207,7 @@ async function handleSeoLinks(request, url, env) {
 		}
 	}
 
-	return new Response(JSON.stringify({ checked: wanted.length, broken }), {
+	return new Response(JSON.stringify({ checked: wanted.length, broken, redirects, pages: pagesFound }), {
 		headers: { "content-type": "application/json", "Cache-Control": "no-store" },
 	});
 }

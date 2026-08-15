@@ -11,6 +11,7 @@ import { computeSlots } from "./availability.js";
 import { loadPageEdits, applyContentEdits, handleContentApi } from "./content-edits.js";
 import { normalisePath } from "../assets/js/content-address.js";
 import { handleBlogApi } from "./blog-api.js";
+import { pathsFromSitemap, scanBatch } from "./seo-scan.js";
 
 export default {
 	async fetch(request, env, ctx) {
@@ -201,6 +202,16 @@ export default {
 			forwardUrl.searchParams.set("username", session.username);
 			const id = env.CHAT_HUB.idFromName("global");
 			return env.CHAT_HUB.get(id).fetch(new Request(forwardUrl, request));
+		}
+
+		// Site-wide SEO scan. Batched: the browser asks for a slice at a time
+		// and shows progress, because reading and checking 134 pages in one
+		// invocation is well past what a Worker should attempt at once.
+		if (url.pathname === "/api/seo/scan") {
+			const session = await getStaffSession(request, env);
+			if (!session) return new Response("Unauthorized", { status: 401 });
+			if (!session.isAdmin) return new Response("Forbidden", { status: 403 });
+			return handleSeoScan(request, url, env);
 		}
 
 		// Creating blog posts from the editor -- see src/blog-api.js. Same admin
@@ -757,3 +768,40 @@ const SEARCH_OVERLAY_HTML = `<div data-tcb-injected class="search-overlay" id="s
 // up and opens a WebSocket to /api/chat/ws, backed by the ChatHub Durable
 // Object above.
 const CHAT_WIDGET_HTML = `<button data-tcb-injected type="button" class="chat-bubble" data-chat-open aria-label="Chat with us" title="Chat with us"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></button><div data-tcb-injected class="chat-panel" id="site-chat" role="dialog" aria-modal="true" aria-label="Chat with TCB Pest Control" hidden><div class="chat-panel-inner"><div class="chat-header"><div class="chat-header-brand"><span class="chat-header-badge"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></span><div class="chat-header-text"><span class="chat-header-title">TCB Pest Control</span><span class="chat-header-subtitle">Chat with us</span></div></div><button type="button" class="chat-close" data-chat-close aria-label="Close chat"><span class="chat-close-esc">Esc</span><span class="chat-close-icon">&times;</span></button></div><div class="chat-intake" data-chat-intake><p class="chat-intake-title">Let's chat</p><p class="chat-intake-lead">Tell us who you are and we will get you sorted.</p><form class="form" data-chat-intake-form><div class="field"><label for="chat-name">Name</label><input id="chat-name" name="name" type="text" autocomplete="name" required/></div><div class="field"><label for="chat-email">Email</label><input id="chat-email" name="email" type="email" autocomplete="email" required/></div><div class="field"><label for="chat-phone">Phone</label><input id="chat-phone" name="phone" type="tel" autocomplete="tel" required/></div><div class="form-footer"><button class="btn btn-primary" type="submit">Start chat</button></div></form></div><div class="chat-messages" data-chat-messages hidden><p class="chat-hint">Send us a message and we will reply here as soon as we can.</p></div><form class="chat-input-row" data-chat-form hidden><input type="text" class="chat-input" data-chat-input placeholder="Type a message..." autocomplete="off" aria-label="Message" maxlength="2000" required/><button type="submit" class="btn btn-primary chat-send-icon" aria-label="Send"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button></form></div></div><script src="/assets/js/chat.js?v=3" defer></script>`;
+
+// One slice of the site-wide SEO scan. The page list comes from sitemap.xml,
+// which is the list Google actually crawls -- a page missing from it is
+// invisible whatever its title says, and one listed but gone is worth seeing.
+//
+// Pages are read through the assets binding rather than over the network, so
+// a scan costs no external requests. Published title and description overrides
+// are layered on, so the report reflects what a visitor sees rather than what
+// the file happens to say.
+async function handleSeoScan(request, url, env) {
+	const offset = Math.max(0, Number(url.searchParams.get("offset")) || 0);
+	// Deliberately small. The limit that matters is CPU per invocation, not
+	// wall time, and a page of this site is around 80KB to parse.
+	const limit = Math.min(20, Math.max(1, Number(url.searchParams.get("limit")) || 10));
+
+	const sitemapResponse = await env.ASSETS.fetch(new Request(new URL("/sitemap.xml", url), request));
+	if (sitemapResponse.status !== 200) {
+		return new Response(JSON.stringify({ error: "Could not read sitemap.xml." }), {
+			status: 502,
+			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
+		});
+	}
+	const paths = pathsFromSitemap(await sitemapResponse.text());
+
+	const batch = await scanBatch({
+		paths,
+		offset,
+		limit,
+		fetchPage: (path) => fetchAsset(request, new URL(path, url), env),
+		loadEdits: (path) => loadPageEdits(env, path).catch(() => null),
+	});
+
+	return new Response(
+		JSON.stringify({ total: paths.length, offset, scanned: batch.scanned, done: batch.done, results: batch.results }),
+		{ headers: { "content-type": "application/json", "Cache-Control": "no-store" } }
+	);
+}

@@ -19,6 +19,7 @@ That's it. The change is live for everyone straight away.
 | Thing | How |
 | --- | --- |
 | Any text on the page | Click it and type |
+| Deleting words | Click them, clear the box, press Enter |
 | A link's destination | Hover the link, click **Edit link** |
 | An image | Hover the image, click **Change image**, pick a new one |
 | Image alt text | Same panel as the image |
@@ -34,6 +35,18 @@ That's it. The change is live for everyone straight away.
   Nobody else can see this.
 - **Publish** — makes your changes live.
 - **Done** — leave editing and go back to the normal page.
+
+## Deleting words
+
+Click the words, clear the box, press Enter. They disappear from the page.
+
+While you're editing you'll see a small **deleted — click to restore** marker
+where they used to be. Visitors never see that marker, only the gap. Click it
+to bring the wording back, or use **Changes → Revert**.
+
+Note that headings are often made of two or three separate runs of text
+(different colours or styles). Clicking selects just the run you clicked, so
+you can delete half a heading and keep the rest.
 
 ## Drafts vs published
 

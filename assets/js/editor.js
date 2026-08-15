@@ -284,8 +284,35 @@ class Editor {
 			const leading = raw.match(/^\s*/)[0];
 			const trailing = raw.match(/\s*$/)[0];
 			entry.node.nodeValue = `${leading}${value}${trailing}`;
+			this.refreshDeletedMarker(entry, value);
 		} else {
 			entry.element.setAttribute(entry.attr, value);
+		}
+	}
+
+	// Deleted text leaves nothing on screen to click, which would make it the
+	// one change you cannot undo from the page itself. So while editing, a
+	// small marker stands in its place -- visible, and clicking it restores
+	// the original wording. Visitors never see this; it only exists in the
+	// editor's own chrome.
+	refreshDeletedMarker(entry, value) {
+		if (value === "") {
+			if (entry.marker && entry.marker.isConnected) return;
+			const marker = chrome("button", {
+				type: "button",
+				class: "tcb-deleted",
+				text: "deleted — click to restore",
+				onclick: (event) => {
+					event.preventDefault();
+					event.stopPropagation();
+					this.revertEdit(entry.address);
+				},
+			});
+			entry.marker = marker;
+			entry.node.parentNode.insertBefore(marker, entry.node);
+		} else if (entry.marker) {
+			if (entry.marker.parentNode) entry.marker.parentNode.removeChild(entry.marker);
+			entry.marker = null;
 		}
 	}
 
@@ -620,10 +647,18 @@ class Editor {
 		// a stray <br> or <div> from the browser's own editing behaviour, and
 		// innerText renders those back to the newlines they represent.
 		const value = normaliseText(this.active.span.innerText);
-		const entry = this.closeActive(value || before);
+		const entry = this.closeActive(value);
+		// closeActive rebuilds the text node directly rather than going through
+		// renderValue, so the deleted-marker has to be brought into step here.
+		this.refreshDeletedMarker(entry, value);
 
+		// Clearing the field deletes the words. No confirmation prompt: the
+		// original is still in the HTML file, the change list shows it as
+		// deleted, and both the marker left behind and Revert bring it back --
+		// so a prompt would only be in the way of something already undoable.
 		if (!value) {
-			this.toast("Text can't be empty — use Changes → Revert to restore the original wording.", "error");
+			if (!before) return;
+			this.save(entry, "", before);
 			return;
 		}
 		if (value === before) return;
@@ -646,7 +681,7 @@ class Editor {
 			row.draft = value;
 			this.rows.set(entry.address, row);
 			this.refreshStatus();
-			this.toast("Saved as a draft. Publish when you're ready.");
+			this.toast(value === "" ? "Text deleted. Publish when you're ready." : "Saved as a draft. Publish when you're ready.");
 		} catch (error) {
 			// Roll the page back to what it showed before, so the screen never
 			// claims a change that isn't stored.
@@ -858,6 +893,32 @@ class Editor {
 		this.refreshStatus();
 	}
 
+	// Drops the override entirely, so the page falls back through to whatever
+	// the HTML file says. Shared by the change list and by the marker left in
+	// place of deleted text. Rethrows so callers can leave their button
+	// enabled if it failed.
+	async revertEdit(address) {
+		try {
+			await api("revert", { method: "POST", body: JSON.stringify({ path: PATH, address }) });
+		} catch (error) {
+			this.toast(error.message, "error");
+			throw error;
+		}
+		const entry = this.entries.get(address);
+		if (entry) {
+			if (entry.kind === "text") {
+				entry.node.nodeValue = entry.originalRaw;
+				this.refreshDeletedMarker(entry, entry.original);
+			} else {
+				entry.element.setAttribute(entry.attr, entry.original);
+			}
+			this.unmarkEdited(entry);
+		}
+		this.rows.delete(address);
+		this.refreshStatus();
+		this.toast("Reverted to the original wording.");
+	}
+
 	// -- change list ----------------------------------------------------------
 
 	openChanges() {
@@ -878,7 +939,12 @@ class Editor {
 					el("span", { class: `tcb-tag ${pending ? "tcb-tag-draft" : "tcb-tag-live"}`, text: pending ? "Draft" : "Live" }),
 					el("div", { class: "tcb-change-body" }, [
 						el("p", { class: "tcb-change-was", text: row.original || "(page setting)" }),
-						el("p", { class: "tcb-change-now", text: value }),
+						el("p", {
+							// An empty value means the words were deleted. Rendering that
+							// as a blank line would make the change list look broken.
+							class: value === "" ? "tcb-change-now tcb-change-gone" : "tcb-change-now",
+							text: value === "" ? "(deleted)" : value,
+						}),
 					]),
 					el("button", {
 						type: "button",
@@ -887,21 +953,12 @@ class Editor {
 						onclick: async (event) => {
 							const button = event.currentTarget;
 							button.disabled = true;
+							const change = button.closest(".tcb-change");
 							try {
-								await api("revert", { method: "POST", body: JSON.stringify({ path: PATH, address: row.address }) });
-								const entry = this.entries.get(row.address);
-								if (entry) {
-									if (entry.kind === "text") entry.node.nodeValue = entry.originalRaw;
-									else entry.element.setAttribute(entry.attr, entry.original);
-									this.unmarkEdited(entry);
-								}
-								this.rows.delete(row.address);
-								this.refreshStatus();
-								button.closest(".tcb-change").remove();
-								this.toast("Reverted to the original wording.");
-							} catch (error) {
+								await this.revertEdit(row.address);
+								if (change) change.remove();
+							} catch {
 								button.disabled = false;
-								this.toast(error.message, "error");
 							}
 						},
 					}),

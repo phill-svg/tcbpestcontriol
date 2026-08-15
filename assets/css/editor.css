@@ -172,6 +172,35 @@ body.tcb-editing-mode .tcb-has-edit {
 	white-space: pre-wrap;
 }
 
+/* Stands in for text that has been deleted, so the one change with nothing
+ * left on screen to click is still visible and still undoable from the page.
+ * Only ever rendered in edit mode -- visitors see the gap, not this. */
+.tcb-deleted {
+	font: 500 0.6875rem/1 "Inter", ui-sans-serif, system-ui, sans-serif;
+	vertical-align: middle;
+	display: inline-block;
+	padding: 0.25rem 0.4rem;
+	border: 1px dashed #6c6c74;
+	border-radius: 0.25rem;
+	background: #f5f5f7;
+	color: #5a5a62;
+	cursor: pointer;
+	/* The surrounding text can be any size; this must not inherit it. */
+	letter-spacing: 0;
+	text-transform: none;
+	white-space: nowrap;
+}
+
+.tcb-deleted:hover {
+	border-color: #e5251a;
+	color: #c41613;
+}
+
+.tcb-change-gone {
+	color: #6c6c74;
+	font-style: italic;
+}
+
 /* Dialogs ------------------------------------------------------------------ */
 
 .tcb-overlay {

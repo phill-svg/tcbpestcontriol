@@ -1847,6 +1847,14 @@ class Editor {
 		const status = el("p", { class: "tcb-hint" });
 		const options = el("div", { class: "tcb-suggestions" });
 		const button = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Suggest one" });
+		// Somewhere to push back. Without this the only response to a weak
+		// suggestion is to press the button again and hope, which is a poor
+		// way to spend anyone's afternoon.
+		const steer = el("input", {
+			type: "text",
+			class: "tcb-input tcb-input-small",
+			placeholder: "Anything to mention? e.g. mention Tuggeranong, lead with termites",
+		});
 
 		button.addEventListener("click", async () => {
 			button.disabled = true;
@@ -1856,7 +1864,10 @@ class Editor {
 
 			let result;
 			try {
-				result = await api("/api/seo/suggest", { method: "POST", body: JSON.stringify({ kind, path: PATH }) });
+				result = await api("/api/seo/suggest", {
+					method: "POST",
+					body: JSON.stringify({ kind, path: PATH, steer: steer.value.trim() }),
+				});
 			} catch (error) {
 				button.disabled = false;
 				status.className = "tcb-hint tcb-hint-warn";
@@ -1879,8 +1890,8 @@ class Editor {
 			}
 
 			status.textContent = result.usedSearches
-				? `Written from this page and the ${result.usedSearches} searches people used to find it. Click one to use it.`
-				: "Written from what this page already says. Click one to use it.";
+				? `Written from this page, ${result.usedExamples} other pages for the house style, and the ${result.usedSearches} searches people used to find it. Click one to use it.`
+				: `Written from this page and ${result.usedExamples} other pages for the house style. Click one to use it.`;
 
 			for (const candidate of result.candidates) {
 				const option = el("button", { type: "button", class: "tcb-suggestion" }, [
@@ -1894,9 +1905,23 @@ class Editor {
 				});
 				options.appendChild(option);
 			}
+
+			// What was thrown away and why. Hidden behind a summary because it
+			// is not usually interesting -- but when the survivors are dull,
+			// the reason is often that the good ones broke the no-invention
+			// rule, and there is no way to know that without being shown.
+			if (result.rejected.length) {
+				const details = el("details", { class: "tcb-rejected" }, [
+					el("summary", { text: `${result.rejected.length} thrown out` }),
+					...result.rejected.map((entry) =>
+						el("p", { class: "tcb-hint", text: `“${entry.text}” — ${entry.reason}` })
+					),
+				]);
+				options.appendChild(details);
+			}
 		});
 
-		return el("div", { class: "tcb-suggest-row" }, [button, status, options]);
+		return el("div", { class: "tcb-suggest-row" }, [button, steer, status, options]);
 	}
 
 	async saveMeta(address, value, original) {

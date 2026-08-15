@@ -661,10 +661,30 @@ body.tcb-editing-mode {
 	font-size: 0.75rem;
 }
 
+.tcb-suggest-row {
+	width: 100%;
+}
+
+.tcb-input-small {
+	width: 100%;
+	font-size: 0.8125rem;
+	padding: 0.35rem 0.5rem;
+}
+
 .tcb-suggestions {
 	width: 100%;
 	display: grid;
 	gap: 0.3rem;
+}
+
+.tcb-rejected summary {
+	font-size: 0.75rem;
+	color: #8a8a92;
+	cursor: pointer;
+}
+
+.tcb-rejected p {
+	margin-top: 0.2rem;
 }
 
 /* Each option is a button, not a line of text: it is clickable, and it has to

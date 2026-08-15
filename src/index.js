@@ -214,6 +214,17 @@ export default {
 			return handleSeoScan(request, url, env);
 		}
 
+		// Second half of the same scan: checking that the pages linked to
+		// actually load. Separate from /api/seo/scan because it can only run
+		// once every page has been read and the full list of destinations is
+		// known -- see handleSeoLinks.
+		if (url.pathname === "/api/seo/links") {
+			const session = await getStaffSession(request, env);
+			if (!session) return new Response("Unauthorized", { status: 401 });
+			if (!session.isAdmin) return new Response("Forbidden", { status: 403 });
+			return handleSeoLinks(request, url, env);
+		}
+
 		// Creating blog posts from the editor -- see src/blog-api.js. Same admin
 		// gate as the content API below: this writes to the repository.
 		if (url.pathname.startsWith("/api/blog/")) {
@@ -798,10 +809,64 @@ async function handleSeoScan(request, url, env) {
 		limit,
 		fetchPage: (path) => fetchAsset(request, new URL(path, url), env),
 		loadEdits: (path) => loadPageEdits(env, path).catch(() => null),
+		origin: url.origin,
 	});
 
 	return new Response(
-		JSON.stringify({ total: paths.length, offset, scanned: batch.scanned, done: batch.done, results: batch.results }),
+		JSON.stringify({
+			total: paths.length,
+			offset,
+			scanned: batch.scanned,
+			done: batch.done,
+			results: batch.results,
+			pages: batch.pages,
+		}),
 		{ headers: { "content-type": "application/json", "Cache-Control": "no-store" } }
 	);
+}
+
+// Checks whether a list of internal link destinations actually load.
+//
+// This cannot be folded into the page scan, because a destination is only
+// worth fetching once it is clear nothing else has already confirmed it: of
+// the 142 internal destinations on this site, 134 are pages the scan reads
+// anyway, and only the remaining eight -- mostly PDFs -- need a request each.
+// So the browser finishes the scan, subtracts what it has seen, and posts the
+// remainder here.
+//
+// Redirects count as working. `_redirects` deliberately keeps old URLs alive,
+// and reporting those as broken would flag the very thing that stops them
+// being broken.
+async function handleSeoLinks(request, url, env) {
+	let targets = [];
+	try {
+		const body = await request.json();
+		targets = Array.isArray(body.targets) ? body.targets : [];
+	} catch {
+		return new Response(JSON.stringify({ error: "Expected a JSON body with a list of targets." }), {
+			status: 400,
+			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
+		});
+	}
+
+	// Bounded per request for the same reason the page scan is: whatever the
+	// browser asks for has to fit in one invocation.
+	const wanted = [...new Set(targets.filter((target) => typeof target === "string" && target.startsWith("/")))].slice(0, 40);
+
+	const broken = [];
+	for (const target of wanted) {
+		try {
+			const response = await fetchAsset(request, new URL(target, url), env);
+			if (response.status >= 400) broken.push(target);
+			// Nothing here reads the body, and an unread one holds the
+			// connection open for the rest of the invocation.
+			if (response.body) await response.body.cancel().catch(() => {});
+		} catch {
+			broken.push(target);
+		}
+	}
+
+	return new Response(JSON.stringify({ checked: wanted.length, broken }), {
+		headers: { "content-type": "application/json", "Cache-Control": "no-store" },
+	});
 }

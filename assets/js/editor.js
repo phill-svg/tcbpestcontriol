@@ -34,6 +34,7 @@ import {
 	buildStyleString,
 } from "./content-address.js";
 import { checkSeo, googlePreview, summarisePage, TITLE_MAX, DESCRIPTION_MAX } from "./seo-check.js";
+import { checkSite, unverifiedTargets } from "./seo-site.js";
 
 // The call that actually starts all this is the very last statement in the
 // file. It cannot run from up here: `class Editor` is declared further down,
@@ -1434,25 +1435,36 @@ class Editor {
 	// because a silent thirty-second wait reads as a hang.
 	buildSiteScan() {
 		const status = el("p", { class: "tcb-hint" });
+		const siteResults = el("div", { class: "tcb-findings" });
 		const results = el("div", { class: "tcb-findings" });
 		const button = el("button", { type: "button", class: "tcb-btn", text: "Check every page" });
 
 		button.addEventListener("click", async () => {
 			button.disabled = true;
 			results.replaceChildren();
+			siteResults.replaceChildren();
 			const pages = [];
+			// What each page said, as opposed to what was wrong with it. Kept
+			// because the cross-page checks -- duplicate titles, broken links,
+			// pages nothing links to -- cannot be answered a page at a time.
+			const scanned = [];
 			let offset = 0;
 			let total = 0;
+			let complete = false;
 
 			try {
 				for (;;) {
 					const batch = await api(`/api/seo/scan?offset=${offset}&limit=10`);
 					total = batch.total;
 					pages.push(...batch.results);
+					scanned.push(...(batch.pages || []));
 					offset += batch.scanned;
 					status.className = "tcb-hint";
 					status.textContent = `Checked ${offset} of ${total} pages… ${pages.length} with something to look at.`;
-					if (batch.done || !batch.scanned) break;
+					if (batch.done || !batch.scanned) {
+						complete = Boolean(batch.done);
+						break;
+					}
 				}
 			} catch (error) {
 				status.className = "tcb-hint tcb-hint-warn";
@@ -1461,12 +1473,73 @@ class Editor {
 				return;
 			}
 
+			// Only the destinations nothing has already confirmed. Every page
+			// in the sitemap was just read, so the leftovers are the PDFs, the
+			// odd unlisted page, and anything that no longer exists.
+			let broken = [];
+			try {
+				// Pages that failed to load count as known too. They are already
+				// reported as "in the sitemap but does not load", and fetching
+				// them again would report the same page twice under two
+				// different headings.
+				const remaining = unverifiedTargets(scanned, [
+					...scanned.map((page) => page.path),
+					...pages.map((page) => page.path),
+				]);
+				for (let at = 0; at < remaining.length; at += 40) {
+					status.textContent = `Checking ${remaining.length} links…`;
+					const batch = await api("/api/seo/links", {
+						method: "POST",
+						body: JSON.stringify({ targets: remaining.slice(at, at + 40) }),
+					});
+					broken.push(...(batch.broken || []));
+				}
+			} catch {
+				// A failed link check should not throw away a completed page
+				// scan. The page findings are still worth showing, so this
+				// falls through with nothing reported rather than nothing at all.
+				broken = [];
+			}
+
+			const siteFindings = checkSite({ pages: scanned, broken, complete });
+			if (siteFindings.length) {
+				siteResults.appendChild(el("p", { class: "tcb-sync-title", text: "Across the whole site" }));
+			}
+			for (const finding of siteFindings) {
+				siteResults.appendChild(
+					el("div", { class: `tcb-finding tcb-finding-${finding.level.replace(/\s+/g, "-")}` }, [
+						el("span", { class: "tcb-finding-level", text: finding.level }),
+						el("div", {}, [
+							el("p", { class: "tcb-finding-message", text: finding.message }),
+							...(finding.detail ? [el("p", { class: "tcb-hint", text: finding.detail })] : []),
+							...(finding.pages && finding.pages.length
+								? [
+										el(
+											"div",
+											{ class: "tcb-scan-pages" },
+											finding.pages.slice(0, 6).map((path) =>
+												el("a", { class: "tcb-scan-link", href: `${path}?edit=1`, text: path })
+											)
+										),
+								  ]
+								: []),
+						]),
+					])
+				);
+			}
+
 			button.disabled = false;
 			button.textContent = "Check again";
 
-			if (!pages.length) {
+			if (!pages.length && !siteFindings.length) {
 				status.className = "tcb-hint";
 				status.textContent = `All ${total} pages checked. Nothing to fix.`;
+				return;
+			}
+
+			if (!pages.length) {
+				status.className = "tcb-hint";
+				status.textContent = `All ${total} pages checked. Nothing wrong on any single page, but see below.`;
 				return;
 			}
 
@@ -1475,7 +1548,8 @@ class Editor {
 			pages.sort((a, b) => weight(a) - weight(b));
 
 			const problemPages = pages.filter((page) => weight(page) === 0).length;
-			status.textContent = `${total} pages checked. ${problemPages} with something to fix, ${pages.length - problemPages} worth a look.`;
+			const across = siteFindings.length ? ` Plus ${siteFindings.length} across the site as a whole.` : "";
+			status.textContent = `${total} pages checked. ${problemPages} with something to fix, ${pages.length - problemPages} worth a look.${across}`;
 
 			for (const page of pages) {
 				const findings = el("div", { class: "tcb-scan-findings" });
@@ -1497,10 +1571,11 @@ class Editor {
 			el("p", { class: "tcb-sync-title", text: "The whole site" }),
 			el("p", {
 				class: "tcb-hint",
-				text: "Checks every page listed in the sitemap — the same list Google crawls. Takes a moment; you can watch it go.",
+				text: "Checks every page listed in the sitemap — the same list Google crawls — then the links between them. Takes a moment; you can watch it go.",
 			}),
 			button,
 			status,
+			siteResults,
 			results,
 		]);
 	}

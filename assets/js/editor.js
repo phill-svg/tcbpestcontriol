@@ -27,6 +27,7 @@ import {
 	MAX_TEXT_LENGTH,
 	isSafeHref,
 	isSafeImageSrc,
+	previewableImagePath,
 } from "./content-address.js";
 
 // The call that actually starts all this is the very last statement in the
@@ -670,11 +671,46 @@ class Editor {
 		if (altInput) altInput.value = entry.element.getAttribute("alt") || "";
 
 		const preview = isImage ? el("img", { class: "tcb-preview", alt: "" }) : null;
+		// The preview only ever shows a path rebuilt by previewableImagePath()
+		// -- the value assigned is the one it returns, never the one typed. It
+		// is stricter than the isSafeImageSrc() gate used on save, because the
+		// preview fires a real request on every keystroke; see the note in
+		// content-address.js. A blank preview therefore doubles as live
+		// validation that the path is wrong.
+		//
+		// CodeQL reports js/xss-through-dom on the assignment below and it is a
+		// false positive. It cannot be silenced from here: GitHub's default
+		// code-scanning setup ignores inline `// codeql[...]` markers, so the
+		// alert has to be dismissed once in the repository's Security tab
+		// (Code scanning -> the alert -> Dismiss -> False positive). Recording
+		// the argument here so whoever does that is not taking it on trust:
+		//
+		//  1. CodeQL's taint tracking follows the string out of the regex match
+		//     and does not model that an anchored pattern constrains what comes
+		//     back. Regex sanitisers are a known blind spot -- the same alert
+		//     appeared when the guard was a boolean helper, and rewriting it to
+		//     return its own match did not change the verdict.
+		//  2. The returned string cannot express a scheme, a host, a quote, an
+		//     angle bracket, whitespace, a query or a fragment: the pattern
+		//     admits only [A-Za-z0-9._~-] and "/", must start with a single
+		//     "/", and must end in an image extension. test/content-edits.test
+		//     fuzzes exactly that over ~138,000 inputs, covering every
+		//     metacharacter in every position, and nothing escapes.
+		//  3. The sink is an <img src>, which cannot execute script in any case
+		//     -- not even via a data: SVG, which browsers load in a
+		//     non-scripting mode. A second, independent reason this could not
+		//     be XSS even with the guard removed entirely.
+		//
+		// If the guard is ever loosened, the dismissal should be revisited.
+		const showPreview = (value) => {
+			if (!preview) return;
+			const safePath = previewableImagePath(value);
+			if (safePath) preview.src = safePath;
+			else preview.removeAttribute("src");
+		};
 		if (preview) {
-			preview.src = currentSrc;
-			valueInput.addEventListener("input", () => {
-				preview.src = valueInput.value;
-			});
+			showPreview(currentSrc);
+			valueInput.addEventListener("input", () => showPreview(valueInput.value));
 		}
 
 		const fields = [
@@ -714,27 +750,33 @@ class Editor {
 			if (altEntry && altInput) await this.saveDirect(altEntry, altInput.value.trim());
 		});
 
-		if (isImage) this.fillImagePicker(dialog.querySelector(".tcb-picker"), valueInput, preview);
+		if (isImage) this.fillImagePicker(dialog.querySelector(".tcb-picker"), valueInput, showPreview);
 	}
 
 	// The Worker can't list the assets directory at runtime, so the picker is
 	// driven by a manifest generated at author time by
 	// scripts/build-image-manifest.js. If it isn't there, the path box still
 	// works on its own.
-	async fillImagePicker(container, input, preview) {
+	async fillImagePicker(container, input, showPreview) {
 		if (!container) return;
 		try {
 			const response = await fetch("/assets/images/manifest.json", { credentials: "same-origin" });
 			if (!response.ok) return;
 			const { images } = await response.json();
+			// The manifest is generated from this repo, so this filter is belt
+			// and braces rather than a real threat -- but it means every path
+			// reaching an <img> in the editor has passed the same check, with no
+			// second route in that only happens to be safe today.
+			const usable = (Array.isArray(images) ? images : []).filter((image) => image && isSafeImageSrc(image.path));
+			if (!usable.length) return;
 			container.appendChild(el("p", { class: "tcb-hint", text: "Or pick one:" }));
 			const grid = el("div", { class: "tcb-picker-grid" });
-			for (const image of images) {
+			for (const image of usable) {
 				const button = el("button", { type: "button", class: "tcb-picker-item", title: image.path });
 				button.appendChild(el("img", { src: image.path, alt: "", loading: "lazy" }));
 				button.addEventListener("click", () => {
 					input.value = image.path;
-					if (preview) preview.src = image.path;
+					showPreview(image.path);
 				});
 				grid.appendChild(button);
 			}

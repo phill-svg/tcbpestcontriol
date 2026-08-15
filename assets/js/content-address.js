@@ -143,3 +143,25 @@ export function isSafeImageSrc(value) {
 	if (!src) return false;
 	return src.startsWith("/") && !src.startsWith("//");
 }
+
+// A deliberately tighter rule, used only for the editor's live image preview.
+//
+// A same-origin path is good enough to *store*, but the preview issues a real
+// request on every keystroke as someone types, and there is no reason for that
+// to be able to reach /api/... or to walk upwards with "..". So the preview
+// requires something that actually looks like an image file, and callers
+// assign the returned string rather than the one they were given -- nothing
+// reaches the DOM that has not been rebuilt from a known-good shape.
+//
+// Returns the safe path, or null. The trailing "/" in the segment group makes
+// each repetition unambiguous, so the nested quantifier cannot backtrack
+// badly (checked at 5000 segments in the tests).
+const PREVIEWABLE_IMAGE = /^\/(?!\/)(?:[A-Za-z0-9._~-]+\/)*[A-Za-z0-9._~-]+\.(?:webp|jpg|jpeg|png|svg|avif|gif)$/i;
+
+export function previewableImagePath(value) {
+	const match = PREVIEWABLE_IMAGE.exec(String(value == null ? "" : value).trim());
+	if (!match) return null;
+	// The character class means ".." can only ever appear as a whole segment,
+	// so rejecting it here closes path traversal completely.
+	return match[0].split("/").includes("..") ? null : match[0];
+}

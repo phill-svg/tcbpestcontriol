@@ -86,13 +86,28 @@ through every page in the sitemap — the same list Google crawls — and lists
 only the ones with something worth looking at, each linking straight into
 editing that page. It takes a second or two.
 
+The whole-site scan also checks four things that no single page can tell you
+about on its own, listed under **Across the whole site**:
+
+- **Two pages with the same title.** They compete with each other in Google
+  and it picks one. The easiest mistake to make in this editor, since copying
+  a title from one page to another takes two seconds.
+- **Two pages with the same description.** Less serious — Google often
+  rewrites descriptions anyway — but a wasted chance to say something
+  different.
+- **Links to pages that no longer exist.** Reported once per broken
+  destination, with the pages that point at it, so renaming a page shows up as
+  one thing to fix rather than nine.
+- **Pages nothing links to.** They are still in the sitemap, so Google can
+  find them, but a visitor clicking around the site never will.
+
 The same preview appears in **Page title & description** and updates as you
 type, so you can see when a title is about to get cut off rather than guessing
 from a character count.
 
-It checks the page in front of you, not the whole site. Your pages are in good
-shape already — the point is to catch a problem being introduced, not to hunt
-for old ones.
+What it does not check: page speed, mobile layout, structured data (your pages
+already carry it), or anything to do with keywords. Nothing here scores your
+page out of a hundred, because that number would be made up.
 
 ## Drafts vs published
 

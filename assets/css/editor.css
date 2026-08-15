@@ -634,3 +634,13 @@ body.tcb-editing-mode {
 .tcb-scan-worth-a-look {
 	color: #92400e;
 }
+
+/* The pages a whole-site finding refers to. Laid out as chips rather than a
+   sentence because they are links, and a run of links with no gap between
+   them reads as one long address. */
+.tcb-scan-pages {
+	margin-top: 0.3rem;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.15rem 0.5rem;
+}

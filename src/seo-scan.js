@@ -14,6 +14,7 @@
 import { checkSeo } from "../assets/js/seo-check.js";
 import { normalisePath } from "../assets/js/content-address.js";
 import { decodeEntities } from "./html-entities.js";
+import { linkTarget } from "../assets/js/seo-site.js";
 
 // Pulled out of the <loc> elements. Only the path is kept -- the scan asks the
 // assets binding for pages, not the public internet.
@@ -118,7 +119,13 @@ export async function extractPageSummary(response) {
 	for (const image of summary.images) {
 		if (image.altText !== null && image.altText !== undefined) image.altText = decodeEntities(image.altText);
 	}
-	for (const link of summary.links) link.text = decodeEntities(link.text);
+	for (const link of summary.links) {
+		link.text = decodeEntities(link.text);
+		// `&amp;` in a query string is the common case, and while the query is
+		// dropped before a link is followed up, an href that has been decoded
+		// is the one a browser would act on.
+		link.href = decodeEntities(link.href);
+	}
 	return summary;
 }
 
@@ -128,9 +135,15 @@ export async function extractPageSummary(response) {
 // `extract` defaults to the real HTMLRewriter-based reader and is injectable
 // so the batching -- which pages get visited, what happens when one fails,
 // whether overrides are applied -- can be tested without a Worker runtime.
-export async function scanBatch({ paths, offset, limit, fetchPage, loadEdits, extract = extractPageSummary }) {
+//
+// Returns `results` (per-page findings, healthy pages omitted) and `pages`
+// (what each page said, for the cross-page checks in assets/js/seo-site.js).
+// Duplicate titles and unlinked pages cannot be seen a page at a time, so the
+// raw material has to come back with the findings rather than instead of them.
+export async function scanBatch({ paths, offset, limit, fetchPage, loadEdits, extract = extractPageSummary, origin }) {
 	const slice = paths.slice(offset, offset + limit);
 	const results = [];
+	const pages = [];
 
 	for (const path of slice) {
 		let summary;
@@ -165,9 +178,22 @@ export async function scanBatch({ paths, offset, limit, fetchPage, loadEdits, ex
 			}
 		}
 
+		pages.push({
+			path,
+			title: summary.title,
+			description: summary.description,
+			// Deduplicated per page: a header, a footer and a body paragraph
+			// all linking to /contact is one relationship, not three.
+			targets: [
+				...new Set(
+					(summary.links || []).map((link) => linkTarget(link.href, path, origin)).filter((target) => target !== null)
+				),
+			],
+		});
+
 		const findings = checkSeo(summary).filter((finding) => finding.level !== "good");
 		if (findings.length) results.push({ path, findings });
 	}
 
-	return { results, scanned: slice.length, done: offset + slice.length >= paths.length };
+	return { results, pages, scanned: slice.length, done: offset + slice.length >= paths.length };
 }

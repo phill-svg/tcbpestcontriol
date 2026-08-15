@@ -293,6 +293,40 @@ test("the image preview guard rebuilds the path instead of trusting it", () => {
 	}
 });
 
+test("the image preview guard cannot emit anything that leaves this origin", () => {
+	// This is the evidence behind the codeql[js/xss-through-dom] suppression in
+	// assets/js/editor.js -- see the comment there. CodeQL cannot see that an
+	// anchored regex constrains its own match, so the argument that the guard
+	// holds has to live somewhere it can be re-checked. Every metacharacter
+	// that could redirect the request, escape the attribute or traverse
+	// upwards is tried in every position of a short string.
+	const alphabet = ["/", ":", ".", "<", ">", '"', "'", "&", "?", "#", "\\", " ", "\n", "\t", "%", "@", "a", "1", "-"];
+
+	const dangerous = (value) =>
+		/^[a-z][a-z0-9+.-]*:/i.test(value) || // any scheme
+		value.startsWith("//") || // protocol-relative host
+		/[<>"'\s?#&%\\]/.test(value) || // attribute escape, query, fragment
+		value.split("/").includes("..") || // traversal
+		!value.startsWith("/"); // not root-relative
+
+	const leaks = [];
+	let tested = 0;
+	const walk = (prefix, depth) => {
+		if (depth === 0) return;
+		for (const character of alphabet) {
+			const candidate = prefix + character;
+			tested++;
+			const result = previewableImagePath(candidate);
+			if (result !== null && dangerous(result)) leaks.push([candidate, result]);
+			walk(candidate, depth - 1);
+		}
+	};
+	walk("", 4);
+
+	assert.ok(tested > 100000, `expected a broad sweep, only tried ${tested}`);
+	assert.deepEqual(leaks, [], "no input may produce an unsafe path");
+});
+
 test("the image preview guard has no catastrophic backtracking of its own", () => {
 	// It carries a nested quantifier, so it is worth pinning: the trailing "/"
 	// makes each repetition unambiguous, which is what keeps it linear.

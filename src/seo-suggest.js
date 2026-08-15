@@ -147,7 +147,7 @@ export function parseCandidates(raw) {
 // They are read from the live site rather than kept in a constant here, so
 // the style tracks whatever the site currently does instead of freezing on
 // whatever it did the day this was written.
-export function buildPrompt({ kind, page, queries = [], examples = [], gaps = [], steer = "", require = [], min, max }) {
+export function buildPrompt({ kind, page, queries = [], examples = [], gaps = [], steer = "", require = [], alsoWanted = [], min, max }) {
 	const searched = queries
 		.slice(0, 12)
 		.map((entry) => entry.key)
@@ -214,6 +214,11 @@ export function buildPrompt({ kind, page, queries = [], examples = [], gaps = []
 				...(require.length
 					? ["", `Every option must contain the words: ${require.join(", ")}. An option without them is no use.`]
 					: []),
+				// Asked for, not demanded. Requiring every phrase at once
+				// rejects everything, because they will not all fit.
+				...(alsoWanted.length
+					? [`Work in as many of these as still read naturally, but not at the cost of the sentence: ${alsoWanted.join(", ")}.`]
+					: []),
 				...(steer ? ["", `The person who owns this site asks specifically: ${String(steer).slice(0, 300)}`] : []),
 			].join("\n"),
 		},
@@ -223,8 +228,8 @@ export function buildPrompt({ kind, page, queries = [], examples = [], gaps = []
 // Returns { candidates, rejected } -- rejected is kept because a run where
 // everything was thrown away should say so rather than silently offering
 // nothing, which reads as a broken button.
-export async function suggest(env, { kind, page, queries = [], examples = [], gaps = [], steer = "", require = [], min, max, run } = {}) {
-	const messages = buildPrompt({ kind, page, queries, examples, gaps, steer, require, min, max });
+export async function suggest(env, { kind, page, queries = [], examples = [], gaps = [], steer = "", require = [], alsoWanted = [], min, max, run } = {}) {
+	const messages = buildPrompt({ kind, page, queries, examples, gaps, steer, require, alsoWanted, min, max });
 	const call = run || ((body) => env.AI.run(MODEL, body));
 	// Six asked for rather than three. Roughly half get thrown out by the
 	// checks below -- so asking for what should survive left the button
@@ -315,16 +320,30 @@ export async function extractMeta(response) {
 export const HEADING_MIN = 12;
 export const HEADING_MAX = 70;
 
-// Closing one specific gap, trying each place the words could go in turn.
+// Closing the page's gaps, trying each place the words could go in turn.
 //
-// The order is the order a person would try: the title carries the most
-// weight and is what shows in the result, the description next, and the main
-// heading last -- which is also the one with room, when a phrase simply will
-// not fit inside 62 characters alongside everything the title already has to
-// say. Each is only attempted if the one before produced nothing that both
-// contains the words and survives the invention checks.
-export async function fixGap(env, { gap, page, examples = [], queries = [], limits, run } = {}) {
+// One rewrite covering all of them, not one per search. A page has a single
+// title, and offering a separate fix per gap produced two buttons proposing
+// two different titles for the same box -- where accepting the second
+// silently undid the first.
+//
+// Only the biggest gap's words are compulsory. Requiring every phrase at once
+// would reject everything: "pigeon control canberra" and "bird proofing
+// canberra" will not both fit inside 62 characters alongside the business
+// name. The rest are asked for and then counted, so a candidate covering two
+// searches can be offered above one covering a single search.
+//
+// The order of places is the order a person would try: the title carries the
+// most weight and is what shows in the result, the description next, and the
+// main heading last -- which is also the one with room left when a phrase
+// simply will not fit in a title. Each is attempted only if the one before
+// produced nothing that both uses the words and survives the invention checks.
+export async function fixGaps(env, { gaps = [], page, examples = [], queries = [], limits, run } = {}) {
 	const attempts = [];
+	if (!gaps.length) return { kind: null, candidates: [], attempts };
+
+	const [biggest, ...rest] = gaps;
+	const alsoWanted = [...new Set(rest.flatMap((gap) => gap.missing))].filter((word) => !biggest.missing.includes(word));
 
 	for (const kind of ["title", "description", "heading"]) {
 		const { min, max } = limits[kind];
@@ -333,18 +352,32 @@ export async function fixGap(env, { gap, page, examples = [], queries = [], limi
 			page,
 			examples,
 			queries,
-			require: gap.missing,
+			require: biggest.missing,
+			alsoWanted,
 			min,
 			max,
 			run,
 		});
-		if (candidates.length) return { kind, candidates, rejected, attempts };
+
+		if (candidates.length) {
+			// Best coverage first: the whole reason for doing this in one pass
+			// is that one line can answer more than one search.
+			const scored = candidates
+				.map((text) => ({ text, covers: gaps.filter((gap) => coversGap(text, gap)).map((gap) => gap.query) }))
+				.sort((a, b) => b.covers.length - a.covers.length);
+			return { kind, candidates: scored, rejected, attempts };
+		}
 		// Kept so the panel can say why the obvious place did not work --
 		// "it will not fit in the title" is a useful thing to be told.
 		attempts.push({ kind, rejected });
 	}
 
-	return { kind: null, candidates: [], rejected: [], attempts };
+	return { kind: null, candidates: [], attempts };
+}
+
+export function coversGap(text, gap) {
+	const haystack = normalise(text);
+	return (gap.missing || []).every((word) => haystack.includes(normalise(word)));
 }
 
 // Which pages to take writing samples from. Pages sharing a prefix are the

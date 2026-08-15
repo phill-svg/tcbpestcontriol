@@ -273,10 +273,10 @@ test("a required word matches its plural on the page", () => {
 });
 
 test("the title is tried first, and the heading only when nothing else fits", async () => {
-	const { fixGap, HEADING_MIN, HEADING_MAX } = await import("../src/seo-suggest.js");
+	const { fixGaps, HEADING_MIN, HEADING_MAX } = await import("../src/seo-suggest.js");
 	const asked = [];
-	const result = await fixGap(null, {
-		gap: { query: "borer control canberra", missing: ["borer"], impressions: 46 },
+	const result = await fixGaps(null, {
+		gaps: [{ query: "borer control canberra", missing: ["borer"], impressions: 46 }],
 		page: PAGE,
 		limits: {
 			title: { min: 30, max: 62 },
@@ -305,16 +305,16 @@ test("the title is tried first, and the heading only when nothing else fits", as
 
 	assert.deepEqual(asked, ["title", "description", "heading"], "in order of weight");
 	assert.equal(result.kind, "heading");
-	assert.deepEqual(result.candidates, ["Termites and borers. Inspection, treatment, written report."]);
+	assert.deepEqual(result.candidates.map((c) => c.text), ["Termites and borers. Inspection, treatment, written report."]);
 	// And it can say why the obvious places were skipped.
 	assert.deepEqual(result.attempts.map((attempt) => attempt.kind), ["title", "description"]);
 });
 
 test("a title that works stops the search there", async () => {
-	const { fixGap, HEADING_MIN, HEADING_MAX } = await import("../src/seo-suggest.js");
+	const { fixGaps, HEADING_MIN, HEADING_MAX } = await import("../src/seo-suggest.js");
 	let calls = 0;
-	const result = await fixGap(null, {
-		gap: { query: "borer control canberra", missing: ["borer"], impressions: 46 },
+	const result = await fixGaps(null, {
+		gaps: [{ query: "borer control canberra", missing: ["borer"], impressions: 46 }],
 		page: PAGE,
 		limits: {
 			title: { min: 30, max: 62 },
@@ -342,4 +342,54 @@ test("heading samples come from other pages' headings, not their titles", () => 
 	assert.match(prompt, /real headings from elsewhere on this site/);
 	assert.match(prompt, /Spiders\. Identified, treated, kept out\./);
 	assert.doesNotMatch(prompt, /Spider Control Canberra \| TCB/);
+});
+
+test("one rewrite covers the page's gaps rather than one per search", async () => {
+	// The complaint that produced this: two Fix buttons on the same page, both
+	// proposing a new title, where accepting the second silently undid the
+	// first. A page has one title.
+	const { fixGaps, HEADING_MIN, HEADING_MAX } = await import("../src/seo-suggest.js");
+	const gaps = [
+		{ query: "pigeon control canberra", missing: ["pigeon"], impressions: 68 },
+		{ query: "bird proofing canberra", missing: ["bird", "proofing"], impressions: 34 },
+	];
+	let prompt = "";
+	const result = await fixGaps(null, {
+		gaps,
+		page: { title: "Bird Control Canberra | TCB", description: "Netting and spikes.", h1: "Bird control." },
+		limits: {
+			title: { min: 30, max: 62 },
+			description: { min: 70, max: 165 },
+			heading: { min: HEADING_MIN, max: HEADING_MAX },
+		},
+		run: async (body) => {
+			prompt = body.messages[1].content;
+			return {
+				response: [
+					"Pigeon Control Canberra | TCB Pest Control",
+					"Pigeon Control & Bird Proofing Canberra | TCB",
+				].join("\n"),
+			};
+		},
+	});
+
+	// Only the biggest gap's words are compulsory -- demanding every phrase at
+	// once would reject everything, because they do not all fit.
+	assert.match(prompt, /must contain the words: pigeon/);
+	assert.match(prompt, /as many of these as still read naturally.*bird, proofing/);
+
+	// And the one answering both searches is offered first.
+	assert.deepEqual(result.candidates[0], {
+		text: "Pigeon Control & Bird Proofing Canberra | TCB",
+		covers: ["pigeon control canberra", "bird proofing canberra"],
+	});
+	assert.deepEqual(result.candidates[1].covers, ["pigeon control canberra"]);
+});
+
+test("a page with nothing to fix asks for nothing", async () => {
+	const { fixGaps } = await import("../src/seo-suggest.js");
+	let called = false;
+	const result = await fixGaps(null, { gaps: [], page: PAGE, limits: {}, run: async () => ((called = true), {}) });
+	assert.equal(result.kind, null);
+	assert.equal(called, false, "no gaps, no generation, no cost");
 });

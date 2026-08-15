@@ -1594,11 +1594,6 @@ class Editor {
 											]),
 									  ]
 									: []),
-								// Only where the work is on this page. A Fix
-								// button that quietly rewrote a different page
-								// than the one on screen would be the one thing
-								// in this editor you could not see happening.
-								...(gap.verdict === "add" ? [this.buildGapFix(gap)] : []),
 							])
 						);
 					}
@@ -1606,7 +1601,15 @@ class Editor {
 					results.appendChild(
 						el("div", { class: `tcb-finding tcb-finding-${group.verdict === "add" ? "problem" : "worth-a-look"}` }, [
 							el("span", { class: "tcb-finding-level", text: group.level }),
-							el("div", {}, [el("p", { class: "tcb-finding-message", text: group.heading }), list]),
+							el("div", {}, [
+								el("p", { class: "tcb-finding-message", text: group.heading }),
+								list,
+								// One button for the group. A page has one
+								// title, so a Fix per search meant two buttons
+								// proposing two different titles for the same
+								// box, where taking the second undid the first.
+								...(group.verdict === "add" ? [this.buildGapFix(rows)] : []),
+							]),
 						])
 					);
 				}
@@ -1691,10 +1694,14 @@ class Editor {
 	// Title first, then description, then the main heading. That is the order
 	// of weight, and the heading is the one with room left when a phrase will
 	// not fit into 62 characters alongside everything a title already carries.
-	buildGapFix(gap) {
+	buildGapFix(gaps) {
 		const status = el("p", { class: "tcb-hint" });
 		const options = el("div", { class: "tcb-suggestions" });
-		const button = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Fix this" });
+		const button = el("button", {
+			type: "button",
+			class: "tcb-btn tcb-btn-small",
+			text: gaps.length > 1 ? `Fix these ${gaps.length}` : "Fix this",
+		});
 
 		const WHERE = { title: "page title", description: "description", heading: "main heading" };
 
@@ -1706,10 +1713,7 @@ class Editor {
 
 			let result;
 			try {
-				result = await api("/api/seo/fix", {
-					method: "POST",
-					body: JSON.stringify({ path: PATH, query: gap.query }),
-				});
+				result = await api("/api/seo/fix", { method: "POST", body: JSON.stringify({ path: PATH }) });
 			} catch (error) {
 				button.disabled = false;
 				status.className = "tcb-hint tcb-hint-warn";
@@ -1732,7 +1736,7 @@ class Editor {
 			const skipped = (result.skipped || []).map((entry) => WHERE[entry.kind]).filter(Boolean);
 			const lead = skipped.length
 				? `The words would not fit in the ${skipped.join(" or the ")}, so these are for the ${WHERE[result.kind]}.`
-				: `Suggestions for the ${WHERE[result.kind]}.`;
+				: `One ${WHERE[result.kind]}, covering as many of these searches as it honestly can.`;
 
 			// A heading built out of several pieces cannot be replaced in one
 			// move without losing what splits it. On this site that is a line
@@ -1746,18 +1750,24 @@ class Editor {
 				: `${lead} Click one to use it.`;
 
 			for (const candidate of result.candidates) {
+				// How many of the searches this one line answers. With more
+				// than one gap in play that is the thing worth comparing, and
+				// it is not visible from the wording alone.
+				const covers =
+					gaps.length > 1 ? `${candidate.covers.length}/${gaps.length}` : `${candidate.text.length}`;
+
 				if (splitHeading) {
-					options.appendChild(el("p", { class: "tcb-suggestion tcb-suggestion-plain", text: candidate }));
+					options.appendChild(el("p", { class: "tcb-suggestion tcb-suggestion-plain", text: candidate.text }));
 					continue;
 				}
 				const option = el("button", { type: "button", class: "tcb-suggestion" }, [
-					el("span", { class: "tcb-suggestion-text", text: candidate }),
-					el("span", { class: "tcb-suggestion-count", text: `${candidate.length}` }),
+					el("span", { class: "tcb-suggestion-text", text: candidate.text }),
+					el("span", { class: "tcb-suggestion-count", text: covers }),
 				]);
 				option.addEventListener("click", async () => {
 					option.disabled = true;
 					try {
-						await this.applyFix(result.kind, candidate);
+						await this.applyFix(result.kind, candidate.text);
 						status.className = "tcb-hint";
 						status.textContent = `Saved as a draft on the ${WHERE[result.kind]}. Publish when you're ready.`;
 						options.replaceChildren();

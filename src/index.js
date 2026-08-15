@@ -14,7 +14,7 @@ import { handleBlogApi } from "./blog-api.js";
 import { pathsFromSitemap, scanBatch, extractPageSummary } from "./seo-scan.js";
 import { suggest, extractContent, extractMeta, examplePaths } from "./seo-suggest.js";
 import { TITLE_MIN, TITLE_MAX, DESCRIPTION_MIN, DESCRIPTION_MAX } from "../assets/js/seo-check.js";
-import { findGaps, describeGap } from "./seo-gaps.js";
+import { findGaps, describeGap, fixForGap } from "./seo-gaps.js";
 import { fetchAsset } from "./assets.js";
 import {
 	insights as searchInsights,
@@ -765,7 +765,7 @@ function editorLauncherHtml({ editing, previewing }) {
 		// browsers by the old immutable rule -- a year-long cache entry cannot be
 		// revalidated away, only stepped around with a different URL. The
 		// no-cache rule in _headers is what stops it happening again.
-		`<link rel="stylesheet" href="/assets/css/editor.css?v=7">` +
+		`<link rel="stylesheet" href="/assets/css/editor.css?v=8">` +
 		`<script src="/assets/js/editor.js?v=1" type="module"></script>` +
 		`</div>`
 	);
@@ -989,7 +989,7 @@ async function handleSearchConsole(url, env) {
 					data.queries,
 					{ title: summary.title, description: summary.description, h1: content.h1 },
 					{ path: wanted, rankings: data.rankings }
-				).map((gap) => ({ ...gap, sentence: describeGap(gap, wanted) }));
+				).map((gap) => ({ ...gap, sentence: describeGap(gap), fix: fixForGap(gap) }));
 			}
 		}
 

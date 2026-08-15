@@ -9,7 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { findGaps, missingWords, contentWords, stem, isBrandQuery, describeGap, betterPageFor } from "../src/seo-gaps.js";
+import { findGaps, missingWords, contentWords, stem, isBrandQuery, describeGap, fixForGap, betterPageFor, isAbout } from "../src/seo-gaps.js";
 
 const PAGE = {
 	title: "Termite Treatment Canberra | TCB Pest Control Canberra",
@@ -92,7 +92,7 @@ test("the explanation leads with the numbers, because they are the argument", ()
 	const sentence = describeGap(gap);
 	assert.match(sentence, /2,340 times/);
 	assert.match(sentence, /position 12\.4/);
-	assert.match(sentence, /“white”, “ant”/);
+	assert.match(fixForGap(gap), /“white” and “ant”/);
 });
 
 test("no searches means no gaps rather than an error", () => {
@@ -118,8 +118,9 @@ test("a phrase another page answers better is not a reason to change this one", 
 	});
 	assert.equal(gap.verdict, "elsewhere");
 	assert.equal(gap.rival.path, "/bird-control");
-	assert.match(describeGap(gap), /already answers it better at position 4\.2/);
-	assert.match(describeGap(gap), /would only set the two competing/);
+	assert.match(fixForGap(gap), /Nothing to do/);
+	assert.match(fixForGap(gap), /already does better at position 4\.2/);
+	assert.match(fixForGap(gap), /competing for the same result/);
 });
 
 test("when the specialist page is behind, the work is pointed at that page", () => {
@@ -128,8 +129,10 @@ test("when the specialist page is behind, the work is pointed at that page", () 
 		rankings: { "bee pest control canberra": [{ path: "/", position: 8.7 }, { path: "/bees", position: 14.0 }] },
 	});
 	assert.equal(gap.verdict, "strengthen");
-	assert.match(describeGap(gap), /\/bees is the page that should own this/);
-	assert.match(describeGap(gap), /the work belongs there, not here/);
+	// The instruction has to say which page, which words, and what next.
+	assert.match(fixForGap(gap), /Open \/bees/);
+	assert.match(fixForGap(gap), /page title, its description and its main heading/);
+	assert.match(fixForGap(gap), /link to it from this page, using those words/);
 });
 
 test("with nothing else ranking, the words belong here or on a new page", () => {
@@ -139,8 +142,8 @@ test("with nothing else ranking, the words belong here or on a new page", () => 
 		rankings: { "borer control canberra": [{ path: "/", position: 16.7 }] },
 	});
 	assert.equal(gap.verdict, "add");
-	assert.match(describeGap(gap), /no other page on the site ranks for it/);
-	assert.match(describeGap(gap), /may deserve a page of its own/);
+	assert.match(fixForGap(gap), /No page on the site is about this/);
+	assert.match(fixForGap(gap), /give it a page of its own/);
 });
 
 test("gaps another page owns sink below the ones worth acting on", () => {
@@ -176,4 +179,75 @@ test("“near me” is not answered by putting the word “near” in a title", 
 	// the word be added is not merely useless, it is slightly deranged.
 	assert.deepEqual(findGaps([row("pest control near me", 42, 17)], HOME), []);
 	assert.deepEqual(contentWords("pest control near me"), ["pest", "control"]);
+});
+
+// --- ranking next to something is not the same as being about it -------------
+
+test("a suburb page is not “the page that should own” borer control", () => {
+	// The worst line this panel has printed. /locations-pest-control-tuggeranong
+	// ranked 20.0 for "borer control canberra", so the code declared it the
+	// rightful owner and told somebody to go and put borers on a suburb page.
+	// It ranked next. That is all it did.
+	const [gap] = findGaps([row("borer control canberra", 46, 16.7)], HOME, {
+		path: "/",
+		rankings: {
+			"borer control canberra": [
+				{ path: "/", position: 16.7 },
+				{ path: "/locations-pest-control-tuggeranong", position: 20.0 },
+			],
+		},
+	});
+	assert.equal(gap.verdict, "add", "nothing on the site is about borers");
+	assert.equal(gap.rival, null);
+	assert.match(fixForGap(gap), /No page on the site is about this/);
+});
+
+test("relatedness is judged on the subject, not on the words every page shares", () => {
+	// Every path here contains "pest" and "control", so matching on those
+	// would make every page related to every search.
+	assert.ok(isAbout("bird control canberra", "/bird-control"));
+	assert.ok(isAbout("bee pest control canberra", "/bees"));
+	assert.ok(isAbout("termite inspection canberra", "/termite-treatment"));
+	assert.ok(!isAbout("borer control canberra", "/locations-pest-control-tuggeranong"));
+	assert.ok(!isAbout("pest control canberra", "/bird-control"), "a generic search belongs to no specific page");
+	assert.ok(!isAbout("bird control canberra", "/rodent-control"));
+});
+
+test("beating another page by a fraction is not beating it", () => {
+	// /bird-control at 10.7 against this page at 10.5. Google shuffles by
+	// more than that in a week, and "leave it alone, that page is winning"
+	// would be advice built on noise.
+	const [gap] = findGaps([row("bird control canberra", 165, 10.5)], HOME, {
+		path: "/",
+		rankings: { "bird control canberra": [{ path: "/", position: 10.5 }, { path: "/bird-control", position: 10.7 }] },
+	});
+	assert.equal(gap.verdict, "strengthen");
+	assert.match(fixForGap(gap), /neck and neck/);
+
+	// A real margin still reads as one page being ahead.
+	const [clear] = findGaps([row("bird control canberra", 165, 10.5)], HOME, {
+		path: "/",
+		rankings: { "bird control canberra": [{ path: "/", position: 10.5 }, { path: "/bird-control", position: 4.2 }] },
+	});
+	assert.equal(clear.verdict, "elsewhere");
+});
+
+test("every gap says what to type, not that work exists", () => {
+	// The complaint that produced this: "it isn't saying how to fix it".
+	const gaps = findGaps(
+		[row("bird control canberra", 165, 10.5), row("borer control canberra", 46, 16.7)],
+		HOME,
+		{
+			path: "/",
+			rankings: {
+				"bird control canberra": [{ path: "/bird-control", position: 17.5 }],
+				"borer control canberra": [{ path: "/", position: 16.7 }],
+			},
+		}
+	);
+	for (const gap of gaps) {
+		const fix = fixForGap(gap);
+		assert.ok(fix.length > 80, "a fix is a set of steps, not a shrug");
+		assert.match(fix, /title|page of its own|Nothing to do/, "it names what to change");
+	}
 });

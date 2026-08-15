@@ -127,9 +127,8 @@ test("isSafeHref / isSafeImageSrc agree with the API's answers", () => {
 	assert.equal(isSafeImageSrc("assets/images/a.webp"), false);
 });
 
-test("text edits reject control characters and empty values", () => {
+test("text edits strip control characters and cap length", () => {
 	const parsed = parseAddress("t:abc:0");
-	assert.equal(validateValue(parsed, "   ").error !== undefined, true);
 	assert.equal(validateValue(parsed, "x".repeat(9000)).error !== undefined, true);
 	// A stray control character pasted in from Word is invisible in the editor
 	// but corrupts the page text, so it is stripped rather than stored.
@@ -260,6 +259,45 @@ test("commented-out markup does not steal an ordinal", () => {
 	assert.deepEqual(missing, []);
 	assert.match(html, /<!-- <h1>Fast spider control<\/h1> -->/, "the comment is left alone");
 	assert.match(html, /<h1>Rapid spider control<\/h1>/, "the live heading is the one that changed");
+});
+
+test("an empty text value is a deletion, not an error", () => {
+	// Deleting a phrase is an ordinary thing to want, and it is fully
+	// reversible: the wording is still in the HTML file and in the stored
+	// `original`, so Revert brings it back.
+	const parsed = parseAddress("t:abc:0");
+	assert.equal(validateValue(parsed, "").value, "");
+	assert.equal(validateValue(parsed, "   ").value, "", "whitespace-only counts as deleting it");
+	assert.equal(validateValue(parsed, "").error, undefined);
+});
+
+test("page title and description still cannot be emptied", () => {
+	// Unlike body copy, a page with no <title> is broken rather than edited,
+	// so the meta fields keep their non-empty rule.
+	assert.ok(validateValue(parseAddress("m:title"), "").error);
+	assert.ok(validateValue(parseAddress("m:description"), "   ").error);
+});
+
+test("bakeEdits removes deleted text from the file", () => {
+	const address = textAddress("Fast spider control", 0);
+	const { html, applied, missing } = bakeEdits(PAGE, new Map([[address, ""]]));
+
+	assert.deepEqual(applied, [address]);
+	assert.deepEqual(missing, []);
+	assert.match(html, /<h1><\/h1>/, "the element stays, its text does not");
+	// Nothing else on the page shifts.
+	assert.equal(html.replace("<h1></h1>", "<h1>Fast spider control</h1>"), PAGE);
+});
+
+test("deleting one run of text leaves its neighbours alone", () => {
+	// The case from a real page: a heading split across two text nodes, where
+	// only the trailing half should go.
+	const page = `<body><h1>Are treatments safe <span>around children and pets?</span></h1></body>`;
+	const address = textAddress("around children and pets?", 0);
+	const { html, missing } = bakeEdits(page, new Map([[address, ""]]));
+
+	assert.deepEqual(missing, []);
+	assert.equal(html, `<body><h1>Are treatments safe <span></span></h1></body>`);
 });
 
 test("the image preview guard rebuilds the path instead of trusting it", () => {

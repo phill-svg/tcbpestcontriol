@@ -341,7 +341,11 @@ export function validateValue(parsed, rawValue) {
 	const value = rawValue.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
 
 	if (parsed.kind === "text") {
-		if (!value) return { error: "Text cannot be empty. Use Revert to restore the original wording." };
+		// An empty value is a deletion, not a mistake: the override is stored
+		// and the words simply stop being rendered. It is fully reversible --
+		// the original is still in the HTML file and in the `original` column,
+		// so Revert brings it straight back -- which is why this needs no
+		// confirmation step of its own.
 		if (value.length > MAX_TEXT_LENGTH) return { error: `Text is too long (limit ${MAX_TEXT_LENGTH} characters).` };
 		return { value };
 	}

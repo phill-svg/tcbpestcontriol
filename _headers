@@ -11,6 +11,22 @@
 /assets/css/*
   Cache-Control: public, max-age=31536000, immutable
 
+# The visual editor's stylesheet is the exception to the rule above, and has
+# to come after it to win.
+#
+# style.css is safe to freeze for a year because every page links it with a
+# ?v= that gets bumped on release. editor.css is injected by the Worker and
+# its ?v= was easy to forget -- which duly happened: rules added after the
+# first version were invisible for anyone who had already loaded it, because
+# their browser had been told to keep the old copy for a year and never ask
+# again. The symptom was a settings panel with half its styling missing.
+#
+# It only ever loads for a signed-in admin, so there is nothing to gain from
+# caching it hard. Revalidating costs one conditional request per page view
+# for one person.
+/assets/css/editor.css
+  Cache-Control: no-cache
+
 /assets/favicon/*
   Cache-Control: public, max-age=31536000, immutable
 

@@ -1539,6 +1539,33 @@ class Editor {
 				])
 			);
 
+			// The strongest thing in this panel. Not an opinion about the
+			// wording and not a forecast: Google has already decided this page
+			// is a plausible answer for these phrases, and the page does not
+			// use the words. Both halves of that are observed.
+			if (page.gaps && page.gaps.length) {
+				const list = el("div", { class: "tcb-findings" });
+				for (const gap of page.gaps) {
+					list.appendChild(el("p", { class: "tcb-finding-message", text: gap.sentence }));
+				}
+				results.appendChild(
+					el("div", { class: "tcb-finding tcb-finding-problem" }, [
+						el("span", { class: "tcb-finding-level", text: "worth doing" }),
+						el("div", {}, [
+							el("p", {
+								class: "tcb-finding-message",
+								text: "Searches this page is shown for but never mentions:",
+							}),
+							list,
+							el("p", {
+								class: "tcb-finding-fix",
+								text: "Work the missing words into the title, description or main heading — but only where they are honestly true of the page. This is the one change here with evidence behind it rather than judgement. “Suggest one” in Page settings now uses these.",
+							}),
+						]),
+					])
+				);
+			}
+
 			// Where rewriting a title would pay. This is the whole reason the
 			// panel exists: the shortlist is actionable in this editor.
 			if (site.opportunities.missed.length) {
@@ -1889,9 +1916,12 @@ class Editor {
 				return;
 			}
 
-			status.textContent = result.usedSearches
-				? `Written from this page, ${result.usedExamples} other pages for the house style, and the ${result.usedSearches} searches people used to find it. Click one to use it.`
-				: `Written from this page and ${result.usedExamples} other pages for the house style. Click one to use it.`;
+			// Says what it was actually working from, because "it just made
+			// something up" is the reasonable default assumption otherwise.
+			const from = [`this page`, `${result.usedExamples} others for the house style`];
+			if (result.usedSearches) from.push(`the ${result.usedSearches} searches people used to find it`);
+			if (result.usedGaps) from.push(`${result.usedGaps} phrases Google shows it for but it never mentions`);
+			status.textContent = `Written from ${from.join(", ")}. Click one to use it.`;
 
 			for (const candidate of result.candidates) {
 				const option = el("button", { type: "button", class: "tcb-suggestion" }, [

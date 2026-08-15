@@ -232,3 +232,25 @@ test("style samples come from sibling pages where there are any", () => {
 	assert.ok(alone.length > 0);
 	assert.ok(!alone.includes("/termite-treatment"));
 });
+
+test("measured gaps reach the model, with the numbers that justify them", () => {
+	// The one instruction in this prompt backed by evidence rather than
+	// judgement. It has to arrive with its impressions and position attached,
+	// because "mention white ants" and "Google showed this page 2,340 times
+	// for white ants and it sits at 12" are different instructions.
+	const prompt = buildPrompt({
+		kind: "title",
+		page: PAGE,
+		gaps: [{ query: "white ants canberra", missing: ["white", "ant"], impressions: 2340, position: 12.4 }],
+		min: 30,
+		max: 62,
+	})[1].content;
+
+	assert.match(prompt, /already shows this page for these searches/);
+	assert.match(prompt, /white ants canberra \(missing: white, ant\) — shown 2340 times, position 12/);
+	// And "if they fit honestly" stays attached: a gap is a reason to
+	// consider a phrase, not a licence to claim the page is about it.
+	assert.match(prompt, /if they fit honestly/);
+
+	assert.doesNotMatch(buildPrompt({ kind: "title", page: PAGE, gaps: [], min: 30, max: 62 })[1].content, /never says the words/);
+});

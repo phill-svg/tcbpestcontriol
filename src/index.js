@@ -14,6 +14,7 @@ import { handleBlogApi } from "./blog-api.js";
 import { pathsFromSitemap, scanBatch, extractPageSummary } from "./seo-scan.js";
 import { suggest, extractContent, extractMeta, examplePaths } from "./seo-suggest.js";
 import { TITLE_MIN, TITLE_MAX, DESCRIPTION_MIN, DESCRIPTION_MAX } from "../assets/js/seo-check.js";
+import { findGaps, describeGap } from "./seo-gaps.js";
 import { fetchAsset } from "./assets.js";
 import {
 	insights as searchInsights,
@@ -764,7 +765,7 @@ function editorLauncherHtml({ editing, previewing }) {
 		// browsers by the old immutable rule -- a year-long cache entry cannot be
 		// revalidated away, only stepped around with a different URL. The
 		// no-cache rule in _headers is what stops it happening again.
-		`<link rel="stylesheet" href="/assets/css/editor.css?v=5">` +
+		`<link rel="stylesheet" href="/assets/css/editor.css?v=6">` +
 		`<script src="/assets/js/editor.js?v=1" type="module"></script>` +
 		`</div>`
 	);
@@ -882,9 +883,14 @@ async function handleSeoSuggest(request, url, env) {
 	// The suggestion is worth less without them, which is worth saying, but
 	// it is not worth refusing to make.
 	let queries = [];
+	let gaps = [];
 	if (isSearchConsoleConfigured(env)) {
 		try {
 			({ queries } = await searchInsights(env, { hostname: url.hostname, path }));
+			// The one instruction here with evidence behind it rather than
+			// judgement: Google already offers this page for these phrases
+			// and the page does not use the words.
+			gaps = findGaps(queries, { title: summary.title, description: summary.description, h1: content.h1 });
 		} catch {
 			// Search Console being unreachable is not a reason to refuse to
 			// draft anything -- it just means drafting from the page alone.
@@ -920,11 +926,12 @@ async function handleSeoSuggest(request, url, env) {
 			page: { title: summary.title, description: summary.description, h1: content.h1, body: content.body },
 			queries,
 			examples,
+			gaps,
 			steer: typeof body.steer === "string" ? body.steer : "",
 			min: kind === "title" ? TITLE_MIN : DESCRIPTION_MIN,
 			max: kind === "title" ? TITLE_MAX : DESCRIPTION_MAX,
 		});
-		return new Response(JSON.stringify({ kind, candidates, rejected, usedSearches: queries.length, usedExamples: examples.length }), {
+		return new Response(JSON.stringify({ kind, candidates, rejected, usedSearches: queries.length, usedExamples: examples.length, usedGaps: gaps.length }), {
 			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
 		});
 	} catch (error) {
@@ -947,10 +954,35 @@ async function handleSearchConsole(url, env) {
 
 	const path = url.searchParams.get("path");
 	try {
-		const data = await searchInsights(env, {
-			hostname: url.hostname,
-			path: path && path.startsWith("/") ? normalisePath(path) : null,
-		});
+		const wanted = path && path.startsWith("/") ? normalisePath(path) : null;
+		const data = await searchInsights(env, { hostname: url.hostname, path: wanted });
+
+		// For a single page, the gap between what Google shows it for and
+		// what it says. Needs the page's own wording, so it is only computed
+		// when a page was asked about.
+		if (wanted) {
+			const pageUrl = new URL(wanted, url);
+			const response = await fetchAsset(new Request(pageUrl, { method: "GET" }), pageUrl, env);
+			if (response.status === 200) {
+				const [summary, content] = await Promise.all([
+					extractPageSummary(response.clone()),
+					extractContent(response),
+				]);
+				const edits = await loadPageEdits(env, wanted).catch(() => null);
+				if (edits) {
+					const title = edits.get("m:title");
+					const description = edits.get("m:description");
+					if (title !== undefined) summary.title = title;
+					if (description !== undefined) summary.description = description;
+				}
+				data.gaps = findGaps(data.queries, {
+					title: summary.title,
+					description: summary.description,
+					h1: content.h1,
+				}).map((gap) => ({ ...gap, sentence: describeGap(gap) }));
+			}
+		}
+
 		return new Response(JSON.stringify(data), {
 			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
 		});

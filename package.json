@@ -1,13 +1,16 @@
 {
-  "name": "tcbpestreal",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "build:css": "node scripts/build-css.js",
-    "check:booking": "node scripts/check-booking-config.js",
-    "test": "node --test test/*.test.mjs"
-  },
-  "dependencies": {
-    "@pushforge/builder": "^2.0.5"
-  }
+	"name": "tcbpestreal",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build:css": "node scripts/build-css.js",
+		"check:booking": "node scripts/check-booking-config.js",
+		"test": "node --test test/*.test.mjs",
+		"build:images": "node scripts/build-image-manifest.js",
+		"sync:content": "node scripts/sync-content-edits.js",
+		"test:parity": "TCB_PARITY=1 node --test test/address-parity.test.mjs"
+	},
+	"dependencies": {
+		"@pushforge/builder": "^2.0.5"
+	}
 }

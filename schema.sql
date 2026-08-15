@@ -22,3 +22,27 @@ CREATE TABLE IF NOT EXISTS bookings (
   UNIQUE (staff_uuid, start_date)
 );
 CREATE INDEX IF NOT EXISTS idx_bookings_staff_day ON bookings (staff_uuid, start_date);
+
+-- Visual editor overrides (see src/content-edits.js).
+--
+-- One row per edited piece of copy: `address` names it by a hash of its
+-- current wording rather than by position, so unrelated changes to the page
+-- can never repoint an edit at the wrong words. `draft` is what you see in
+-- preview, `published` is what visitors see, and `original` records what the
+-- HTML file said so scripts/sync-content-edits.js can find it again.
+--
+-- The Worker creates this table on demand, so applying this file by hand is
+-- optional -- it is here so the schema stays documented in one place.
+CREATE TABLE IF NOT EXISTS content_edits (
+  path         TEXT NOT NULL,        -- "/spider-control"
+  address      TEXT NOT NULL,        -- "t:<hash>:<ordinal>" | "a:<tag>:<attr>:<hash>:<ordinal>" | "m:title"
+  kind         TEXT NOT NULL,        -- text | attr | meta
+  original     TEXT NOT NULL,        -- wording as it appears in the HTML file
+  draft        TEXT,                 -- unpublished edit, visible in preview only
+  published    TEXT,                 -- live edit, served to visitors
+  updated_by   TEXT NOT NULL,
+  updated_at   INTEGER NOT NULL,     -- epoch ms
+  published_at INTEGER,              -- epoch ms
+  PRIMARY KEY (path, address)
+);
+CREATE INDEX IF NOT EXISTS idx_content_edits_published ON content_edits (published);

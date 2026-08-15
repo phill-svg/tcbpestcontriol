@@ -1367,6 +1367,29 @@ class Editor {
 		// The editor's own chrome is excluded, or its buttons would be counted
 		// as links with unhelpful text.
 		const page = summarisePage(document, `[data-tcb-editor], [${IGNORED_SUBTREE_ATTR}]`);
+
+		// The title and description come from the stored edit rather than from
+		// the document, when one exists.
+		//
+		// This used to read document.title, which gave different answers for
+		// the same page depending on history: saving in Page settings assigns
+		// document.title, so the check saw the new wording -- but after a
+		// reload it saw the file's wording again, because edit mode serves the
+		// page unedited. Worse, whichever it happened to see was presented as
+		// simple fact, so a draft title could read as "nothing to fix" here
+		// while the whole-site scan, which only ever sees published content,
+		// reported the old one as a problem. Two panels contradicting each
+		// other with no way to tell which was right.
+		const draftFields = [];
+		for (const [address, label] of [[META_TITLE_ADDRESS, "title"], [META_DESCRIPTION_ADDRESS, "description"]]) {
+			const row = this.rows.get(address);
+			if (!row) continue;
+			const value = row.draft ?? row.published;
+			if (value === null || value === undefined) continue;
+			page[label] = value;
+			if (row.draft !== null && row.draft !== undefined) draftFields.push(label);
+		}
+
 		const findings = checkSeo(page);
 
 		const list = el("div", { class: "tcb-findings" });

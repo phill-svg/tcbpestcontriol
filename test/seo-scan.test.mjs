@@ -136,3 +136,36 @@ test("healthy pages are left out of the report entirely", async () => {
 });
 
 assert.equal(typeof originalExtract, "function");
+
+test("entity-encoded titles are measured as a reader sees them", async () => {
+	// The bug this pins: HTMLRewriter hands back raw source, so
+	// "Termite Treatment &amp; Inspections" measured 63 characters and got
+	// reported as too long for Google. A reader sees "&" and 59 characters,
+	// and the browser-side check said so — the scanner was the one that was
+	// wrong, while an offline survey sharing the same flaw agreed with it and
+	// made the wrong answer look corroborated.
+	const raw = "Termite Treatment &amp; Inspections | TCB Pest Control Canberra";
+	const decoded = "Termite Treatment & Inspections | TCB Pest Control Canberra";
+	assert.equal(raw.length, 63);
+	assert.equal(decoded.length, 59);
+
+	const summary = {
+		title: decoded,
+		description: "x".repeat(100),
+		h1Count: 1,
+		images: [],
+		links: [],
+		hasCanonical: true,
+	};
+	const { checkSeo } = await import("../assets/js/seo-check.js");
+	assert.deepEqual(
+		checkSeo(summary).filter((finding) => finding.level !== "good"),
+		[],
+		"the real title is comfortably inside the limit"
+	);
+
+	// And measured raw it would have been flagged, which is what happened.
+	const flagged = checkSeo({ ...summary, title: raw }).filter((finding) => finding.level !== "good");
+	assert.equal(flagged.length, 1);
+	assert.match(flagged[0].message, /63 characters/);
+});

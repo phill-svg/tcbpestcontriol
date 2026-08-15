@@ -83,7 +83,9 @@ function withUrlParams(changes) {
 }
 
 async function api(path, options = {}) {
-	const response = await fetch(`/api/content/${path}`, {
+	// A leading slash means "this exact endpoint"; anything else is relative to
+	// the content API, which is where most calls go.
+	const response = await fetch(path.startsWith("/") ? path : `/api/content/${path}`, {
 		credentials: "same-origin",
 		headers: { "content-type": "application/json" },
 		...options,
@@ -287,6 +289,7 @@ class Editor {
 		}
 		this.bindPageInteractions();
 		this.refreshStatus();
+		this.checkDraftPost();
 	}
 
 	// Current values are painted on *after* indexing, so the addresses stay
@@ -393,6 +396,7 @@ class Editor {
 					text: "Page title & description",
 					onclick: () => this.openPageSettings(),
 				}),
+				el("button", { type: "button", class: "tcb-btn", text: "New post", onclick: () => this.openNewPost() }),
 				el("button", { type: "button", class: "tcb-btn", text: "Changes", onclick: () => this.openChanges() }),
 				this.previewButton,
 				this.publishButton,
@@ -984,6 +988,176 @@ class Editor {
 			if (!this.rows.has(entry.address)) this.unmarkEdited(entry);
 			throw error;
 		}
+	}
+
+	// If this page is an unpublished post, say so and offer to publish it.
+	// Without this a draft would be a page you could reach and edit but never
+	// finish, with no sign anywhere that it was waiting.
+	async checkDraftPost() {
+		if (!/^\/blog-/.test(PATH)) return;
+		let posts = [];
+		try {
+			({ posts } = await api("/api/blog/posts"));
+		} catch {
+			return;
+		}
+		const post = (posts || []).find((candidate) => `/${candidate.slug}` === PATH);
+		if (!post || post.status !== "draft") return;
+
+		const publish = el("button", { type: "button", class: "tcb-btn tcb-btn-primary", text: "Publish post" });
+		publish.addEventListener("click", async () => {
+			publish.disabled = true;
+			publish.textContent = "Publishing…";
+			try {
+				await api("/api/blog/publish", { method: "POST", body: JSON.stringify({ slug: post.slug }) });
+				banner.replaceChildren(
+					el("span", {
+						class: "tcb-bar-label",
+						text: "Published. It is on the blog, the sitemap and the feed — live in a minute or two.",
+					})
+				);
+			} catch (error) {
+				publish.disabled = false;
+				publish.textContent = "Publish post";
+				this.toast(error.message, "error");
+			}
+		});
+
+		const banner = chrome("div", { class: "tcb-bar tcb-bar-draft" }, [
+			el("span", { class: "tcb-bar-badge", text: "Draft" }),
+			el("span", {
+				class: "tcb-bar-label",
+				text: "Nobody can find this post yet — it is not on the blog, the sitemap or the feed, and Google is told to skip it.",
+			}),
+			el("div", { class: "tcb-bar-actions" }, [publish]),
+		]);
+		document.body.appendChild(banner);
+	}
+
+	// -- writing a new blog post ----------------------------------------------
+
+	// BLOG-GUIDE.md's seven manual steps, as a form. Only the parts that need
+	// deciding are asked for: the slug, date, read time, canonical URL, social
+	// tags and related-post cards are all derived server-side.
+	//
+	// The wording does not have to be final here. Once the draft exists it is
+	// an ordinary page, so it can be opened with ?edit=1 and polished with the
+	// same click-to-edit the rest of the site uses.
+	async openNewPost() {
+		let options = { categories: [], services: [] };
+		try {
+			options = await api("/api/blog/options");
+		} catch (error) {
+			this.toast(error.message, "error");
+			return;
+		}
+
+		const field = (label, control, hint) =>
+			el("label", { class: "tcb-label" }, hint ? [el("span", { text: label }), control, el("span", { class: "tcb-hint", text: hint })] : [el("span", { text: label }), control]);
+
+		const titleInput = el("input", { type: "text", class: "tcb-input", placeholder: "Controlling Ants in Your Canberra Home This Summer" });
+		const descriptionInput = el("textarea", { class: "tcb-input tcb-textarea", rows: "2" });
+		const descriptionCount = el("span", { class: "tcb-hint" });
+		const updateCount = () => {
+			const length = descriptionInput.value.trim().length;
+			descriptionCount.textContent = `${length} characters — Google shows about 155.`;
+			descriptionCount.className = length > 200 || (length && length < 20) ? "tcb-hint tcb-hint-warn" : "tcb-hint";
+		};
+		descriptionInput.addEventListener("input", updateCount);
+		updateCount();
+
+		const categorySelect = el("select", { class: "tcb-input" });
+		for (const category of options.categories) categorySelect.appendChild(el("option", { value: category, text: category }));
+
+		const serviceSelect = el("select", { class: "tcb-input" });
+		for (const service of options.services) serviceSelect.appendChild(el("option", { value: service.url, text: service.name }));
+
+		const heroInput = el("input", { type: "text", class: "tcb-input", value: "/assets/images/pest-ant-macro.webp" });
+		const heroAltInput = el("input", { type: "text", class: "tcb-input" });
+		const heroPreview = el("img", { class: "tcb-preview", alt: "" });
+		const showHero = (value) => {
+			const safe = previewableImagePath(value);
+			if (safe) heroPreview.src = safe;
+			else heroPreview.removeAttribute("src");
+		};
+		heroInput.addEventListener("input", () => showHero(heroInput.value));
+		showHero(heroInput.value);
+		const picker = el("div", { class: "tcb-picker" });
+		this.fillImagePicker(picker, heroInput, showHero);
+
+		const introInput = el("textarea", { class: "tcb-input tcb-textarea", rows: "3" });
+		const pestInput = el("input", { type: "text", class: "tcb-input", placeholder: "ant control" });
+
+		// Sections are added and removed as needed, rather than being fixed at
+		// the template's three.
+		const sectionList = el("div", { class: "tcb-sections" });
+		const addSection = (heading = "", paragraph = "") => {
+			const headingInput = el("input", { type: "text", class: "tcb-input", placeholder: "Section heading" });
+			headingInput.value = heading;
+			const paragraphInput = el("textarea", { class: "tcb-input tcb-textarea", rows: "3", placeholder: "Section text" });
+			paragraphInput.value = paragraph;
+			const row = el("div", { class: "tcb-section" }, [
+				headingInput,
+				paragraphInput,
+				el("button", {
+					type: "button",
+					class: "tcb-btn tcb-btn-quiet",
+					text: "Remove section",
+					onclick: () => row.remove(),
+				}),
+			]);
+			row.headingInput = headingInput;
+			row.paragraphInput = paragraphInput;
+			sectionList.appendChild(row);
+		};
+		addSection();
+		addSection();
+
+		this.openDialog(
+			"New blog post",
+			[
+				el("p", { class: "tcb-hint", text: "This creates the post as a draft. Nothing links to it and Google is told to ignore it until you publish." }),
+				field("Title", titleInput),
+				field("Description", descriptionInput),
+				descriptionCount,
+				field("Category", categorySelect),
+				field("Main image", heroInput),
+				heroPreview,
+				picker,
+				field("Image description", heroAltInput, "What the picture shows, for screen readers and Google."),
+				field("Opening paragraph", introInput),
+				sectionList,
+				el("button", { type: "button", class: "tcb-btn", text: "Add another section", onclick: () => addSection() }),
+				field("Topic for the closing call to action", pestInput, "Filled into “a conversation about ___ in and around your home”."),
+				field("Service page to link", serviceSelect),
+			],
+			async () => {
+				const sections = [...sectionList.children].map((row) => ({
+					heading: row.headingInput.value.trim(),
+					paragraph: row.paragraphInput.value.trim(),
+				}));
+				const result = await api("/api/blog/create", {
+					method: "POST",
+					body: JSON.stringify({
+						title: titleInput.value,
+						description: descriptionInput.value,
+						category: categorySelect.value,
+						heroSrc: heroInput.value.trim(),
+						heroAlt: heroAltInput.value,
+						intro: introInput.value,
+						sections,
+						pestTopic: pestInput.value,
+						relatedServiceUrl: serviceSelect.value,
+					}),
+				});
+				// Straight into the draft, in edit mode, so the wording can be
+				// worked on where it will actually appear.
+				setTimeout(() => {
+					location.href = `${result.url}?edit=1`;
+				}, 1200);
+			},
+			{ confirmLabel: "Create draft" }
+		);
 	}
 
 	// -- styling a run of text ------------------------------------------------

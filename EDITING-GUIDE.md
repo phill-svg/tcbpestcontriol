@@ -83,6 +83,23 @@ you left off.
 
 Published changes appear within about half a minute everywhere in the world.
 
+## Writing a new blog post
+
+Click **New post** in the toolbar. Fill in the title, a description, a category,
+a main image, an opening paragraph, and as many sections as you want.
+
+It creates the post as a **draft**: the page exists at its real address so you
+can read it, but nothing links to it, it is not in the blog list, the sitemap
+or the feed, and Google is told to skip it. You land straight in it in edit
+mode, so you can polish the wording by clicking it, exactly like any other page.
+
+When you are happy, press **Publish post** in the orange draft bar. That adds it
+to the blog page, the sitemap, the RSS feed and the site search, and removes the
+"skip me" tag. Live in a minute or two.
+
+The web address, publish date, reading time, social-share tags and the two
+"continue reading" cards are all worked out for you.
+
 ## Sync to code
 
 Open **Changes** and there's a **Sync to code** button at the bottom.

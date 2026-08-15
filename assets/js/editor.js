@@ -33,6 +33,7 @@ import {
 	parseStyleParts,
 	buildStyleString,
 } from "./content-address.js";
+import { checkSeo, googlePreview, summarisePage, TITLE_MAX, DESCRIPTION_MAX } from "./seo-check.js";
 
 // The call that actually starts all this is the very last statement in the
 // file. It cannot run from up here: `class Editor` is declared further down,
@@ -396,6 +397,7 @@ class Editor {
 					text: "Page title & description",
 					onclick: () => this.openPageSettings(),
 				}),
+				el("button", { type: "button", class: "tcb-btn", text: "SEO check", onclick: () => this.openSeoCheck() }),
 				el("button", { type: "button", class: "tcb-btn", text: "New post", onclick: () => this.openNewPost() }),
 				el("button", { type: "button", class: "tcb-btn", text: "Changes", onclick: () => this.openChanges() }),
 				this.previewButton,
@@ -1353,6 +1355,65 @@ class Editor {
 		this.refreshStatus();
 	}
 
+	// -- SEO check ------------------------------------------------------------
+
+	// Checks the page in front of you rather than the whole site. A survey of
+	// all 134 pages found five issues, two of them on the staff dashboard,
+	// which has no business being in Google anyway -- so a bulk audit would
+	// mostly report that everything is fine. What changed is that this editor
+	// can now rewrite titles and descriptions, so the useful thing is catching
+	// a problem being introduced, on the page where it is being introduced.
+	openSeoCheck() {
+		// The editor's own chrome is excluded, or its buttons would be counted
+		// as links with unhelpful text.
+		const page = summarisePage(document, `[data-tcb-editor], [${IGNORED_SUBTREE_ATTR}]`);
+		const findings = checkSeo(page);
+
+		const list = el("div", { class: "tcb-findings" });
+		for (const finding of findings) {
+			list.appendChild(
+				el("div", { class: `tcb-finding tcb-finding-${finding.level.replace(/\s+/g, "-")}` }, [
+					el("span", { class: "tcb-finding-level", text: finding.level }),
+					el("div", {}, [
+						el("p", { class: "tcb-finding-message", text: finding.message }),
+						...(finding.detail ? [el("p", { class: "tcb-hint", text: finding.detail })] : []),
+					]),
+				])
+			);
+		}
+
+		const problems = findings.filter((finding) => finding.level === "problem").length;
+		const looks = findings.filter((finding) => finding.level === "worth a look").length;
+
+		this.openDialog(
+			"SEO check",
+			[
+				el("p", {
+					class: "tcb-hint",
+					text: problems || looks
+						? `${problems} to fix, ${looks} worth a look on this page.`
+						: "Nothing to fix on this page.",
+				}),
+				this.buildGooglePreview(page),
+				list,
+			],
+			null,
+			{ confirmLabel: null, cancelLabel: "Close" }
+		);
+	}
+
+	// What the page is likely to look like in a result. A character count is
+	// abstract; seeing the sentence cut off mid-word is not.
+	buildGooglePreview(page) {
+		const preview = googlePreview(page, location.origin, PATH);
+		return el("div", { class: "tcb-serp" }, [
+			el("p", { class: "tcb-hint", text: "Roughly how this page looks in Google:" }),
+			el("p", { class: "tcb-serp-url", text: preview.url }),
+			el("p", { class: `tcb-serp-title${preview.titleTruncated ? " tcb-serp-cut" : ""}`, text: preview.title }),
+			el("p", { class: `tcb-serp-desc${preview.descriptionTruncated ? " tcb-serp-cut" : ""}`, text: preview.description }),
+		]);
+	}
+
 	// -- page title and description ------------------------------------------
 
 	openPageSettings() {
@@ -1369,12 +1430,35 @@ class Editor {
 			(descriptionMeta && descriptionMeta.getAttribute("content")) ||
 			"";
 
+		// Live feedback as you type. This is where an SEO problem would
+		// actually get introduced, so it is worth more here than in any
+		// after-the-fact report -- and a result preview showing the sentence
+		// cut off mid-word means more than a character count.
+		const counts = el("p", { class: "tcb-hint" });
+		const serp = el("div", {});
+		const refreshPreview = () => {
+			const draft = { title: titleInput.value, description: descriptionInput.value };
+			const titleLength = draft.title.trim().length;
+			const descriptionLength = draft.description.trim().length;
+			counts.textContent =
+				`Title ${titleLength} characters (Google cuts around ${TITLE_MAX}), ` +
+				`description ${descriptionLength} (cuts around ${DESCRIPTION_MAX}).`;
+			counts.className =
+				titleLength > TITLE_MAX || descriptionLength > DESCRIPTION_MAX ? "tcb-hint tcb-hint-warn" : "tcb-hint";
+			serp.replaceChildren(this.buildGooglePreview(draft));
+		};
+		titleInput.addEventListener("input", refreshPreview);
+		descriptionInput.addEventListener("input", refreshPreview);
+		refreshPreview();
+
 		this.openDialog(
 			"Page title & description",
 			[
 				el("p", { class: "tcb-hint", text: "This is what shows up as the heading and blurb in Google results." }),
 				el("label", { class: "tcb-label" }, [el("span", { text: "Page title" }), titleInput]),
 				el("label", { class: "tcb-label" }, [el("span", { text: "Description" }), descriptionInput]),
+				counts,
+				serp,
 			],
 			async () => {
 				const title = titleInput.value.trim();

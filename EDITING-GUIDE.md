@@ -74,6 +74,21 @@ One difference from the wording changes: styling stays in the site settings
 and is not written into the code files by **Sync to code**. It is still live
 for visitors and still revertable, it just lives in one place instead of two.
 
+## Checking a page for Google
+
+**SEO check** in the toolbar looks at the page you are on and tells you what
+is worth fixing, with a rough preview of how it would appear in a Google
+result. It checks the title and description lengths, that there is one main
+heading, that images have descriptions, and that links say where they go.
+
+The same preview appears in **Page title & description** and updates as you
+type, so you can see when a title is about to get cut off rather than guessing
+from a character count.
+
+It checks the page in front of you, not the whole site. Your pages are in good
+shape already — the point is to catch a problem being introduced, not to hunt
+for old ones.
+
 ## Drafts vs published
 
 Every change you make is saved straight away as a **draft**. Drafts are only

@@ -143,6 +143,16 @@ It shows three things:
 - **Just off the first page** — searches where you sit around position 8 to 20.
   Google already thinks you are relevant and almost nobody is seeing you.
 
+And the most useful part: **searches this page is shown for but never
+mentions**. If Google has shown a page 2,340 times for "white ants canberra"
+and put it at position 12, and the page's title, description and heading never
+say "white ant", that is a gap worth closing. It is not a prediction — nothing
+here can tell you what will rank, and anything claiming to is guessing. It is
+two facts that both already exist, side by side.
+
+**Suggest one** uses those gaps when it drafts. That is the difference between
+a suggestion that rewords what you have and one with a reason behind it.
+
 Google's own numbers stop two or three days short of today, so the window ends
 a few days back. That is Google, not a delay here.
 

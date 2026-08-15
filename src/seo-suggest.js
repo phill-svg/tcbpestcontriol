@@ -139,7 +139,7 @@ export function parseCandidates(raw) {
 // They are read from the live site rather than kept in a constant here, so
 // the style tracks whatever the site currently does instead of freezing on
 // whatever it did the day this was written.
-export function buildPrompt({ kind, page, queries = [], examples = [], steer = "", min, max }) {
+export function buildPrompt({ kind, page, queries = [], examples = [], gaps = [], steer = "", min, max }) {
 	const searched = queries
 		.slice(0, 12)
 		.map((entry) => entry.key)
@@ -188,6 +188,18 @@ export function buildPrompt({ kind, page, queries = [], examples = [], steer = "
 				...(searched.length
 					? ["", "People reached this page by searching for:", searched.join(", "), "", "Work the strongest of those phrases in where it reads naturally."]
 					: []),
+				// The sharpest instruction available, and the only one backed
+				// by evidence rather than judgement: Google is already
+				// offering this page for these phrases and the page does not
+				// use the words. Rewriting to close that is the one change
+				// here with an observed reason behind it.
+				...(gaps.length
+					? [
+							"",
+							"Google already shows this page for these searches, but the page never says the words in brackets. Work them in if they fit honestly:",
+							...gaps.slice(0, 5).map((gap) => `- ${gap.query} (missing: ${gap.missing.join(", ")}) — shown ${gap.impressions} times, position ${Math.round(gap.position)}`),
+					  ]
+					: []),
 				...(steer ? ["", `The person who owns this site asks specifically: ${String(steer).slice(0, 300)}`] : []),
 			].join("\n"),
 		},
@@ -197,8 +209,8 @@ export function buildPrompt({ kind, page, queries = [], examples = [], steer = "
 // Returns { candidates, rejected } -- rejected is kept because a run where
 // everything was thrown away should say so rather than silently offering
 // nothing, which reads as a broken button.
-export async function suggest(env, { kind, page, queries = [], examples = [], steer = "", min, max, run } = {}) {
-	const messages = buildPrompt({ kind, page, queries, examples, steer, min, max });
+export async function suggest(env, { kind, page, queries = [], examples = [], gaps = [], steer = "", min, max, run } = {}) {
+	const messages = buildPrompt({ kind, page, queries, examples, gaps, steer, min, max });
 	const call = run || ((body) => env.AI.run(MODEL, body));
 	// Six asked for rather than three. Roughly half get thrown out by the
 	// checks below -- so asking for what should survive left the button

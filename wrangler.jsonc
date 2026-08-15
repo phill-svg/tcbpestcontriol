@@ -30,6 +30,10 @@
     { "tag": "v1", "new_sqlite_classes": ["ChatHub"] }
   ],
   "vars": {
+    // Which repository the editor's "Sync to code" button commits to. The
+    // token that authorises it is a secret (GITHUB_TOKEN), never a var --
+    // set it in the Cloudflare dashboard, or with `wrangler secret put`.
+    "GITHUB_REPO": "phill-svg/tcbpestcontriol",
     "VAPID_SUBJECT": "mailto:phill@tcbpestcontrolcanberra.com.au",
     "VAPID_PUBLIC_KEY": "BKGvQzfz5UyGkxVtEFiMt-ONioOrOWZFpooBQ_7ev6HCCa9LCymRv5LeHMvfFsSfPlOQbGwWdC5QX3jFS7Apdoo"
   }

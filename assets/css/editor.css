@@ -379,6 +379,27 @@ body.tcb-editing-mode .tcb-has-edit {
 	color: #111114;
 }
 
+/* Sync-to-code panel ------------------------------------------------------- */
+
+.tcb-sync {
+	margin-top: 1rem;
+	padding-top: 1rem;
+	border-top: 1px solid #e6e6ea;
+	display: grid;
+	gap: 0.5rem;
+	justify-items: start;
+}
+
+.tcb-sync-title {
+	margin: 0;
+	font-weight: 600;
+	font-size: 0.9375rem;
+}
+
+.tcb-hint-warn {
+	color: #c41613;
+}
+
 /* Toast -------------------------------------------------------------------- */
 
 .tcb-toast {

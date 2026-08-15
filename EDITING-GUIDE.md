@@ -57,6 +57,33 @@ you left off.
 
 Published changes appear within about half a minute everywhere in the world.
 
+## Sync to code
+
+Open **Changes** and there's a **Sync to code** button at the bottom.
+
+Your published changes are already live — this folds them into the site's
+underlying files so the two don't drift apart. **It changes nothing visitors
+can see.** Press it whenever you think of it; once a month is plenty.
+
+If some changes can't be matched, it says so and leaves those alone rather
+than guessing. That means the wording in the code was altered by hand after
+you published, and it's worth a look.
+
+### One-time setup
+
+The button needs permission to write to the code. Until that's done it will
+tell you so instead of working.
+
+1. On GitHub: **Settings → Developer settings → Personal access tokens →
+   Fine-grained tokens → Generate new token**.
+2. Give it access to the `tcbpestcontriol` repository only, with
+   **Contents: Read and write**. Nothing else.
+3. Copy the token.
+4. In Cloudflare: **Workers → tcbpestreal → Settings → Variables and Secrets
+   → Add**, type **Secret**, name `GITHUB_TOKEN`, paste the token, save.
+
+That's it. `GITHUB_REPO` is already set in `wrangler.jsonc`.
+
 ## Things worth knowing
 
 **One page at a time.** Publish applies to the page you're on. If you change

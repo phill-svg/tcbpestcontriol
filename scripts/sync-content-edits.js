@@ -150,7 +150,7 @@ if (args.clear && args.write && synced.length) {
 		const result = await response.json().catch(() => ({}));
 		console.log("");
 		console.log(
-			response.ok ? `Cleared ${result.cleared} synced overrides from the site.` : `Could not clear overrides (${response.status}).`
+			response.ok ? `Marked ${result.cleared} overrides as now living in the code.` : `Could not mark overrides as synced (${response.status}).`
 		);
 	}
 }

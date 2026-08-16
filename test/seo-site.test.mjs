@@ -341,17 +341,54 @@ test("the smallest safe change wins over the one that frees most", () => {
 	assert.equal(waste.freed, 9);
 });
 
-test("a title still too long after the small change gets the bigger one", () => {
-	// The exception, and the reason "smallest" is measured by the result
-	// rather than by the number of words removed. These titles start at 76
-	// characters; taking one word off leaves them at 63, still past the point
-	// Google cuts. Stopping there would be a fix that fixes nothing.
+test("applying the fix twice does not keep eating the business name", () => {
+	// The bug this guards. Each step is locally reasonable: after the first
+	// pass settles the site on "| TCB Pest Control", "control" is repeated in
+	// most of the front halves, and removing it frees more characters and
+	// breaks no length rule. The destination is "| TCB Pest", which is not
+	// the name of anything.
+	let pages = Array.from({ length: 20 }, (unused, at) => suffixed(`/p${at}`, `Ant Control Canberra ${at}`));
+	const proposed = [];
+	for (let round = 0; round < 4; round++) {
+		const waste = suffixWaste(pages);
+		if (!waste) break;
+		proposed.push(waste.replacement);
+		const map = new Map(waste.changes.map((change) => [change.path, change.to]));
+		pages = pages.map((page) => (map.has(page.path) ? { ...page, title: map.get(page.path) } : page));
+	}
+	assert.deepEqual(proposed, ["TCB Pest Control"], "it should settle after one pass, not keep shortening");
+});
+
+test("the floor only applies to endings that are a longer form of the name", () => {
+	// A site signing off with something else is not covered by a rule about
+	// this business's name and should not be held to it.
+	const pages = Array.from({ length: 12 }, (unused, at) =>
+		suffixed(`/p${at}`, `Ant Control Canberra ${at}`, "Aardvark Removals Canberra")
+	);
+	const waste = suffixWaste(pages);
+	assert.equal(waste.replacement, "Aardvark Removals");
+});
+
+test("a title the ending cannot rescue is left to the per-page check", () => {
+	// These start at 76 characters. Taking one word off leaves 63 -- still
+	// past the point Google cuts -- and the only ending that would get them
+	// under is "| TCB Pest", which is below the business name.
+	//
+	// So nothing is proposed. That is the right answer rather than a gap: the
+	// per-page check already reports each of these as too long, and the fix
+	// for a title with too many words in it is to write fewer words, not to
+	// shave the company's name down until the arithmetic works.
 	const pages = Array.from({ length: 12 }, (unused, at) =>
 		suffixed(`/p${at}`, `Carpenter Ant and Termite Control Canberra ${at}`)
 	);
-	const waste = suffixWaste(pages);
-	assert.equal(waste.replacement, "TCB Pest");
-	assert.ok(waste.changes.every((change) => change.to.length <= 62));
+	assert.equal(suffixWaste(pages), null);
+
+	// And with a shorter ending in play, the same escalation still happens --
+	// the floor is what stopped it above, not a loss of the ability.
+	const others = Array.from({ length: 12 }, (unused, at) =>
+		suffixed(`/q${at}`, `Carpenter Ant and Termite Control Canberra ${at}`, "Aardvark Pest Removals Canberra")
+	);
+	assert.equal(suffixWaste(others, { minimumEnding: "Aardvark" }).replacement, "Aardvark Pest");
 });
 
 test("a short ending is left alone", () => {

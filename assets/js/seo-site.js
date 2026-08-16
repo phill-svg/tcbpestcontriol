@@ -360,7 +360,22 @@ function nearDuplicateBodies(pages) {
 // proposes a specific replacement, applies it, and checks the result against
 // the same length rules every other title is held to -- and only reports what
 // survives that.
-export function suffixWaste(pages, { minPages = 10, minTitle = 30, maxTitle = 62 } = {}) {
+// The shortest sign-off the business will answer to.
+//
+// Nothing in the algorithm can work this out. It sees "TCB Pest Control
+// Canberra", notices the front half of most titles says "control", and
+// removing it looks like exactly the same kind of win as removing "Canberra"
+// -- it frees more characters and passes every length rule. What it cannot
+// see is that "TCB Pest" is not the name of anything.
+//
+// Left without a floor the fix ratchets. Pressing it once settles the site on
+// "| TCB Pest Control", which is right; the next scan then finds "control"
+// repeated across 86 titles and proposes "| TCB Pest", and the one after that
+// would keep going until the length rules stopped it. Each step is locally
+// reasonable and the destination is nonsense.
+export const MINIMUM_ENDING = "TCB Pest Control";
+
+export function suffixWaste(pages, { minPages = 10, minTitle = 30, maxTitle = 62, minimumEnding = MINIMUM_ENDING } = {}) {
 	const endings = new Map();
 	for (const page of pages) {
 		const title = String(page.title || "").trim();
@@ -384,9 +399,18 @@ export function suffixWaste(pages, { minPages = 10, minTitle = 30, maxTitle = 62
 	// Candidate replacements, most aggressive last: drop one trailing word,
 	// then two, and so on. The first word is the business's name and never
 	// goes -- an ending that does not identify the business is not an ending.
+	// The floor only means anything when the ending in use is a longer form of
+	// it. A site that signs off with something else entirely is not covered by
+	// a rule about this business's name, and should not be held to it.
+	const floor = String(minimumEnding || "");
+	const floored = floor && commonest.ending.toLowerCase().startsWith(floor.toLowerCase()) ? floor.length : 0;
+
 	let best = null;
 	for (let drop = 1; drop < words.length; drop++) {
 		const replacement = words.slice(0, words.length - drop).join(" ");
+		// Candidates only get shorter from here, so this is the end of the
+		// search rather than one to skip past.
+		if (floored && replacement.length < floored) break;
 		const removed = words
 			.slice(words.length - drop)
 			.map((word) => word.toLowerCase().replace(/[^a-z0-9]/g, ""))

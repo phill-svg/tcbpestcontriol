@@ -135,6 +135,18 @@ export function checkSite({ pages = [], broken = [], redirected = [], extraPages
 		});
 	}
 
+	// Titles that do not follow the shape the rest of the site uses.
+	const outliers = conventionOutliers(pages);
+	if (outliers) {
+		findings.push({
+			level: "worth a look",
+			message: `${outliers.odd.length} ${outliers.odd.length === 1 ? "title does" : "titles do"} not follow the shape the other ${outliers.following} use.`,
+			detail: `Every other title on the site ends with “| ” and the business name. These do not, so they read as a different site in the search results.`,
+			fix: "Nothing here is wrong on its own — the lengths are fine — which is why the page-by-page checks pass them. It only shows up against the other titles. Worth rewriting rather than just bolting the usual ending on: “About TCB Pest Control Canberra” with the ending appended says the business name twice and is worse than what it replaced.",
+			pages: outliers.odd,
+		});
+	}
+
 	// The business block in the structured data is one shared template, so a
 	// field missing from it is missing everywhere at once -- one fact, one
 	// finding, however many pages carry the block.
@@ -419,6 +431,41 @@ export function suffixWaste(pages, { minPages = 10, minTitle = 30, maxTitle = 62
 		redundant: best.affected.map((change) => change.path),
 		freed: best.freed,
 	};
+}
+
+// The pages that do not follow the shape every other title on the site uses.
+//
+// A convention is only visible from above. Nothing about "About TCB Pest
+// Control Canberra" is wrong on its own -- it is 31 characters, inside every
+// length rule, and reads fine. What is wrong is that the other 132 titles end
+// with "| something" and this one does not, which is a fact no per-page check
+// can hold because no page can see the other 133.
+//
+// Reported rather than fixed. Appending the usual ending to "About TCB Pest
+// Control Canberra" produces "About TCB Pest Control Canberra | TCB Pest
+// Control", which is worse than what it replaced -- these need a rewrite, and
+// a rewrite is a judgement rather than a rule.
+// There is deliberately only one proportion here. The first version also
+// required that 80% of titles follow the shape, which reads like a second
+// safeguard and is arithmetically unreachable: every title either contains a
+// separator or does not, so following = total - odd, and a site with under
+// 10% outliers necessarily has over 90% followers. Both of the tests written
+// for it passed with it deleted. An unreachable guard is worse than no guard,
+// because it looks like protection while providing none.
+export function conventionOutliers(pages, { maxOddShare = 0.1 } = {}) {
+	const titled = pages.filter((page) => String(page.title || "").trim());
+	// Too few pages and there is no convention to be outside of -- a shape is
+	// only a convention once enough pages have kept to it.
+	if (titled.length < 20) return null;
+
+	const following = titled.filter((page) => page.title.includes("|"));
+	const odd = titled.filter((page) => !page.title.includes("|"));
+	if (!odd.length) return null;
+	// A handful against a rule is worth saying. A third of the site against it
+	// is not an outlier, it is a disagreement about the rule.
+	if (odd.length / titled.length > maxOddShare) return null;
+
+	return { following: following.length, total: titled.length, odd: odd.map((page) => page.path) };
 }
 
 // Which link destinations still need checking. Anything that was scanned and

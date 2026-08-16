@@ -65,7 +65,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var successText = successEl ? successEl.querySelector(".staff-login-success-text") : null;
 
   var DEFAULT_PRICE_NOTE = "Fixed price — no surprises. Includes GST.";
-  var QUOTE_PRICE_NOTE = "We'll prepare a custom quote for you — no fixed price.";
+  var QUOTE_PRICE_NOTE = "We'll prepare a custom quote for you.";
 
   function isQuoteMode() {
     return quoteInput && quoteInput.value === "1";

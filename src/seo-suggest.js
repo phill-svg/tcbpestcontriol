@@ -29,6 +29,7 @@ import {
 	isConfigured as claudeConfigured,
 	setupMessage as claudeSetupMessage,
 } from "./claude-suggest.js";
+import { TITLE_MIN, TITLE_MAX, DESCRIPTION_MIN, DESCRIPTION_MAX } from "../assets/js/seo-check.js";
 
 // One model writes the copy, and it is Claude.
 //
@@ -466,6 +467,91 @@ export async function fixGaps(env, { gaps = [], page, examples = [], queries = [
 	}
 
 	return { kind: null, candidates: [], attempts };
+}
+
+// Drafting a whole page for a search nothing on the site answers.
+//
+// The other half of what fixForGap has always said in prose: "either work the
+// words into this page, or -- since N people a month search it and nothing
+// here covers it -- give it a page of its own." Only the first half had a
+// button, so the recommendation with the most behind it was the one you had
+// to act on by hand.
+//
+// The invention rule is stricter here than anywhere else, and has to be. Every
+// other suggestion is a rewrite of a page that already exists, so the page's
+// own words are the yardstick for what may be claimed. A new page has no
+// words yet, which would leave nothing to check against -- so nothing is
+// allowed: no numbers, no licences, no guarantees, no response times. What
+// comes back is a shape and a voice with the facts left out, and the facts are
+// added by the person who knows them.
+export async function draftPage(env, { query, examples = [], model = CLAUDE_MODEL, run } = {}) {
+	const sample = examples
+		.map((example) => [example.title, example.description].filter(Boolean).join(" — "))
+		.filter(Boolean)
+		.slice(0, 4);
+
+	const messages = [
+		{
+			role: "system",
+			content:
+				"You write pages for a pest control company's website in Canberra, Australia. Use Australian spelling. " +
+				"Be concrete: name the pest, the suburb, the season, the thing that is actually done. Never write that a " +
+				"service is professional, trusted, reliable or expert. " +
+				"You may not state any fact about the business: no numbers, no prices, no years in business, no response " +
+				"times, no licences, no guarantees, no awards. Write about the pest and the problem, not about the company. " +
+				"Reply as JSON only: {\"title\":\"\",\"description\":\"\",\"intro\":\"\",\"sections\":[{\"heading\":\"\",\"paragraph\":\"\"}]}. " +
+				"Three sections.",
+		},
+		{
+			role: "user",
+			content: [
+				`People search for “${query}” and this site has no page about it. Draft one.`,
+				"",
+				`The title must contain the words from “${query}” and be between ${TITLE_MIN} and ${TITLE_MAX} characters.`,
+				`The description must be between ${DESCRIPTION_MIN} and ${DESCRIPTION_MAX} characters.`,
+				...(sample.length ? ["", "Match the voice of these, which are real pages from elsewhere on this site:", ...sample.map((text) => `- ${text}`)] : []),
+			].join("\n"),
+		},
+	];
+
+	const answered = run ? { model, result: await run({ messages, max_tokens: 2000 }) } : await runModel(env, model, { messages, max_tokens: 2000 });
+	const raw = typeof answered.result === "string" ? answered.result : answered.result.response || "";
+
+	let draft;
+	try {
+		// Models wrap JSON in prose and fences however firmly they are asked
+		// not to. Taking the outermost braces is more reliable than insisting.
+		const start = raw.indexOf("{");
+		const end = raw.lastIndexOf("}");
+		draft = JSON.parse(raw.slice(start, end + 1));
+	} catch {
+		throw new Error("The draft came back in a shape this could not read. Worth trying again.");
+	}
+
+	// Nothing to check against but the query itself, which is the point.
+	const clean = (text, { min, max } = {}) => {
+		const verdict = validateSuggestion(text, { source: query, min, max });
+		return verdict.ok ? String(text).trim() : null;
+	};
+
+	const sections = (Array.isArray(draft.sections) ? draft.sections : [])
+		.map((section) => ({
+			heading: String(section?.heading || "").trim(),
+			paragraph: String(section?.paragraph || "").trim(),
+		}))
+		.filter((section) => section.heading && section.paragraph && !claimsIn(section.paragraph).size && !numbersIn(section.paragraph).size);
+
+	return {
+		query,
+		title: clean(draft.title, { min: TITLE_MIN, max: TITLE_MAX }),
+		description: clean(draft.description, { min: DESCRIPTION_MIN, max: DESCRIPTION_MAX }),
+		// The intro runs longer than a description and is not length-checked,
+		// but it is held to the same no-facts rule.
+		intro: !claimsIn(draft.intro || "").size && !numbersIn(draft.intro || "").size ? String(draft.intro || "").trim() : "",
+		sections,
+		model: answered.model,
+		cost: answered.cost,
+	};
 }
 
 export function coversGap(text, gap) {

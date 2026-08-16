@@ -183,7 +183,7 @@ body.tcb-editing-mode .tcb-has-edit {
 	border: 1px dashed #6c6c74;
 	border-radius: 0.25rem;
 	background: #f5f5f7;
-	color: #5a5a62;
+	color: #111114;
 	cursor: pointer;
 	/* The surrounding text can be any size; this must not inherit it. */
 	letter-spacing: 0;
@@ -197,7 +197,7 @@ body.tcb-editing-mode .tcb-has-edit {
 }
 
 .tcb-change-gone {
-	color: #6c6c74;
+	color: #111114;
 	font-style: italic;
 }
 
@@ -269,7 +269,7 @@ body.tcb-editing-mode .tcb-has-edit {
 .tcb-hint {
 	margin: 0;
 	font-size: 0.8125rem;
-	color: #5a5a62;
+	color: #111114;
 }
 
 .tcb-preview {
@@ -364,7 +364,7 @@ body.tcb-editing-mode .tcb-has-edit {
 	padding: 0;
 	font-size: 0.875rem;
 	line-height: 1;
-	color: #6c6c74;
+	color: #111114;
 }
 
 .tcb-swatch-on {
@@ -427,7 +427,7 @@ body.tcb-editing-mode .tcb-has-edit {
 }
 
 .tcb-change-was {
-	color: #6c6c74;
+	color: #111114;
 	text-decoration: line-through;
 }
 
@@ -679,7 +679,7 @@ body.tcb-editing-mode {
 
 .tcb-rejected summary {
 	font-size: 0.75rem;
-	color: #8a8a92;
+	color: #111114;
 	cursor: pointer;
 }
 
@@ -717,7 +717,7 @@ body.tcb-editing-mode {
 	flex-shrink: 0;
 	font-variant-numeric: tabular-nums;
 	font-size: 0.75rem;
-	color: #8a8a92;
+	color: #111114;
 }
 
 /* Search Console figures ---------------------------------------------------- */
@@ -757,7 +757,7 @@ body.tcb-editing-mode {
 	font-size: 10px;
 	text-transform: uppercase;
 	letter-spacing: 0.12em;
-	color: #8a8a92;
+	color: #111114;
 	background: none;
 }
 

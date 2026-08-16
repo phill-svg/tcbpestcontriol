@@ -46,6 +46,7 @@ export const SERVICE_DURATIONS = {
 	"ants-spiders-roaches": 60,
 	"rodents": 60,
 	"wasps-bees": 45,
+	"termite-treatment": 60,
 };
 
 // Human labels for each service key -- used later when creating the ServiceM8
@@ -57,6 +58,7 @@ export const SERVICE_LABELS = {
 	"ants-spiders-roaches": "Ants / Spiders / Cockroaches",
 	"rodents": "Rodents (mice & rats)",
 	"wasps-bees": "Wasps / Bees",
+	"termite-treatment": "Termite Treatment"
 };
 
 // True only for a service the widget is allowed to book. Callers validate up
@@ -79,6 +81,7 @@ export const PRICING = {
 	"termite-inspection": { modifier: "property", prices: { subfloor: 320, slab: 289 } },
 	"rodents": { modifier: "none", price: 289 },
 	"wasps-bees": { modifier: "none", price: 289 },
+	"termite-treatment": { modifier: "none", price: 0 },
 };
 
 // Question label shown above the modifier <select>, keyed by modifier type.

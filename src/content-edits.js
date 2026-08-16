@@ -31,6 +31,7 @@ import {
 	sanitiseStyle,
 } from "../assets/js/content-address.js";
 import { decodeEntities, escapeHtmlText, escapeStyleAttribute } from "./html-entities.js";
+import { MINIMUM_ENDING } from "../assets/js/seo-site.js";
 import { bakeEdits, pathToFile } from "./bake-edits.js";
 import { missingConfig, setupMessage, readFile, commitFiles, decodeBase64Utf8 } from "./github-sync.js";
 
@@ -761,6 +762,16 @@ export async function handleSeoTitleEndings(request, env, session, { paths, fetc
 	const replacement = String(body.replacement || "").trim();
 	if (!ending || !replacement) return json({ error: "Expected an ending and a replacement." }, 400);
 	if (replacement.length >= ending.length) return json({ error: "The replacement has to be shorter than the ending." }, 400);
+	// The same floor the check applies, enforced again here rather than
+	// trusted from the browser. The panel is one caller; a stale tab holding
+	// last week's finding is another, and this endpoint rewrites titles across
+	// the whole site, so "the client already checked" is not good enough.
+	if (
+		ending.toLowerCase().startsWith(MINIMUM_ENDING.toLowerCase()) &&
+		replacement.length < MINIMUM_ENDING.length
+	) {
+		return json({ error: `The ending has to keep at least “${MINIMUM_ENDING}” — that is the name of the business.` }, 400);
+	}
 
 	// Which words come off, and therefore which titles are eligible at all.
 	const removed = ending

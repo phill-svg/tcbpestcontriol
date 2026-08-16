@@ -98,30 +98,31 @@ number or a claim the page does not already make — a price, a response time,
 it reads well. Occasionally that means all three are thrown out and it asks
 you to try again. That is the rule doing its job, not a fault.
 
-**Compare models** next to it asks several different models the same question
-and lays the answers out side by side. Copy is the one thing here that cannot
-be tested — there is no way to check "does this sound like the rest of the
-site" other than reading it — so this puts the choice with you rather than
-guessing on your behalf.
+### Suggestions come from Claude, and cost about a cent each
 
-### Using Claude for suggestions (optional, costs money)
+There was briefly a **Compare models** button here that ran four free models
+against the same page so the best one could be picked by reading rather than
+by guessing. That choice has been made — Claude won, and the four free models
+have been removed.
 
-Everything above runs on Cloudflare's models, which are free at the rate you
-would use them. You can also route suggestions through Claude, which writes
-noticeably better copy and charges per use — roughly **a cent or two each time
-you press the button**. A tenner would last months.
+Every set of suggestions now says who wrote it and what it cost, underneath
+the options, so the running total is never a surprise at the end of the month.
+Roughly **a cent or two per press**; a tenner lasts months.
 
-To switch it on: get an API key from console.anthropic.com (add a payment
-method first, then API keys → Create key), and in Cloudflare go to Workers →
-tcbpestreal → Settings → Variables and Secrets and add a **Secret** named
-exactly `ANTHROPIC_API_KEY` with the key as its value.
+This needs the `ANTHROPIC_API_KEY` secret in Cloudflare (Workers →
+tcbpestreal → Settings → Variables and Secrets). It is already set. The key
+comes from console.anthropic.com under API keys, and the account needs a
+payment method with some credit on it.
 
-That is the whole setup. Adding the key is what turns it on — suggestions
-start coming from Claude automatically, and the panel shows what each click
-cost underneath the options so it is never a surprise at the end of the month.
-Delete the secret to go back to the free models. The same no-inventing rules
-apply to Claude exactly as they do to everything else; a better writer is not
-a reason to trust it about whether you hold a licence.
+**If that key is ever removed, or the account runs out of credit, the suggest
+buttons stop working.** They do not quietly fall back to a free model — that
+was the old behaviour and it meant you could be reading worse copy for weeks
+without knowing. Now it tells you what went wrong instead.
+
+The same no-inventing rules apply to Claude exactly as they did before: any
+suggestion containing a number or a claim the page does not already make is
+thrown away before you see it. A better writer is not a reason to trust it
+about whether you hold a licence.
 
 Under **The whole site** there is a **Check every page** button. It goes
 through every page in the sitemap — the same list Google crawls — and lists

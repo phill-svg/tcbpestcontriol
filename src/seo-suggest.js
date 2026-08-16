@@ -30,72 +30,74 @@ import {
 	setupMessage as claudeSetupMessage,
 } from "./claude-suggest.js";
 
-// Llama 3.3 is what the site chat uses and what this started on. It is not
-// deprecated, but it is a 2024 model being asked to write marketing copy in a
-// particular voice, and three rounds of prompt work have not made its output
-// good enough. At that point the prompt has stopped being the variable.
+// One model writes the copy, and it is Claude.
 //
-// The trouble is that copy quality cannot be judged from a test. There is no
-// assertion for "this reads like the rest of the site", and every previous
-// attempt to improve it was made blind -- change the prompt, ship, ask, guess
-// again. So rather than swapping in another model on a hunch and starting the
-// same loop, the panel can run several and show them side by side, and the
-// person who can actually judge picks the winner.
-export const DEFAULT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+// This started on Llama 3.3, then briefly offered four Workers AI models side
+// by side so the choice could be made by reading rather than by guessing --
+// copy quality being the one thing here with no test behind it. That
+// comparison did its job: the answer came back "Claude", and a shortlist that
+// has been decided is just clutter.
+//
+// So the free models are gone rather than kept as options nobody will pick.
+// The cost of that is spelled out below, because it is real: there is no
+// longer anything to fall back to.
+export const MODEL_CHOICES = [{ id: CLAUDE_MODEL, label: "Claude Opus 5", paid: true }];
 
-// The shortlist offered in the comparison. The first four are Workers AI and
-// cost nothing at this volume; Claude is a paid API and is only offered once a
-// key exists, which is what modelChoices() below is for.
-export const MODEL_CHOICES = [
-	{ id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", label: "Llama 3.3 70B" },
-	{ id: "@cf/deepseek-ai/deepseek-v4-pro-0813", label: "DeepSeek V4 Pro" },
-	{ id: "@cf/moonshotai/kimi-k2.6", label: "Kimi K2.6" },
-	{ id: "@cf/google/gemma-4-26b-a4b-it", label: "Gemma 4 26B" },
-	{ id: CLAUDE_MODEL, label: "Claude Opus 5 (paid)", paid: true },
-];
-
-// Offering a model that cannot answer is worse than not offering it: the
-// comparison comes back with one dead column every time and no explanation
-// anybody would connect to a missing key.
-export function modelChoices(env) {
-	return MODEL_CHOICES.filter((choice) => !choice.paid || claudeConfigured(env));
+// A readable name for whichever model answered.
+//
+// Still worth having with one model in the list. SEO_AI_MODEL can still point
+// at anything, and an answer from something other than Claude has to be
+// visibly from something other than Claude.
+export function modelLabel(id) {
+	const known = MODEL_CHOICES.find((choice) => choice.id === id);
+	if (known) return known.label;
+	if (isClaudeModel(id)) return "Claude";
+	const tail = String(id || "").split("/").pop();
+	return tail || "an unknown model";
 }
 
-// Which model a plain "Suggest one" click uses.
+// What the panel needs to say about who answered.
 //
-// Adding the API key is the decision to pay -- there is no other reason to put
-// one there -- so a key present is taken as the answer, rather than leaving
-// suggestions on a free model that somebody has just gone to the trouble of
-// replacing. An explicit SEO_AI_MODEL still wins over both, which is the way
-// back to the free models without deleting the key.
+// This lives here rather than in the endpoint because src/index.js imports
+// cloudflare:workers and cannot be loaded by a Node test -- the same reason
+// fetchAsset was moved into src/assets.js. Written inline in the handler, the
+// first version of this had a mutation survive: reporting every answer as
+// though the asked-for model produced it, which is precisely the failure the
+// field exists to prevent, and nothing caught it.
+export function describeRun(asked, answered) {
+	return {
+		model: answered.model,
+		label: modelLabel(answered.model),
+		asked: asked === answered.model ? null : modelLabel(asked),
+		fellBack: answered.fellBack || null,
+	};
+}
+
+// Which model a plain "Suggest one" click uses. SEO_AI_MODEL stays as the way
+// to point this somewhere else without a deploy -- the escape hatch if Claude
+// is ever unavailable for longer than it is worth waiting out.
 export function preferredModel(env) {
-	if (env.SEO_AI_MODEL) return env.SEO_AI_MODEL;
-	if (claudeConfigured(env)) return CLAUDE_MODEL;
-	return DEFAULT_MODEL;
+	return env.SEO_AI_MODEL || CLAUDE_MODEL;
 }
 
-// A model id that Workers AI does not recognise throws, and a broken button
-// is a worse outcome than mediocre copy. Anything unexpected falls back to
-// the known-good model and says which one actually answered.
+// Running the model, with nothing behind it.
 //
-// That applies to Claude too, and deliberately: a rate limit, an expired card
-// or a network blip should degrade to a free suggestion rather than to an
-// error dialog. A missing key is the one case that does not fall back, because
-// it is not a failure -- it means Claude was never switched on, and quietly
-// answering from Llama would make that impossible to notice.
+// This used to fall back to Llama on any failure, on the reasoning that a
+// working button beats an error box. That reasoning was sound while the free
+// models were there anyway; it is not a reason to keep four models nobody
+// chose, and silently answering from a model that was deliberately removed
+// would be worse than saying what went wrong.
+//
+// So a failure is now a failure, and it says which kind. A missing key is
+// answered with the setup steps, because it is not a fault -- it means Claude
+// was never switched on. Anything else comes back as itself.
 export async function runModel(env, model, body) {
-	try {
-		if (isClaudeModel(model)) {
-			if (!claudeConfigured(env)) throw new NotConfigured(claudeSetupMessage());
-			const answered = await runClaude(env, body);
-			return { model, ...answered };
-		}
-		return { model, result: await env.AI.run(model, body) };
-	} catch (error) {
-		if (error instanceof NotConfigured) throw error;
-		if (model === DEFAULT_MODEL) throw error;
-		return { model: DEFAULT_MODEL, result: await env.AI.run(DEFAULT_MODEL, body), fellBack: error.message };
+	if (isClaudeModel(model)) {
+		if (!claudeConfigured(env)) throw new NotConfigured(claudeSetupMessage());
+		return { model, ...(await runClaude(env, body)) };
 	}
+	// Only reachable through SEO_AI_MODEL, which is set by hand.
+	return { model, result: await env.AI.run(model, body) };
 }
 
 // Distinguishable from a runtime failure by type rather than by reading the
@@ -307,7 +309,7 @@ export function buildPrompt({ kind, page, queries = [], examples = [], gaps = []
 // Returns { candidates, rejected } -- rejected is kept because a run where
 // everything was thrown away should say so rather than silently offering
 // nothing, which reads as a broken button.
-export async function suggest(env, { kind, page, queries = [], examples = [], gaps = [], steer = "", require = [], alsoWanted = [], model = DEFAULT_MODEL, min, max, run } = {}) {
+export async function suggest(env, { kind, page, queries = [], examples = [], gaps = [], steer = "", require = [], alsoWanted = [], model = CLAUDE_MODEL, min, max, run } = {}) {
 	const messages = buildPrompt({ kind, page, queries, examples, gaps, steer, require, alsoWanted, min, max });
 	// Six asked for rather than three. Roughly half get thrown out by the
 	// checks below -- so asking for what should survive left the button
@@ -428,7 +430,7 @@ export const HEADING_MAX = 70;
 // main heading last -- which is also the one with room left when a phrase
 // simply will not fit in a title. Each is attempted only if the one before
 // produced nothing that both uses the words and survives the invention checks.
-export async function fixGaps(env, { gaps = [], page, examples = [], queries = [], limits, model = DEFAULT_MODEL, run } = {}) {
+export async function fixGaps(env, { gaps = [], page, examples = [], queries = [], limits, model = CLAUDE_MODEL, run } = {}) {
 	const attempts = [];
 	if (!gaps.length) return { kind: null, candidates: [], attempts };
 

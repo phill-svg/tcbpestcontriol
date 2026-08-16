@@ -806,17 +806,3 @@ body.tcb-editing-mode {
 	flex-wrap: wrap;
 	gap: 0.4rem;
 }
-
-.tcb-compare {
-	display: grid;
-	gap: 0.25rem;
-	padding: 0.5rem 0;
-	border-top: 1px solid #e6e6ea;
-}
-
-.tcb-compare-model {
-	font-size: 10px;
-	text-transform: uppercase;
-	letter-spacing: 0.12em;
-	color: #8a8a92;
-}

@@ -76,6 +76,19 @@ function priceNote(result) {
 	return ` Cost ${cents < 1 ? "under a cent" : `about ${cents.toFixed(1)}c`}.`;
 }
 
+// Which model actually answered, and whether that is the one that was asked
+// for. The second half is the part that earns its place: a paid model that
+// fails falls back to a free one on purpose, and without this the panel looked
+// identical either way -- so a broken API key, an empty account or a rejected
+// request would read as "Claude wrote this" indefinitely.
+function modelNote(result) {
+	if (!result.label) return "";
+	if (result.asked) {
+		return ` ${result.asked} could not answer, so ${result.label} wrote these instead${result.fellBack ? ` (${result.fellBack})` : ""}.`;
+	}
+	return ` Written by ${result.label}.`;
+}
+
 function el(tag, props = {}, children = []) {
 	const node = document.createElement(tag);
 	for (const [key, value] of Object.entries(props)) {
@@ -2266,10 +2279,6 @@ class Editor {
 		const status = el("p", { class: "tcb-hint" });
 		const options = el("div", { class: "tcb-suggestions" });
 		const button = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Suggest one" });
-		// The escape hatch for "these aren't good". Copy quality is the one
-		// thing in this panel with no test behind it, so the judgement has to
-		// come from whoever can read them side by side.
-		const compareButton = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Compare models" });
 		// Somewhere to push back. Without this the only response to a weak
 		// suggestion is to press the button again and hope, which is a poor
 		// way to spend anyone's afternoon.
@@ -2317,7 +2326,11 @@ class Editor {
 			const from = [`this page`, `${result.usedExamples} others for the house style`];
 			if (result.usedSearches) from.push(`the ${result.usedSearches} searches people used to find it`);
 			if (result.usedGaps) from.push(`${result.usedGaps} phrases Google shows it for but it never mentions`);
-			status.textContent = `Written from ${from.join(", ")}. Click one to use it.${priceNote(result)}`;
+			status.textContent = `Written from ${from.join(", ")}. Click one to use it.${modelNote(result)}${priceNote(result)}`;
+			// A fallback is not a failure, but it is not what was asked for
+			// either, and on a paid model it is the difference between getting
+			// what you are paying for and not.
+			if (result.asked) status.className = "tcb-hint tcb-hint-warn";
 
 			for (const candidate of result.candidates) {
 				const option = el("button", { type: "button", class: "tcb-suggestion" }, [
@@ -2347,66 +2360,7 @@ class Editor {
 			}
 		});
 
-		compareButton.addEventListener("click", async () => {
-			compareButton.disabled = true;
-			options.replaceChildren();
-			status.className = "tcb-hint";
-			status.textContent = "Asking every model the same question…";
-
-			let result;
-			try {
-				result = await api("/api/seo/suggest", {
-					method: "POST",
-					body: JSON.stringify({ kind, path: PATH, steer: steer.value.trim(), compare: true }),
-				});
-			} catch (error) {
-				compareButton.disabled = false;
-				status.className = "tcb-hint tcb-hint-warn";
-				status.textContent = error.message;
-				return;
-			}
-
-			compareButton.disabled = false;
-			status.textContent = `Same page, same instructions, ${result.compare.length} different models. Click whichever reads best — then tell me which model wrote it and I will make it the default.`;
-
-			for (const run of result.compare) {
-				const block = el("div", { class: "tcb-compare" }, [
-					// The cost rides on the model's own name rather than in a
-					// footnote, so a paid column cannot be compared against the
-					// free ones without the price being in the same glance.
-					el("p", { class: "tcb-compare-model", text: `${run.label}${priceNote(run)}` }),
-				]);
-
-				if (run.error) {
-					block.appendChild(el("p", { class: "tcb-hint tcb-hint-warn", text: `Not available: ${run.error}` }));
-				} else if (!run.candidates.length) {
-					block.appendChild(
-						el("p", {
-							class: "tcb-hint",
-							text: run.rejected.length ? `Everything it wrote was thrown out — ${run.rejected[0].reason}.` : "Nothing came back.",
-						})
-					);
-				}
-
-				for (const candidate of run.candidates) {
-					const option = el("button", { type: "button", class: "tcb-suggestion" }, [
-						el("span", { class: "tcb-suggestion-text", text: candidate }),
-						el("span", { class: "tcb-suggestion-count", text: `${candidate.length}` }),
-					]);
-					option.addEventListener("click", () => {
-						input.value = candidate;
-						onPick();
-						input.focus();
-						status.textContent = `Used the ${run.label} option. Save it below if you are happy with it.`;
-					});
-					block.appendChild(option);
-				}
-
-				options.appendChild(block);
-			}
-		});
-
-		return el("div", { class: "tcb-suggest-row" }, [el("div", { class: "tcb-btn-row" }, [button, compareButton]), steer, status, options]);
+		return el("div", { class: "tcb-suggest-row" }, [el("div", { class: "tcb-btn-row" }, [button]), steer, status, options]);
 	}
 
 	async saveMeta(address, value, original) {

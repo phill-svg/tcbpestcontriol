@@ -30,7 +30,14 @@ import {
 	setupMessage,
 	CLAUDE_MODEL,
 } from "../src/claude-suggest.js";
-import { runModel, preferredModel, modelChoices, NotConfigured, DEFAULT_MODEL } from "../src/seo-suggest.js";
+import {
+	runModel,
+	preferredModel,
+	MODEL_CHOICES,
+	modelLabel,
+	describeRun,
+	NotConfigured,
+} from "../src/seo-suggest.js";
 
 // The body seo-suggest.js builds, verbatim -- including the temperature that
 // must not survive the trip.
@@ -146,20 +153,62 @@ test("a model id alone says which provider answers", () => {
 	assert.ok(!isClaudeModel(undefined));
 });
 
-test("adding the key is what switches suggestions over", () => {
-	assert.equal(preferredModel({}), DEFAULT_MODEL);
+test("Claude is what suggestions use, with a hand-set escape hatch", () => {
+	assert.equal(preferredModel({}), CLAUDE_MODEL);
 	assert.equal(preferredModel({ ANTHROPIC_API_KEY: "test" }), CLAUDE_MODEL);
-	// And the way back without deleting it.
-	assert.equal(preferredModel({ ANTHROPIC_API_KEY: "test", SEO_AI_MODEL: DEFAULT_MODEL }), DEFAULT_MODEL);
+	// SEO_AI_MODEL is the way to point this elsewhere without a deploy, for
+	// the case where Claude is unavailable for longer than it is worth
+	// waiting out. Nothing in the panel offers it.
+	assert.equal(preferredModel({ SEO_AI_MODEL: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" }), "@cf/meta/llama-3.3-70b-instruct-fp8-fast");
 });
 
-test("the paid model is not offered for comparison until it can answer", () => {
-	// Otherwise every comparison comes back with one dead column and an error
-	// nobody would connect to a key that was never added.
-	assert.ok(!modelChoices({}).some((choice) => choice.id === CLAUDE_MODEL));
-	assert.ok(modelChoices({ ANTHROPIC_API_KEY: "test" }).some((choice) => choice.id === CLAUDE_MODEL));
-	// The free shortlist is unchanged either way.
-	assert.equal(modelChoices({}).length, 4);
+test("a failed call is a failure, not a quiet downgrade", () => {
+	// This used to fall back to Llama on the reasoning that a working button
+	// beats an error box. That held while the free models were there anyway.
+	// Now that they have been deliberately removed, answering from one would
+	// be worse than saying what went wrong -- it would hand over copy from a
+	// model somebody chose to delete, under Claude's name.
+	const env = {
+		ANTHROPIC_API_KEY: "test",
+		AI: {
+			run: async () => {
+				throw new Error("nothing should reach Workers AI");
+			},
+		},
+	};
+	// The Claude call cannot succeed from here, so this is the failure path.
+	return assert.rejects(() => runModel(env, CLAUDE_MODEL, BODY), (error) => {
+		assert.ok(!(error instanceof NotConfigured), "a key is present; this is a runtime failure, not a setup step");
+		assert.doesNotMatch(String(error.message), /nothing should reach Workers AI/, "it must not have tried the free model");
+		return true;
+	});
+});
+
+test("the panel is told when the answer came from a different model", () => {
+	// The ordinary case: Claude was asked and Claude answered, so there is
+	// nothing to explain and nothing is said.
+	assert.deepEqual(describeRun(CLAUDE_MODEL, { model: CLAUDE_MODEL }), {
+		model: CLAUDE_MODEL,
+		label: "Claude Opus 5",
+		asked: null,
+		fellBack: null,
+	});
+
+	// Only reachable by setting SEO_AI_MODEL by hand, but that is exactly when
+	// it matters: an answer from something other than Claude has to be
+	// visibly from something other than Claude.
+	const other = describeRun(CLAUDE_MODEL, { model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" });
+	assert.equal(other.label, "llama-3.3-70b-instruct-fp8-fast");
+	assert.equal(other.asked, "Claude Opus 5");
+});
+
+test("whatever answered has a name a person would recognise", () => {
+	assert.equal(modelLabel(CLAUDE_MODEL), "Claude Opus 5");
+	assert.equal(MODEL_CHOICES.length, 1, "one model, so nothing to choose between");
+	// Set by hand: still named rather than blank, because "written by" with
+	// nothing after it is worse than the raw id.
+	assert.equal(modelLabel("@cf/some/experimental-model"), "experimental-model");
+	assert.ok(modelLabel(undefined));
 });
 
 test("the setup message says it costs money, before anything is spent", () => {

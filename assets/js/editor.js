@@ -63,6 +63,19 @@ function pathOf(pageUrl) {
 	}
 }
 
+// What that click just cost, when it cost anything.
+//
+// The free models report nothing and this stays empty, which is the common
+// case. When Claude answered, the figure goes next to the suggestions rather
+// than into a monthly total -- a cent is only worth knowing about at the
+// moment you are deciding whether to press the button again, and by the time
+// it turns up on a bill it is far too late to be interesting.
+function priceNote(result) {
+	if (typeof result.cost !== "number" || !result.cost) return "";
+	const cents = result.cost * 100;
+	return ` Cost ${cents < 1 ? "under a cent" : `about ${cents.toFixed(1)}c`}.`;
+}
+
 function el(tag, props = {}, children = []) {
 	const node = document.createElement(tag);
 	for (const [key, value] of Object.entries(props)) {
@@ -2232,7 +2245,7 @@ class Editor {
 			const from = [`this page`, `${result.usedExamples} others for the house style`];
 			if (result.usedSearches) from.push(`the ${result.usedSearches} searches people used to find it`);
 			if (result.usedGaps) from.push(`${result.usedGaps} phrases Google shows it for but it never mentions`);
-			status.textContent = `Written from ${from.join(", ")}. Click one to use it.`;
+			status.textContent = `Written from ${from.join(", ")}. Click one to use it.${priceNote(result)}`;
 
 			for (const candidate of result.candidates) {
 				const option = el("button", { type: "button", class: "tcb-suggestion" }, [
@@ -2266,7 +2279,7 @@ class Editor {
 			compareButton.disabled = true;
 			options.replaceChildren();
 			status.className = "tcb-hint";
-			status.textContent = "Asking four models the same question…";
+			status.textContent = "Asking every model the same question…";
 
 			let result;
 			try {
@@ -2282,10 +2295,15 @@ class Editor {
 			}
 
 			compareButton.disabled = false;
-			status.textContent = "Same page, same instructions, four different models. Click whichever reads best — then tell me which model wrote it and I will make it the default.";
+			status.textContent = `Same page, same instructions, ${result.compare.length} different models. Click whichever reads best — then tell me which model wrote it and I will make it the default.`;
 
 			for (const run of result.compare) {
-				const block = el("div", { class: "tcb-compare" }, [el("p", { class: "tcb-compare-model", text: run.label })]);
+				const block = el("div", { class: "tcb-compare" }, [
+					// The cost rides on the model's own name rather than in a
+					// footnote, so a paid column cannot be compared against the
+					// free ones without the price being in the same glance.
+					el("p", { class: "tcb-compare-model", text: `${run.label}${priceNote(run)}` }),
+				]);
 
 				if (run.error) {
 					block.appendChild(el("p", { class: "tcb-hint tcb-hint-warn", text: `Not available: ${run.error}` }));

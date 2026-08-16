@@ -1,6 +1,14 @@
 {
   "name": "tcbpestreal",
   "compatibility_date": "2026-07-09",
+  // Required by the Anthropic SDK, which reaches for node:fs and node:path in
+  // the credential loader it uses to find a locally-signed-in account. That
+  // path never runs here -- the key is passed in explicitly from a secret --
+  // but the imports are static, so without this flag the module fails to
+  // resolve and the whole Worker fails to start rather than just the SEO
+  // suggestion button. Additive: it makes Node's built-ins available and
+  // changes nothing about the code already here.
+  "compatibility_flags": ["nodejs_compat"],
   "main": "src/index.js",
   "ai": { "binding": "AI" },
   "assets": {

@@ -20,8 +20,9 @@ import {
 	examplePaths,
 	HEADING_MIN,
 	HEADING_MAX,
-	MODEL_CHOICES,
-	DEFAULT_MODEL,
+	modelChoices,
+	preferredModel,
+	NotConfigured,
 } from "./seo-suggest.js";
 import { TITLE_MIN, TITLE_MAX, DESCRIPTION_MIN, DESCRIPTION_MAX } from "../assets/js/seo-check.js";
 import { findGaps, describeGap, fixForGap } from "./seo-gaps.js";
@@ -976,7 +977,7 @@ async function handleSeoSuggest(request, url, env) {
 	// labelling the output puts the judgement with the person who can make it.
 	if (body.compare) {
 		const runs = await Promise.all(
-			MODEL_CHOICES.map(async (choice) => {
+			modelChoices(env).map(async (choice) => {
 				try {
 					const result = await suggest(env, { ...shared, model: choice.id });
 					return { model: choice.id, label: choice.label, ...result };
@@ -992,14 +993,18 @@ async function handleSeoSuggest(request, url, env) {
 	}
 
 	try {
-		const { candidates, rejected, model } = await suggest(env, {
+		const { candidates, rejected, model, cost, servedBy } = await suggest(env, {
 			...shared,
-			model: env.SEO_AI_MODEL || DEFAULT_MODEL,
+			model: preferredModel(env),
 		});
-		return new Response(JSON.stringify({ kind, candidates, rejected, model, ...context }), {
+		return new Response(JSON.stringify({ kind, candidates, rejected, model, cost, servedBy, ...context }), {
 			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
 		});
 	} catch (error) {
+		// A missing key is a setup step, not a failure. Answered with the
+		// instructions and a 409 so the panel can lay them out rather than
+		// showing "something went wrong" against a thing nobody switched on.
+		if (error instanceof NotConfigured) return jsonError(409, error.message);
 		return jsonError(502, `Could not draft a suggestion (${error.message}).`);
 	}
 }
@@ -1065,7 +1070,7 @@ async function handleSeoFix(request, url, env) {
 	try {
 		const result = await fixGaps(env, {
 			gaps,
-			model: env.SEO_AI_MODEL || DEFAULT_MODEL,
+			model: preferredModel(env),
 			page: { title: summary.title, description: summary.description, h1: content.h1, body: content.body },
 			examples,
 			limits: {
@@ -1087,6 +1092,7 @@ async function handleSeoFix(request, url, env) {
 			{ headers: { "content-type": "application/json", "Cache-Control": "no-store" } }
 		);
 	} catch (error) {
+		if (error instanceof NotConfigured) return jsonError(409, error.message);
 		return jsonError(502, `Could not draft a fix (${error.message}).`);
 	}
 }

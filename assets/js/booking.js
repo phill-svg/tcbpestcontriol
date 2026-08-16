@@ -13,6 +13,7 @@ var PRICING = {
   "termite-inspection": { modifier: "property", prices: { subfloor: 320, slab: 289 } },
   "rodents": { modifier: "none", price: 289 },
   "wasps-bees": { modifier: "none", price: 289 },
+  "termite-treatment": { modifier: "none", price: 0 },
 };
 var MODIFIER_LABELS = { bedrooms: "How many bedrooms?", property: "Property type" };
 var MODIFIER_OPTIONS = {

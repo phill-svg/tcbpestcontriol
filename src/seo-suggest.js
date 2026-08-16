@@ -22,6 +22,14 @@
 // -- the cost of a rejected suggestion is another click, and the cost of an
 // invented licence claim on a pest control website is not.
 
+import {
+	CLAUDE_MODEL,
+	isClaudeModel,
+	runClaude,
+	isConfigured as claudeConfigured,
+	setupMessage as claudeSetupMessage,
+} from "./claude-suggest.js";
+
 // Llama 3.3 is what the site chat uses and what this started on. It is not
 // deprecated, but it is a 2024 model being asked to write marketing copy in a
 // particular voice, and three rounds of prompt work have not made its output
@@ -35,26 +43,65 @@
 // person who can actually judge picks the winner.
 export const DEFAULT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
-// The shortlist offered in the comparison. All current on Workers AI as of
-// this writing; none are on the May 2026 deprecation list.
+// The shortlist offered in the comparison. The first four are Workers AI and
+// cost nothing at this volume; Claude is a paid API and is only offered once a
+// key exists, which is what modelChoices() below is for.
 export const MODEL_CHOICES = [
-	{ id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", label: "Llama 3.3 70B (current)" },
+	{ id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", label: "Llama 3.3 70B" },
 	{ id: "@cf/deepseek-ai/deepseek-v4-pro-0813", label: "DeepSeek V4 Pro" },
 	{ id: "@cf/moonshotai/kimi-k2.6", label: "Kimi K2.6" },
 	{ id: "@cf/google/gemma-4-26b-a4b-it", label: "Gemma 4 26B" },
+	{ id: CLAUDE_MODEL, label: "Claude Opus 5 (paid)", paid: true },
 ];
+
+// Offering a model that cannot answer is worse than not offering it: the
+// comparison comes back with one dead column every time and no explanation
+// anybody would connect to a missing key.
+export function modelChoices(env) {
+	return MODEL_CHOICES.filter((choice) => !choice.paid || claudeConfigured(env));
+}
+
+// Which model a plain "Suggest one" click uses.
+//
+// Adding the API key is the decision to pay -- there is no other reason to put
+// one there -- so a key present is taken as the answer, rather than leaving
+// suggestions on a free model that somebody has just gone to the trouble of
+// replacing. An explicit SEO_AI_MODEL still wins over both, which is the way
+// back to the free models without deleting the key.
+export function preferredModel(env) {
+	if (env.SEO_AI_MODEL) return env.SEO_AI_MODEL;
+	if (claudeConfigured(env)) return CLAUDE_MODEL;
+	return DEFAULT_MODEL;
+}
 
 // A model id that Workers AI does not recognise throws, and a broken button
 // is a worse outcome than mediocre copy. Anything unexpected falls back to
 // the known-good model and says which one actually answered.
+//
+// That applies to Claude too, and deliberately: a rate limit, an expired card
+// or a network blip should degrade to a free suggestion rather than to an
+// error dialog. A missing key is the one case that does not fall back, because
+// it is not a failure -- it means Claude was never switched on, and quietly
+// answering from Llama would make that impossible to notice.
 export async function runModel(env, model, body) {
 	try {
+		if (isClaudeModel(model)) {
+			if (!claudeConfigured(env)) throw new NotConfigured(claudeSetupMessage());
+			const answered = await runClaude(env, body);
+			return { model, ...answered };
+		}
 		return { model, result: await env.AI.run(model, body) };
 	} catch (error) {
+		if (error instanceof NotConfigured) throw error;
 		if (model === DEFAULT_MODEL) throw error;
 		return { model: DEFAULT_MODEL, result: await env.AI.run(DEFAULT_MODEL, body), fellBack: error.message };
 	}
 }
+
+// Distinguishable from a runtime failure by type rather than by reading the
+// message, so the endpoint can answer with setup instructions instead of a
+// 502 that says something went wrong.
+export class NotConfigured extends Error {}
 
 // Words that assert something a customer could act on, or complain about.
 // Trade-services copy attracts all of these, and every one of them is a claim
@@ -291,7 +338,17 @@ export async function suggest(env, { kind, page, queries = [], examples = [], ga
 		else rejected.push({ text: candidate, reason: verdict.reason });
 	}
 
-	return { candidates: candidates.slice(0, 4), rejected, model: answered.model, fellBack: answered.fellBack };
+	return {
+		candidates: candidates.slice(0, 4),
+		rejected,
+		model: answered.model,
+		fellBack: answered.fellBack,
+		// Only the paid provider reports these. Shown per click rather than
+		// totalled at the end of the month, which is the only point at which
+		// the number is any use in deciding whether to click again.
+		cost: answered.cost,
+		servedBy: answered.servedBy,
+	};
 }
 
 // Just the title and description, for gathering house-style examples. A far

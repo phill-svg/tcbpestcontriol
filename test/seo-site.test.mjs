@@ -16,6 +16,7 @@ import {
 	bodySketch,
 	sketchSimilarity,
 	suffixWaste,
+	conventionOutliers,
 	NEAR_DUPLICATE,
 } from "../assets/js/seo-site.js";
 
@@ -389,6 +390,64 @@ test("a handful of pages sharing an ending is not a site-wide pattern", () => {
 test("titles with no ending at all do not invent one", () => {
 	const pages = [page("/a", { title: "Ant Control Canberra" }), page("/b", { title: "Flea Control Canberra" })];
 	assert.equal(suffixWaste(pages), null);
+});
+
+// Titles that break the site's own shape.
+//
+// The two real ones -- "About TCB Pest Control Canberra" and "Stored Product
+// Pest Control Canberra" -- are 31 and 36 characters, inside every length
+// rule, and pass every per-page check there is. What is wrong with them is
+// only visible next to the other 132 titles, which all end "| " and the
+// business name. No page can see that about itself.
+
+const conventional = (count, from = 0) =>
+	Array.from({ length: count }, (unused, at) => page(`/p${from + at}`, { title: `Pest ${from + at} Control Canberra | TCB Pest Control` }));
+
+test("the odd title out is named, against the shape the rest follow", () => {
+	const pages = [...conventional(30), page("/about", { title: "About TCB Pest Control Canberra" })];
+	const odd = conventionOutliers(pages);
+	assert.deepEqual(odd.odd, ["/about"]);
+	assert.equal(odd.following, 30);
+
+	const finding = checkSite({ pages, complete: false }).find((entry) => /do not follow|does not follow/.test(entry.message));
+	assert.ok(finding);
+	assert.equal(finding.level, "worth a look");
+	assert.match(finding.message, /1 title does not follow/);
+	assert.deepEqual(finding.pages, ["/about"]);
+});
+
+// The two guards below are each isolated on purpose. The first attempt used
+// 15-and-15 and 5-and-1, and both of those trip *every* guard at once -- so
+// both tests passed with the guard they were named after deleted, and only a
+// mutant showed it. A fixture that fails for several reasons tests none of
+// them.
+
+test("a site with no settled shape is not told it has outliers", () => {
+	// 25 titles, 5 of them without a separator. Comfortably past the
+	// small-site threshold, so only the proportion can stop this one: a fifth
+	// of the site is a disagreement about the convention, not a breach of it.
+	const pages = [
+		...conventional(20),
+		...Array.from({ length: 5 }, (unused, at) => page(`/q${at}`, { title: `Pest Control Canberra ${at}` })),
+	];
+	assert.equal(pages.length, 25, "past the 20-title threshold, so that guard is not what is being tested");
+	assert.equal(conventionOutliers(pages), null);
+});
+
+test("a small site is not held to a convention it has not established", () => {
+	// 19 titles with a single outlier -- 5%, well inside the proportion, so
+	// the only thing that can stop this is the size threshold.
+	const pages = [...conventional(18), page("/about", { title: "About TCB Pest Control Canberra" })];
+	assert.equal(pages.length, 19);
+	assert.ok(1 / 19 < 0.1, "inside the proportion, so that guard is not what is being tested");
+	assert.equal(conventionOutliers(pages), null);
+
+	// One more page and the same shape is a convention worth holding to.
+	assert.deepEqual(conventionOutliers([...conventional(19, 100), page("/about", { title: "About TCB" })]).odd, ["/about"]);
+});
+
+test("a site where every title matches says nothing", () => {
+	assert.equal(conventionOutliers(conventional(30)), null);
 });
 
 test("findings are ordered worst first", () => {

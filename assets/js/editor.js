@@ -1953,6 +1953,11 @@ class Editor {
 							el("p", { class: "tcb-finding-message", text: finding.message }),
 							...(finding.detail ? [el("p", { class: "tcb-hint", text: finding.detail })] : []),
 							...(finding.fix ? [el("p", { class: "tcb-finding-fix", text: finding.fix })] : []),
+							// A whole-site finding's fix edits pages other than
+							// this one, so it takes no path -- the server works
+							// out which pages are affected from the same rule
+							// that produced the finding.
+							...(finding.action ? [this.buildFindingFix(null, finding.action)] : []),
 							...(finding.pages && finding.pages.length
 								? [
 										el(
@@ -2046,6 +2051,7 @@ class Editor {
 	// read two lines -- and catch the one case where the tool has it
 	// backwards, because the wording somebody meant to change was the title.
 	buildFindingFix(path, action) {
+		if (action.kind === "titles") return this.buildTitleEndingFix(action);
 		if (action.kind !== "social") return el("span");
 		// The mechanism, spelled out: which lines in the page's code change,
 		// and when the change lands where. Somebody deciding whether to press
@@ -2079,6 +2085,72 @@ class Editor {
 				text: `How: it rewrites the ${tags} lines in this page's code to match the ${action.field} — the same as publishing a ${action.field} edit, except the wording stays exactly what it already is. The fix is live as soon as it runs, and “Sync to code” writes it into the HTML file permanently. Nothing on the page itself changes.`,
 			}),
 			el("div", { class: "tcb-suggest-row" }, [button, status]),
+		]);
+	}
+
+	// Fix for the shared title ending, which edits pages other than this one.
+	//
+	// Every other Fix in this panel changes one page you are looking at. This
+	// one changes seventeen you are not, so it asks twice: the first press
+	// fetches exactly what would change and lists it, and only the second
+	// press writes anything. A bulk edit that happens on one click, to pages
+	// out of sight, is the one button here worth being slow about.
+	buildTitleEndingFix(action) {
+		const status = el("p", { class: "tcb-hint" });
+		const preview = el("div", { class: "tcb-scan-pages" });
+		const button = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: `Show the ${action.count} changes` });
+		let planned = null;
+
+		button.addEventListener("click", async () => {
+			button.disabled = true;
+			try {
+				if (!planned) {
+					status.textContent = "Working out what would change…";
+					const result = await api("/api/seo/fix-titles", {
+						method: "POST",
+						body: JSON.stringify({ ending: action.ending, replacement: action.replacement, preview: true }),
+					});
+					planned = result.changes || [];
+					preview.replaceChildren(
+						...planned.map((change) =>
+							el("p", { class: "tcb-hint", text: `${change.path}: “${change.from}” → “${change.to}”` })
+						)
+					);
+					if (!planned.length) {
+						status.textContent = "Nothing left to change — these have been edited already.";
+						button.remove();
+						return;
+					}
+					status.textContent = `${planned.length} titles would change. Nothing has been written yet.`;
+					button.textContent = `Apply to ${planned.length} pages`;
+					button.disabled = false;
+					return;
+				}
+
+				status.textContent = "Applying…";
+				const result = await api("/api/seo/fix-titles", {
+					method: "POST",
+					body: JSON.stringify({ ending: action.ending, replacement: action.replacement }),
+				});
+				button.remove();
+				preview.replaceChildren();
+				status.textContent =
+					`Changed ${result.changed} titles.` +
+					(result.skipped ? ` ${result.skipped} left alone because they had already been edited by hand.` : "") +
+					" Live now, and revertable a page at a time from each page's own editor.";
+			} catch (error) {
+				button.disabled = false;
+				status.textContent = error.message;
+			}
+		});
+
+		return el("div", {}, [
+			el("p", {
+				class: "tcb-hint",
+				text: `How: it replaces the ending “| ${action.ending}” with “| ${action.replacement}” on the titles that already repeat its last word, and only those. Pages you have edited yourself are left alone. The change is live as soon as it runs, and “Sync to code” writes it into the HTML files permanently.`,
+			}),
+			el("div", { class: "tcb-suggest-row" }, [button, status]),
+			preview,
 		]);
 	}
 

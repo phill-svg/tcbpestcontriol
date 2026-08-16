@@ -743,6 +743,86 @@ export async function handleSeoSocialFix(request, env, session, { fetchPage, ext
 	return json({ ok: true, path, field, value });
 }
 
+// Replacing the shared ending on every title that repeats its last word.
+//
+// The one bulk edit in this panel, and the only one that changes pages the
+// person pressing the button is not looking at. Three things follow from that.
+//
+// It runs in preview first: the browser asks for the list, shows it, and only
+// a second press writes anything. It re-reads every page rather than trusting
+// the list the scan produced, because a scan is a snapshot and titles can have
+// changed since. And it skips any page carrying a title somebody set by hand
+// -- overwriting a deliberate edit with a mechanical one is a downgrade, and
+// the whole point of the rule is that it only removes a repeated word.
+export async function handleSeoTitleEndings(request, env, session, { paths, fetchPage, extract }) {
+	const body = await readJsonBody(request);
+	if (!body) return json({ error: "Invalid request." }, 400);
+	const ending = String(body.ending || "").trim();
+	const replacement = String(body.replacement || "").trim();
+	if (!ending || !replacement) return json({ error: "Expected an ending and a replacement." }, 400);
+	if (replacement.length >= ending.length) return json({ error: "The replacement has to be shorter than the ending." }, 400);
+
+	// Which words come off, and therefore which titles are eligible at all.
+	const removed = ending
+		.slice(replacement.length)
+		.toLowerCase()
+		.match(/[a-z0-9]+/g);
+	if (!removed || !removed.length) return json({ error: "That replacement removes nothing." }, 400);
+
+	await ensureTable(env);
+	const edited = new Set();
+	const { results: overrides } = await env.DB.prepare(
+		"SELECT path FROM content_edits WHERE address = ? AND (draft IS NOT NULL OR published IS NOT NULL)"
+	)
+		.bind(META_TITLE_ADDRESS)
+		.all();
+	for (const row of overrides || []) edited.add(row.path);
+
+	const changes = [];
+	let skipped = 0;
+	for (const path of paths) {
+		if (edited.has(path)) {
+			skipped++;
+			continue;
+		}
+		let summary;
+		try {
+			const response = await fetchPage(path);
+			if (!response || response.status !== 200) continue;
+			summary = await extract(response);
+		} catch {
+			continue;
+		}
+		const title = String(summary.title || "").trim();
+		const at = title.lastIndexOf("|");
+		if (at < 0 || title.slice(at + 1).trim() !== ending) continue;
+		const head = title.slice(0, at).trim();
+		if (!removed.some((word) => head.toLowerCase().includes(word))) continue;
+		changes.push({ path, from: title, to: `${head} | ${replacement}` });
+	}
+
+	if (body.preview) return json({ ok: true, preview: true, changes, skipped });
+
+	const now = Date.now();
+	for (const change of changes) {
+		await env.DB.prepare(
+			`INSERT INTO content_edits (path, address, kind, original, draft, published, updated_by, updated_at, published_at)
+			 VALUES (?, ?, 'meta', ?, NULL, ?, ?, ?, ?)
+			 ON CONFLICT (path, address) DO UPDATE SET
+			   published = excluded.published,
+			   draft = NULL,
+			   updated_by = excluded.updated_by,
+			   updated_at = excluded.updated_at,
+			   published_at = excluded.published_at`
+		)
+			.bind(change.path, META_TITLE_ADDRESS, change.from, change.to, session.username, now, now)
+			.run();
+	}
+
+	invalidateCaches();
+	return json({ ok: true, changed: changes.length, skipped, changes });
+}
+
 // Records that an edit's wording now lives in the HTML file as well.
 //
 // Deliberately a flag rather than a delete. A synced override carries on

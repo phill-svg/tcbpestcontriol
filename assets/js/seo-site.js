@@ -124,12 +124,14 @@ export function checkSite({ pages = [], broken = [], redirected = [], extraPages
 	// The shared title ending. One finding, because it is one edit.
 	const waste = suffixWaste(pages);
 	if (waste) {
+		const example = waste.changes[0];
 		findings.push({
 			level: "worth a look",
-			message: `${waste.redundant.length} titles end with “| ${waste.ending}” and already say those words earlier in the title.`,
-			detail: `Shortening the ending to “| ${waste.brand}” frees ${waste.freed} characters on each of them.`,
-			fix: `Google cuts titles off around ${62} characters, so those ${waste.freed} characters are the difference between naming the suburb, the pest or the species and running out of room. “Ant Control Canberra | ${waste.ending}” says control and Canberra twice; “Ant Control Canberra — Black, Coastal Brown, Argentine | ${waste.brand}” fits in the same space and answers three more searches. Worth doing as one pass rather than a page at a time.`,
+			message: `${waste.changes.length} titles end with “| ${waste.ending}” and already say the last word earlier in the title.`,
+			detail: `Changing the ending to “| ${waste.replacement}” on those frees ${waste.freed} characters each — for example “${example.from}” becomes “${example.to}”.`,
+			fix: `Those ${waste.freed} characters are room for the suburb, the pest or the species. Only the repeated word comes off: the business name stays, and every other page keeps the ending it has. Fix applies it to all ${waste.changes.length} at once and leaves any page you have already edited alone.`,
 			pages: waste.redundant,
+			action: { kind: "titles", ending: waste.ending, replacement: waste.replacement, count: waste.changes.length },
 		});
 	}
 
@@ -329,9 +331,24 @@ function nearDuplicateBodies(pages) {
 // appended to every title, and it is one decision to change, not 115. So it
 // is measured once, across the site, and reported once.
 //
-// Returns null when there is nothing worth saying, which is the usual case
-// for a site whose ending is already short.
-export function suffixWaste(pages, { minPages = 10 } = {}) {
+// The first version of this got the arithmetic badly wrong, and the mistake is
+// worth recording because it was invisible from the diagnosis alone.
+//
+// It counted every ending word the front half repeated -- pest, control and
+// canberra -- concluded 103 titles were wasting 22 characters each, and
+// recommended shortening the ending to "| TCB". Two things were wrong with
+// that. "Pest Control" is the business's actual name, so repeating it is the
+// unavoidable cost of being called TCB Pest Control rather than a fault to
+// fix. And shortening every ending to "| TCB" would have dropped 61 of the
+// 110 titles below the 30-character minimum -- trading one finding for
+// sixty-one, in a panel whose entire job is to reduce that number.
+//
+// Neither error shows up while you are only describing a problem. Both were
+// obvious the moment the repair was written out and measured. So this now
+// proposes a specific replacement, applies it, and checks the result against
+// the same length rules every other title is held to -- and only reports what
+// survives that.
+export function suffixWaste(pages, { minPages = 10, minTitle = 30, maxTitle = 62 } = {}) {
 	const endings = new Map();
 	for (const page of pages) {
 		const title = String(page.title || "").trim();
@@ -349,31 +366,58 @@ export function suffixWaste(pages, { minPages = 10 } = {}) {
 	}
 	if (!commonest || commonest.using.length < minPages) return null;
 
-	// The first word is the name of the business. Everything after it is a
-	// description of the business, and a description is what the rest of the
-	// title is already for.
 	const words = commonest.ending.split(/\s+/);
 	if (words.length < 2) return null;
-	const brand = words[0];
-	const trailing = words.slice(1).map((word) => word.toLowerCase().replace(/[^a-z0-9]/g, "")).filter(Boolean);
-	if (!trailing.length) return null;
 
-	// Only the pages whose front half already says one of those words. A page
-	// titled "About Us | TCB Pest Control Canberra" is not repeating anything
-	// and has no reason to be counted.
-	const redundant = commonest.using.filter((page) => {
-		const head = String(page.title).slice(0, String(page.title).lastIndexOf("|")).toLowerCase();
-		return trailing.some((word) => head.includes(word));
-	});
-	if (redundant.length < minPages) return null;
+	// Candidate replacements, most aggressive last: drop one trailing word,
+	// then two, and so on. The first word is the business's name and never
+	// goes -- an ending that does not identify the business is not an ending.
+	let best = null;
+	for (let drop = 1; drop < words.length; drop++) {
+		const replacement = words.slice(0, words.length - drop).join(" ");
+		const removed = words
+			.slice(words.length - drop)
+			.map((word) => word.toLowerCase().replace(/[^a-z0-9]/g, ""))
+			.filter(Boolean);
+		if (!removed.length) continue;
+
+		// Only the pages whose front half already says one of the words being
+		// removed. "About Us | TCB Pest Control Canberra" repeats nothing and
+		// has no business being counted, or edited.
+		const affected = [];
+		let unsafe = false;
+		for (const page of commonest.using) {
+			const title = String(page.title);
+			const head = title.slice(0, title.lastIndexOf("|")).trim();
+			if (!removed.some((word) => head.toLowerCase().includes(word))) continue;
+			const after = `${head} | ${replacement}`;
+			// The repair has to pass the same length rules as everything else.
+			// Shortening a title into a fresh "too short" finding is not a fix.
+			if (after.length < minTitle || after.length > maxTitle) {
+				unsafe = true;
+				break;
+			}
+			affected.push({ path: page.path, from: title, to: after });
+		}
+		if (unsafe || affected.length < minPages) continue;
+		// The first safe candidate wins, not the most aggressive one. Left to
+		// maximise characters this picks "| TCB Pest" -- which frees 17 rather
+		// than 9 and is safely inside the length rules, and is also not the
+		// name of the business. The smallest edit that clears the bar keeps
+		// the ending a real reading of the name, and the extra characters are
+		// not worth a sign-off that reads like a truncation.
+		best = { replacement, affected, freed: commonest.ending.length - replacement.length };
+		break;
+	}
+	if (!best) return null;
 
 	return {
 		ending: commonest.ending,
-		brand,
+		replacement: best.replacement,
 		used: commonest.using.length,
-		redundant: redundant.map((page) => page.path),
-		// What shortening it to the business name alone gives back.
-		freed: commonest.ending.length - brand.length,
+		changes: best.affected,
+		redundant: best.affected.map((change) => change.path),
+		freed: best.freed,
 	};
 }
 

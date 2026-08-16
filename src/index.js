@@ -8,7 +8,13 @@ import { handleIndexJson } from "./index-json.js";
 import { renderMarkdown } from "./markdown.js";
 import { isBookableService, SERVICE_LABELS, HORIZON_DAYS, computePrice } from "./booking-config.js";
 import { computeSlots } from "./availability.js";
-import { loadPageEdits, applyContentEdits, handleContentApi, handleSeoSocialFix } from "./content-edits.js";
+import {
+	loadPageEdits,
+	applyContentEdits,
+	handleContentApi,
+	handleSeoSocialFix,
+	handleSeoTitleEndings,
+} from "./content-edits.js";
 import { normalisePath } from "../assets/js/content-address.js";
 import { handleBlogApi } from "./blog-api.js";
 import { pathsFromSitemap, scanBatch, extractPageSummary } from "./seo-scan.js";
@@ -266,6 +272,26 @@ export default {
 				// A fresh GET rather than the incoming POST -- fetching an asset
 				// with the API request's method is the exact bug documented in
 				// src/assets.js.
+				fetchPage: (path) => {
+					const targetUrl = new URL(path, url);
+					return fetchAsset(new Request(targetUrl, { method: "GET" }), targetUrl, env);
+				},
+				extract: extractPageSummary,
+			});
+		}
+
+		// The one bulk edit in the panel: replacing the shared title ending on
+		// every page that repeats its last word. Same admin gate as the rest,
+		// and it previews before it writes -- see handleSeoTitleEndings.
+		if (url.pathname === "/api/seo/fix-titles") {
+			const session = await getStaffSession(request, env);
+			if (!session) return new Response("Unauthorized", { status: 401 });
+			if (!session.isAdmin) return new Response("Forbidden", { status: 403 });
+			const sitemap = await env.ASSETS.fetch(new Request(new URL("/sitemap.xml", url), { method: "GET" }));
+			if (!sitemap.ok) return jsonError(502, "Could not read sitemap.xml.");
+			return handleSeoTitleEndings(request, env, session, {
+				paths: pathsFromSitemap(await sitemap.text()),
+				// A fresh GET, not the incoming POST -- see src/assets.js.
 				fetchPage: (path) => {
 					const targetUrl = new URL(path, url);
 					return fetchAsset(new Request(targetUrl, { method: "GET" }), targetUrl, env);

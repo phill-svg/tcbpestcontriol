@@ -274,17 +274,83 @@ test("near-identical bodies are grouped into one finding", () => {
 const suffixed = (path, head, ending = "TCB Pest Control Canberra") => page(path, { title: `${head} | ${ending}` });
 
 test("one shared ending is one finding, not one per page", () => {
-	const pages = ["ant", "flea", "rodent", "spider", "wasp", "possum", "bird", "bee", "moth", "mite", "tick", "borer"].map(
-		(pest, at) => suffixed(`/${pest}-control`, `${pest} Control Canberra`, "TCB Pest Control Canberra")
+	const pages = ["Ant", "Flea", "Rodent", "Spider", "Wasp", "Possum", "Bird", "Bee", "Moth", "Mite", "Tick", "Borer"].map(
+		(pest) => suffixed(`/${pest.toLowerCase()}-control`, `${pest} Control Canberra`)
 	);
 	const findings = checkSite({ pages, complete: false });
 	const ending = findings.filter((finding) => /end with/.test(finding.message));
 	assert.equal(ending.length, 1, "twelve pages sharing one ending is one edit");
 	assert.match(ending[0].message, /12 titles end with/);
-	// The characters it gives back, which is the whole reason to care.
-	assert.match(ending[0].detail, /frees 22 characters/);
 	assert.equal(ending[0].level, "worth a look");
 	assert.equal(ending[0].pages.length, 12);
+	// And it carries the change it proposes, so the panel can offer a button
+	// rather than describing homework.
+	assert.equal(ending[0].action.kind, "titles");
+	assert.equal(ending[0].action.replacement, "TCB Pest Control");
+});
+
+test("the repair is not allowed to break the rule it is fixing", () => {
+	// The bug this replaces. Counting every repeated word made "| TCB" look
+	// like the answer -- 22 characters back on 103 pages -- and shortening the
+	// real site's titles that far would have pushed 61 of them under the
+	// 30-character minimum, trading one finding for sixty-one.
+	//
+	// Heads so short that every candidate ending takes the title under the
+	// 30-character minimum. There is no safe shortening here, and the right
+	// answer is to say nothing rather than to propose one anyway.
+	const cramped = Array.from({ length: 12 }, (unused, at) => suffixed(`/p${at}`, `Canberra ${at}`));
+	assert.equal(
+		suffixWaste(cramped),
+		null,
+		"shortening these would report them as too short instead — one finding traded for twelve"
+	);
+
+	// And where a safe shortening does exist, every result it proposes is
+	// inside the same bounds the per-page check enforces.
+	const roomy = Array.from({ length: 12 }, (unused, at) => suffixed(`/p${at}`, `Ant Control Canberra ${at}`));
+	const waste = suffixWaste(roomy);
+	assert.equal(waste.replacement, "TCB Pest Control", "one word off, not three");
+	for (const change of waste.changes) {
+		assert.ok(change.to.length >= 30, `${change.to} is under the minimum this panel enforces`);
+		assert.ok(change.to.length <= 62, `${change.to} is over the maximum`);
+	}
+});
+
+test("the business name is not treated as a repeated word", () => {
+	// The other half of the same bug. "Pest Control" is what the business is
+	// called; a title saying it twice is the cost of the name, not a fault.
+	// Only "Canberra" -- the word after the name -- comes off.
+	const pages = Array.from({ length: 12 }, (unused, at) =>
+		suffixed(`/p${at}`, `Cockroach Control Canberra ${at}`)
+	);
+	const waste = suffixWaste(pages);
+	assert.equal(waste.replacement, "TCB Pest Control");
+	assert.equal(waste.freed, 9);
+	assert.ok(waste.changes.every((change) => change.to.endsWith("| TCB Pest Control")));
+});
+
+test("the smallest safe change wins over the one that frees most", () => {
+	// Both candidates are inside the length rules here: dropping one word
+	// leaves 44 characters, dropping two leaves 36 and frees 17 rather than 9.
+	// The smaller change still wins, because "| TCB Pest" frees more and is
+	// not the name of the business.
+	const pages = Array.from({ length: 12 }, (unused, at) => suffixed(`/p${at}`, `Termite Control Canberra ${at}`));
+	const waste = suffixWaste(pages);
+	assert.equal(waste.replacement, "TCB Pest Control");
+	assert.equal(waste.freed, 9);
+});
+
+test("a title still too long after the small change gets the bigger one", () => {
+	// The exception, and the reason "smallest" is measured by the result
+	// rather than by the number of words removed. These titles start at 76
+	// characters; taking one word off leaves them at 63, still past the point
+	// Google cuts. Stopping there would be a fix that fixes nothing.
+	const pages = Array.from({ length: 12 }, (unused, at) =>
+		suffixed(`/p${at}`, `Carpenter Ant and Termite Control Canberra ${at}`)
+	);
+	const waste = suffixWaste(pages);
+	assert.equal(waste.replacement, "TCB Pest");
+	assert.ok(waste.changes.every((change) => change.to.length <= 62));
 });
 
 test("a short ending is left alone", () => {

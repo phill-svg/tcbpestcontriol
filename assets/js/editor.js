@@ -76,6 +76,19 @@ function priceNote(result) {
 	return ` Cost ${cents < 1 ? "under a cent" : `about ${cents.toFixed(1)}c`}.`;
 }
 
+// Which model actually answered, and whether that is the one that was asked
+// for. The second half is the part that earns its place: a paid model that
+// fails falls back to a free one on purpose, and without this the panel looked
+// identical either way -- so a broken API key, an empty account or a rejected
+// request would read as "Claude wrote this" indefinitely.
+function modelNote(result) {
+	if (!result.label) return "";
+	if (result.asked) {
+		return ` ${result.asked} could not answer, so ${result.label} wrote these instead${result.fellBack ? ` (${result.fellBack})` : ""}.`;
+	}
+	return ` Written by ${result.label}.`;
+}
+
 function el(tag, props = {}, children = []) {
 	const node = document.createElement(tag);
 	for (const [key, value] of Object.entries(props)) {
@@ -2317,7 +2330,11 @@ class Editor {
 			const from = [`this page`, `${result.usedExamples} others for the house style`];
 			if (result.usedSearches) from.push(`the ${result.usedSearches} searches people used to find it`);
 			if (result.usedGaps) from.push(`${result.usedGaps} phrases Google shows it for but it never mentions`);
-			status.textContent = `Written from ${from.join(", ")}. Click one to use it.${priceNote(result)}`;
+			status.textContent = `Written from ${from.join(", ")}. Click one to use it.${modelNote(result)}${priceNote(result)}`;
+			// A fallback is not a failure, but it is not what was asked for
+			// either, and on a paid model it is the difference between getting
+			// what you are paying for and not.
+			if (result.asked) status.className = "tcb-hint tcb-hint-warn";
 
 			for (const candidate of result.candidates) {
 				const option = el("button", { type: "button", class: "tcb-suggestion" }, [

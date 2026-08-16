@@ -54,6 +54,44 @@ export const MODEL_CHOICES = [
 	{ id: CLAUDE_MODEL, label: "Claude Opus 5 (paid)", paid: true },
 ];
 
+// A readable name for whichever model answered.
+//
+// This exists because the panel used to say nothing about it, and once one of
+// the options costs money that silence is a real problem: a Claude call that
+// fails falls back to the free model by design, and without a name on the
+// answer there is no way to tell a paid suggestion from a free one. Somebody
+// could believe they were buying better copy for weeks and be reading Llama.
+export function modelLabel(id) {
+	const known = MODEL_CHOICES.find((choice) => choice.id === id);
+	if (known) return known.label;
+	if (isClaudeModel(id)) return "Claude";
+	// An id set by hand through SEO_AI_MODEL, which is still worth naming
+	// even though nothing here has a label for it.
+	const tail = String(id || "").split("/").pop();
+	return tail || "an unknown model";
+}
+
+// What the panel needs to say about who answered.
+//
+// This lives here rather than in the endpoint because src/index.js imports
+// cloudflare:workers and cannot be loaded by a Node test -- the same reason
+// fetchAsset was moved into src/assets.js. Written inline in the handler, the
+// first version of this had a mutation survive: reporting every answer as
+// though the asked-for model produced it, which is precisely the failure the
+// field exists to prevent, and nothing caught it.
+export function describeRun(asked, answered) {
+	return {
+		model: answered.model,
+		label: modelLabel(answered.model),
+		// Null when the answer came from the model that was asked for, which
+		// is the ordinary case and needs no explaining. Set only when they
+		// differ -- the case worth knowing about, and the one a single label
+		// would quietly hide.
+		asked: asked === answered.model ? null : modelLabel(asked),
+		fellBack: answered.fellBack || null,
+	};
+}
+
 // Offering a model that cannot answer is worse than not offering it: the
 // comparison comes back with one dead column every time and no explanation
 // anybody would connect to a missing key.

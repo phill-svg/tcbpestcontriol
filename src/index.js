@@ -28,6 +28,7 @@ import {
 	HEADING_MAX,
 	modelChoices,
 	preferredModel,
+	describeRun,
 	NotConfigured,
 } from "./seo-suggest.js";
 import { TITLE_MIN, TITLE_MAX, DESCRIPTION_MIN, DESCRIPTION_MAX } from "../assets/js/seo-check.js";
@@ -1019,11 +1020,19 @@ async function handleSeoSuggest(request, url, env) {
 	}
 
 	try {
-		const { candidates, rejected, model, cost, servedBy } = await suggest(env, {
-			...shared,
-			model: preferredModel(env),
-		});
-		return new Response(JSON.stringify({ kind, candidates, rejected, model, cost, servedBy, ...context }), {
+		const asked = preferredModel(env);
+		const answered = await suggest(env, { ...shared, model: asked });
+		return new Response(JSON.stringify({
+			kind,
+			candidates: answered.candidates,
+			rejected: answered.rejected,
+			// Who answered, and whether that is who was asked -- see
+			// describeRun, which is where the logic is so it can be tested.
+			...describeRun(asked, answered),
+			cost: answered.cost,
+			servedBy: answered.servedBy,
+			...context,
+		}), {
 			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
 		});
 	} catch (error) {

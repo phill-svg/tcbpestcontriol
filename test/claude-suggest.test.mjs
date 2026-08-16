@@ -30,7 +30,15 @@ import {
 	setupMessage,
 	CLAUDE_MODEL,
 } from "../src/claude-suggest.js";
-import { runModel, preferredModel, modelChoices, NotConfigured, DEFAULT_MODEL } from "../src/seo-suggest.js";
+import {
+	runModel,
+	preferredModel,
+	modelChoices,
+	modelLabel,
+	describeRun,
+	NotConfigured,
+	DEFAULT_MODEL,
+} from "../src/seo-suggest.js";
 
 // The body seo-suggest.js builds, verbatim -- including the temperature that
 // must not survive the trip.
@@ -160,6 +168,54 @@ test("the paid model is not offered for comparison until it can answer", () => {
 	assert.ok(modelChoices({ ANTHROPIC_API_KEY: "test" }).some((choice) => choice.id === CLAUDE_MODEL));
 	// The free shortlist is unchanged either way.
 	assert.equal(modelChoices({}).length, 4);
+});
+
+test("a paid model that fails says so rather than passing off the free one", () => {
+	// The failure this exists to prevent, and the reason it matters more once
+	// money is involved: falling back to Llama is the right behaviour, but a
+	// panel that looks identical either way means somebody can pay for Claude
+	// for weeks and be reading Llama the whole time.
+	const env = {
+		ANTHROPIC_API_KEY: "test",
+		AI: { run: async () => ({ response: "from llama" }) },
+	};
+	// The Claude path throws because no client is reachable from here; the
+	// fallback is what answers.
+	return runModel(env, CLAUDE_MODEL, BODY).then((answered) => {
+		assert.equal(answered.model, DEFAULT_MODEL, "the free model answered");
+		assert.ok(answered.fellBack, "and the reason is carried back, not swallowed");
+		// Which is what lets the panel say the two apart.
+		assert.notEqual(modelLabel(answered.model), modelLabel(CLAUDE_MODEL));
+	});
+});
+
+test("the panel is told when the answer came from a different model", () => {
+	// The paid model answered, which is the ordinary case: nothing to explain,
+	// so nothing is said.
+	assert.deepEqual(describeRun(CLAUDE_MODEL, { model: CLAUDE_MODEL }), {
+		model: CLAUDE_MODEL,
+		label: "Claude Opus 5 (paid)",
+		asked: null,
+		fellBack: null,
+	});
+
+	// The paid model was asked for and the free one answered. This is the
+	// whole reason the field exists -- without it the panel reads identically
+	// either way, and somebody paying for Claude would have no way to notice
+	// they were being handed Llama.
+	const fellBack = describeRun(CLAUDE_MODEL, { model: DEFAULT_MODEL, fellBack: "rate limited" });
+	assert.equal(fellBack.label, "Llama 3.3 70B");
+	assert.equal(fellBack.asked, "Claude Opus 5 (paid)");
+	assert.equal(fellBack.fellBack, "rate limited");
+});
+
+test("every model that can answer has a name a person would recognise", () => {
+	assert.equal(modelLabel(CLAUDE_MODEL), "Claude Opus 5 (paid)");
+	assert.equal(modelLabel(DEFAULT_MODEL), "Llama 3.3 70B");
+	// Set by hand through SEO_AI_MODEL: still named rather than blank, because
+	// "written by" with nothing after it is worse than the raw id.
+	assert.equal(modelLabel("@cf/some/experimental-model"), "experimental-model");
+	assert.ok(modelLabel(undefined));
 });
 
 test("the setup message says it costs money, before anything is spent", () => {

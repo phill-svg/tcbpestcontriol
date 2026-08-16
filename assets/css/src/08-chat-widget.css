@@ -30,7 +30,7 @@
   border: 2px solid var(--accent);
   opacity: 0;
   pointer-events: none;
-  animation: chat-bubble-pulse 2.5s ease-out infinite;
+  animation: chat-bubble-pulse 3s ease-out infinite;
 }
 
 @keyframes chat-bubble-pulse {
@@ -38,7 +38,7 @@
     opacity: 0.55;
     transform: scale(0.92);
   }
-  70% {
+  75% {
     opacity: 0;
     transform: scale(1.25);
   }

@@ -22,7 +22,39 @@
 // -- the cost of a rejected suggestion is another click, and the cost of an
 // invented licence claim on a pest control website is not.
 
-const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+// Llama 3.3 is what the site chat uses and what this started on. It is not
+// deprecated, but it is a 2024 model being asked to write marketing copy in a
+// particular voice, and three rounds of prompt work have not made its output
+// good enough. At that point the prompt has stopped being the variable.
+//
+// The trouble is that copy quality cannot be judged from a test. There is no
+// assertion for "this reads like the rest of the site", and every previous
+// attempt to improve it was made blind -- change the prompt, ship, ask, guess
+// again. So rather than swapping in another model on a hunch and starting the
+// same loop, the panel can run several and show them side by side, and the
+// person who can actually judge picks the winner.
+export const DEFAULT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+
+// The shortlist offered in the comparison. All current on Workers AI as of
+// this writing; none are on the May 2026 deprecation list.
+export const MODEL_CHOICES = [
+	{ id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", label: "Llama 3.3 70B (current)" },
+	{ id: "@cf/deepseek-ai/deepseek-v4-pro-0813", label: "DeepSeek V4 Pro" },
+	{ id: "@cf/moonshotai/kimi-k2.6", label: "Kimi K2.6" },
+	{ id: "@cf/google/gemma-4-26b-a4b-it", label: "Gemma 4 26B" },
+];
+
+// A model id that Workers AI does not recognise throws, and a broken button
+// is a worse outcome than mediocre copy. Anything unexpected falls back to
+// the known-good model and says which one actually answered.
+export async function runModel(env, model, body) {
+	try {
+		return { model, result: await env.AI.run(model, body) };
+	} catch (error) {
+		if (model === DEFAULT_MODEL) throw error;
+		return { model: DEFAULT_MODEL, result: await env.AI.run(DEFAULT_MODEL, body), fellBack: error.message };
+	}
+}
 
 // Words that assert something a customer could act on, or complain about.
 // Trade-services copy attracts all of these, and every one of them is a claim
@@ -228,13 +260,14 @@ export function buildPrompt({ kind, page, queries = [], examples = [], gaps = []
 // Returns { candidates, rejected } -- rejected is kept because a run where
 // everything was thrown away should say so rather than silently offering
 // nothing, which reads as a broken button.
-export async function suggest(env, { kind, page, queries = [], examples = [], gaps = [], steer = "", require = [], alsoWanted = [], min, max, run } = {}) {
+export async function suggest(env, { kind, page, queries = [], examples = [], gaps = [], steer = "", require = [], alsoWanted = [], model = DEFAULT_MODEL, min, max, run } = {}) {
 	const messages = buildPrompt({ kind, page, queries, examples, gaps, steer, require, alsoWanted, min, max });
-	const call = run || ((body) => env.AI.run(MODEL, body));
 	// Six asked for rather than three. Roughly half get thrown out by the
 	// checks below -- so asking for what should survive left the button
 	// frequently offering one bland option, or none.
-	const result = await call({ messages, max_tokens: 700, temperature: 0.8 });
+	const body = { messages, max_tokens: 700, temperature: 0.8 };
+	const answered = run ? { model, result: await run(body) } : await runModel(env, model, body);
+	const result = answered.result;
 	const raw = typeof result === "string" ? result : result.response || "";
 
 	// The page's own words are the yardstick, including the title and
@@ -258,7 +291,7 @@ export async function suggest(env, { kind, page, queries = [], examples = [], ga
 		else rejected.push({ text: candidate, reason: verdict.reason });
 	}
 
-	return { candidates: candidates.slice(0, 4), rejected };
+	return { candidates: candidates.slice(0, 4), rejected, model: answered.model, fellBack: answered.fellBack };
 }
 
 // Just the title and description, for gathering house-style examples. A far
@@ -338,7 +371,7 @@ export const HEADING_MAX = 70;
 // main heading last -- which is also the one with room left when a phrase
 // simply will not fit in a title. Each is attempted only if the one before
 // produced nothing that both uses the words and survives the invention checks.
-export async function fixGaps(env, { gaps = [], page, examples = [], queries = [], limits, run } = {}) {
+export async function fixGaps(env, { gaps = [], page, examples = [], queries = [], limits, model = DEFAULT_MODEL, run } = {}) {
 	const attempts = [];
 	if (!gaps.length) return { kind: null, candidates: [], attempts };
 
@@ -354,6 +387,7 @@ export async function fixGaps(env, { gaps = [], page, examples = [], queries = [
 			queries,
 			require: biggest.missing,
 			alsoWanted,
+			model,
 			min,
 			max,
 			run,

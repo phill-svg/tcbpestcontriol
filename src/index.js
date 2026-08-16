@@ -21,6 +21,7 @@ import { pathsFromSitemap, scanBatch, extractPageSummary } from "./seo-scan.js";
 import {
 	suggest,
 	fixGaps,
+	draftPage,
 	extractContent,
 	extractMeta,
 	examplePaths,
@@ -278,6 +279,17 @@ export default {
 				},
 				extract: extractPageSummary,
 			});
+		}
+
+		// Drafting a page for a search nothing on the site answers. The other
+		// half of the advice the gap panel has always given in words -- see
+		// draftPage, and note it drafts only: creating the page is still the
+		// composer, with a person looking at it.
+		if (url.pathname === "/api/seo/draft-page") {
+			const session = await getStaffSession(request, env);
+			if (!session) return new Response("Unauthorized", { status: 401 });
+			if (!session.isAdmin) return new Response("Forbidden", { status: 403 });
+			return handleSeoDraftPage(request, url, env);
 		}
 
 		// The one bulk edit in the panel: replacing the shared title ending on
@@ -838,7 +850,7 @@ function editorLauncherHtml({ editing, previewing }) {
 		// browsers by the old immutable rule -- a year-long cache entry cannot be
 		// revalidated away, only stepped around with a different URL. The
 		// no-cache rule in _headers is what stops it happening again.
-		`<link rel="stylesheet" href="/assets/css/editor.css?v=13">` +
+		`<link rel="stylesheet" href="/assets/css/editor.css?v=14">` +
 		`<script src="/assets/js/editor.js?v=1" type="module"></script>` +
 		`</div>`
 	);
@@ -1035,6 +1047,34 @@ async function handleSeoSuggest(request, url, env) {
 // phrase Google already shows the page for has to actually appear, or nothing
 // has been fixed -- so a candidate without it is thrown out however well it
 // reads, and the request falls through to the next place the words could go.
+// Drafts a page for a search nothing on the site answers.
+//
+// Returns a draft and nothing else. It does not create the page: the composer
+// does, with the draft filled in and a person reading it. That is deliberate
+// -- a new page on a real business's website is not a thing to bring into
+// existence from one click on a panel.
+async function handleSeoDraftPage(request, url, env) {
+	const body = await readJsonBody(request);
+	const query = String(body?.query || "").trim();
+	if (!query) return jsonError(400, "Expected a search to write about.");
+
+	try {
+		// Writing samples from the site, so a new page arrives in the same
+		// voice as the rest rather than in a model's house style.
+		const examples = await styleExamples(request, url, env, "/");
+		const draft = await draftPage(env, { query, examples, model: preferredModel(env) });
+		if (!draft.title || !draft.description) {
+			return jsonError(502, "The draft came back missing a title or description, or with a claim it could not make. Worth trying again.");
+		}
+		return new Response(JSON.stringify(draft), {
+			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
+		});
+	} catch (error) {
+		if (error instanceof NotConfigured) return jsonError(409, error.message);
+		return jsonError(502, `Could not draft a page (${error.message}).`);
+	}
+}
+
 async function handleSeoFix(request, url, env) {
 	let body = {};
 	try {

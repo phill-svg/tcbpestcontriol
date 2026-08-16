@@ -1087,7 +1087,12 @@ class Editor {
 	// The wording does not have to be final here. Once the draft exists it is
 	// an ordinary page, so it can be opened with ?edit=1 and polished with the
 	// same click-to-edit the rest of the site uses.
-	async openNewPost() {
+	// `draft` is optional and arrives from the gap panel's "Give it its own
+	// page": a title, description, intro and sections already written, with
+	// every fact left out on purpose. Everything is still a field, and nothing
+	// exists until Create is pressed -- the draft saves the typing, not the
+	// deciding.
+	async openNewPost(draft = null) {
 		let options = { categories: [], services: [] };
 		try {
 			options = await api("/api/blog/options");
@@ -1154,8 +1159,22 @@ class Editor {
 			row.paragraphInput = paragraphInput;
 			sectionList.appendChild(row);
 		};
-		addSection();
-		addSection();
+		if (draft && Array.isArray(draft.sections) && draft.sections.length) {
+			for (const section of draft.sections) addSection(section.heading, section.paragraph);
+		} else {
+			addSection();
+			addSection();
+		}
+
+		if (draft) {
+			titleInput.value = draft.title || "";
+			descriptionInput.value = draft.description || "";
+			updateCount();
+			introInput.value = draft.intro || "";
+			// The search this page exists to answer, which is also the thing
+			// the template threads through as the topic.
+			pestInput.value = draft.query || "";
+		}
 
 		this.openDialog(
 			"New blog post",
@@ -1745,7 +1764,47 @@ class Editor {
 		const button = el("button", {
 			type: "button",
 			class: "tcb-btn tcb-btn-small",
-			text: gaps.length > 1 ? `Fix these ${gaps.length}` : "Fix this",
+			text: gaps.length > 1 ? `Work these ${gaps.length} into this page` : "Work it into this page",
+		});
+
+		// The advice here has always been two-sided -- work the words into
+		// this page, or give the search a page of its own -- and only the
+		// first side had a button, which quietly made it the recommendation
+		// whether or not it was the better one. The biggest gap is the one
+		// worth a page, so that is the one this offers.
+		const biggest = gaps.slice().sort((a, b) => (b.impressions || 0) - (a.impressions || 0))[0];
+		const pageButton = el("button", {
+			type: "button",
+			class: "tcb-btn tcb-btn-small",
+			text: "Give it its own page",
+		});
+
+		pageButton.addEventListener("click", async () => {
+			pageButton.disabled = true;
+			options.replaceChildren();
+			status.className = "tcb-hint";
+			status.textContent = `Drafting a page about “${biggest.query}”…`;
+
+			let draft;
+			try {
+				draft = await api("/api/seo/draft-page", {
+					method: "POST",
+					body: JSON.stringify({ query: biggest.query }),
+				});
+			} catch (error) {
+				pageButton.disabled = false;
+				status.className = "tcb-hint tcb-hint-warn";
+				status.textContent = error.message;
+				return;
+			}
+
+			pageButton.disabled = false;
+			status.textContent = `Drafted.${modelNote(draft)}${priceNote(draft)} Check it over — nothing is created until you save it.`;
+			// Opened rather than created. A new page on a real business's site
+			// is not a thing to bring into existence from one click, and the
+			// composer is where the hero image, the category and the wording
+			// get a look from somebody who knows the business.
+			this.openNewPost(draft);
 		});
 
 		const WHERE = { title: "page title", description: "description", heading: "main heading" };
@@ -1826,7 +1885,15 @@ class Editor {
 			}
 		});
 
-		return el("div", { class: "tcb-suggest-row" }, [button, status, options]);
+		return el("div", { class: "tcb-suggest-row" }, [
+			el("div", { class: "tcb-btn-row" }, [button, pageButton]),
+			el("p", {
+				class: "tcb-hint",
+				text: `A new page here is a blog post — the only kind this editor can create. For a search someone types when they are ready to book, a service page like the ones under Pests We Treat converts better, and that one still has to be built by hand.`,
+			}),
+			status,
+			options,
+		]);
 	}
 
 	// Applies one accepted suggestion. The title and description are metadata;

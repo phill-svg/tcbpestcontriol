@@ -11,7 +11,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { validateSuggestion, parseCandidates, buildPrompt, suggest, numbersIn, claimsIn, examplePaths } from "../src/seo-suggest.js";
+import { validateSuggestion, parseCandidates, buildPrompt, suggest, numbersIn, claimsIn, examplePaths, draftPage } from "../src/seo-suggest.js";
 
 const PAGE = {
 	title: "Termite Treatment Canberra | TCB Pest Control",
@@ -392,4 +392,72 @@ test("a page with nothing to fix asks for nothing", async () => {
 	const result = await fixGaps(null, { gaps: [], page: PAGE, limits: {}, run: async () => ((called = true), {}) });
 	assert.equal(result.kind, null);
 	assert.equal(called, false, "no gaps, no generation, no cost");
+});
+
+// Drafting a whole page for a search nothing on the site answers.
+//
+// The invention rule is stricter here than anywhere else, and has to be.
+// Every other suggestion rewrites a page that already exists, so that page's
+// own words are the yardstick for what may be claimed. A new page has no
+// words yet -- so nothing is allowed through, and the facts are added by the
+// person who knows them.
+
+const reply = (payload) => async () => ({ response: JSON.stringify(payload) });
+
+test("a drafted page may not claim anything about the business", async () => {
+	const draft = await draftPage(null, {
+		query: "borer control canberra",
+		run: reply({
+			title: "Borer Control Canberra | TCB Pest Control",
+			description:
+				"Licensed borer treatment across Canberra, guaranteed for 12 months, with same-day callout available.",
+			intro: "We have treated borer in Canberra homes for over 20 years.",
+			sections: [
+				{ heading: "Where borer turns up", paragraph: "Borer favours untreated pine in subfloors and roof timbers." },
+				{ heading: "Our guarantee", paragraph: "Every borer treatment is guaranteed for 12 months." },
+			],
+		}),
+	});
+
+	// The description claims a licence, a guarantee, a number and same-day
+	// service. None of it is checkable, so none of it survives.
+	assert.equal(draft.description, null);
+	assert.equal(draft.intro, "", "twenty years in business is not something a model can know");
+	assert.deepEqual(
+		draft.sections.map((section) => section.heading),
+		["Where borer turns up"],
+		"the section about the pest stays; the one making a promise does not"
+	);
+});
+
+test("a clean draft comes back whole", async () => {
+	const draft = await draftPage(null, {
+		query: "borer control canberra",
+		run: reply({
+			title: "Borer Control Canberra | TCB Pest Control",
+			description:
+				"Borer in Canberra homes: how to spot the frass, which timbers they favour, and what treatment involves.",
+			intro: "Borer beetles lay in untreated timber and the grubs do the damage on their way out.",
+			sections: [{ heading: "Spotting borer", paragraph: "Fine powder below skirting boards and small round exit holes." }],
+		}),
+	});
+	assert.match(draft.title, /Borer Control Canberra/);
+	assert.ok(draft.description);
+	assert.ok(draft.intro);
+	assert.equal(draft.sections.length, 1);
+});
+
+test("a draft that is not JSON is refused rather than half-read", async () => {
+	await assert.rejects(
+		() => draftPage(null, { query: "borer control canberra", run: async () => ({ response: "Sure! Here is a page." }) }),
+		/could not read/
+	);
+});
+
+test("the title still has to be a usable length", async () => {
+	const draft = await draftPage(null, {
+		query: "borer control canberra",
+		run: reply({ title: "Borer", description: "x".repeat(120), intro: "", sections: [] }),
+	});
+	assert.equal(draft.title, null, "five characters is not a title");
 });

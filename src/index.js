@@ -26,7 +26,6 @@ import {
 	examplePaths,
 	HEADING_MIN,
 	HEADING_MAX,
-	modelChoices,
 	preferredModel,
 	describeRun,
 	NotConfigured,
@@ -839,7 +838,7 @@ function editorLauncherHtml({ editing, previewing }) {
 		// browsers by the old immutable rule -- a year-long cache entry cannot be
 		// revalidated away, only stepped around with a different URL. The
 		// no-cache rule in _headers is what stops it happening again.
-		`<link rel="stylesheet" href="/assets/css/editor.css?v=12">` +
+		`<link rel="stylesheet" href="/assets/css/editor.css?v=13">` +
 		`<script src="/assets/js/editor.js?v=1" type="module"></script>` +
 		`</div>`
 	);
@@ -998,26 +997,11 @@ async function handleSeoSuggest(request, url, env) {
 	};
 	const context = { usedSearches: queries.length, usedExamples: examples.length, usedGaps: gaps.length };
 
-	// Comparison mode. Copy quality is the one thing here with no test for it
-	// -- there is no assertion for "reads like the rest of the site" -- so
-	// three rounds of tuning happened blind. Running the shortlist at once and
-	// labelling the output puts the judgement with the person who can make it.
-	if (body.compare) {
-		const runs = await Promise.all(
-			modelChoices(env).map(async (choice) => {
-				try {
-					const result = await suggest(env, { ...shared, model: choice.id });
-					return { model: choice.id, label: choice.label, ...result };
-				} catch (error) {
-					// One model being unavailable should not lose the others.
-					return { model: choice.id, label: choice.label, candidates: [], rejected: [], error: error.message };
-				}
-			})
-		);
-		return new Response(JSON.stringify({ kind, compare: runs, ...context }), {
-			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
-		});
-	}
+	// There was a comparison mode here, which ran four Workers AI models
+	// against the same page and showed the results side by side. It existed
+	// because copy quality has no test behind it and the choice had to be made
+	// by reading rather than by guessing. It has been made, and a comparison
+	// with one entry in it is a button that does nothing.
 
 	try {
 		const asked = preferredModel(env);

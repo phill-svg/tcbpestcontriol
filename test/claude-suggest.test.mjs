@@ -33,11 +33,10 @@ import {
 import {
 	runModel,
 	preferredModel,
-	modelChoices,
+	MODEL_CHOICES,
 	modelLabel,
 	describeRun,
 	NotConfigured,
-	DEFAULT_MODEL,
 } from "../src/seo-suggest.js";
 
 // The body seo-suggest.js builds, verbatim -- including the temperature that
@@ -154,66 +153,60 @@ test("a model id alone says which provider answers", () => {
 	assert.ok(!isClaudeModel(undefined));
 });
 
-test("adding the key is what switches suggestions over", () => {
-	assert.equal(preferredModel({}), DEFAULT_MODEL);
+test("Claude is what suggestions use, with a hand-set escape hatch", () => {
+	assert.equal(preferredModel({}), CLAUDE_MODEL);
 	assert.equal(preferredModel({ ANTHROPIC_API_KEY: "test" }), CLAUDE_MODEL);
-	// And the way back without deleting it.
-	assert.equal(preferredModel({ ANTHROPIC_API_KEY: "test", SEO_AI_MODEL: DEFAULT_MODEL }), DEFAULT_MODEL);
+	// SEO_AI_MODEL is the way to point this elsewhere without a deploy, for
+	// the case where Claude is unavailable for longer than it is worth
+	// waiting out. Nothing in the panel offers it.
+	assert.equal(preferredModel({ SEO_AI_MODEL: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" }), "@cf/meta/llama-3.3-70b-instruct-fp8-fast");
 });
 
-test("the paid model is not offered for comparison until it can answer", () => {
-	// Otherwise every comparison comes back with one dead column and an error
-	// nobody would connect to a key that was never added.
-	assert.ok(!modelChoices({}).some((choice) => choice.id === CLAUDE_MODEL));
-	assert.ok(modelChoices({ ANTHROPIC_API_KEY: "test" }).some((choice) => choice.id === CLAUDE_MODEL));
-	// The free shortlist is unchanged either way.
-	assert.equal(modelChoices({}).length, 4);
-});
-
-test("a paid model that fails says so rather than passing off the free one", () => {
-	// The failure this exists to prevent, and the reason it matters more once
-	// money is involved: falling back to Llama is the right behaviour, but a
-	// panel that looks identical either way means somebody can pay for Claude
-	// for weeks and be reading Llama the whole time.
+test("a failed call is a failure, not a quiet downgrade", () => {
+	// This used to fall back to Llama on the reasoning that a working button
+	// beats an error box. That held while the free models were there anyway.
+	// Now that they have been deliberately removed, answering from one would
+	// be worse than saying what went wrong -- it would hand over copy from a
+	// model somebody chose to delete, under Claude's name.
 	const env = {
 		ANTHROPIC_API_KEY: "test",
-		AI: { run: async () => ({ response: "from llama" }) },
+		AI: {
+			run: async () => {
+				throw new Error("nothing should reach Workers AI");
+			},
+		},
 	};
-	// The Claude path throws because no client is reachable from here; the
-	// fallback is what answers.
-	return runModel(env, CLAUDE_MODEL, BODY).then((answered) => {
-		assert.equal(answered.model, DEFAULT_MODEL, "the free model answered");
-		assert.ok(answered.fellBack, "and the reason is carried back, not swallowed");
-		// Which is what lets the panel say the two apart.
-		assert.notEqual(modelLabel(answered.model), modelLabel(CLAUDE_MODEL));
+	// The Claude call cannot succeed from here, so this is the failure path.
+	return assert.rejects(() => runModel(env, CLAUDE_MODEL, BODY), (error) => {
+		assert.ok(!(error instanceof NotConfigured), "a key is present; this is a runtime failure, not a setup step");
+		assert.doesNotMatch(String(error.message), /nothing should reach Workers AI/, "it must not have tried the free model");
+		return true;
 	});
 });
 
 test("the panel is told when the answer came from a different model", () => {
-	// The paid model answered, which is the ordinary case: nothing to explain,
-	// so nothing is said.
+	// The ordinary case: Claude was asked and Claude answered, so there is
+	// nothing to explain and nothing is said.
 	assert.deepEqual(describeRun(CLAUDE_MODEL, { model: CLAUDE_MODEL }), {
 		model: CLAUDE_MODEL,
-		label: "Claude Opus 5 (paid)",
+		label: "Claude Opus 5",
 		asked: null,
 		fellBack: null,
 	});
 
-	// The paid model was asked for and the free one answered. This is the
-	// whole reason the field exists -- without it the panel reads identically
-	// either way, and somebody paying for Claude would have no way to notice
-	// they were being handed Llama.
-	const fellBack = describeRun(CLAUDE_MODEL, { model: DEFAULT_MODEL, fellBack: "rate limited" });
-	assert.equal(fellBack.label, "Llama 3.3 70B");
-	assert.equal(fellBack.asked, "Claude Opus 5 (paid)");
-	assert.equal(fellBack.fellBack, "rate limited");
+	// Only reachable by setting SEO_AI_MODEL by hand, but that is exactly when
+	// it matters: an answer from something other than Claude has to be
+	// visibly from something other than Claude.
+	const other = describeRun(CLAUDE_MODEL, { model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" });
+	assert.equal(other.label, "llama-3.3-70b-instruct-fp8-fast");
+	assert.equal(other.asked, "Claude Opus 5");
 });
 
-test("every model that can answer has a name a person would recognise", () => {
-	assert.equal(modelLabel(CLAUDE_MODEL), "Claude Opus 5 (paid)");
-	assert.equal(modelLabel(DEFAULT_MODEL), "Llama 3.3 70B");
-	// Set by hand through SEO_AI_MODEL: still named rather than blank, because
-	// "written by" with nothing after it is worse than the raw id.
+test("whatever answered has a name a person would recognise", () => {
+	assert.equal(modelLabel(CLAUDE_MODEL), "Claude Opus 5");
+	assert.equal(MODEL_CHOICES.length, 1, "one model, so nothing to choose between");
+	// Set by hand: still named rather than blank, because "written by" with
+	// nothing after it is worse than the raw id.
 	assert.equal(modelLabel("@cf/some/experimental-model"), "experimental-model");
 	assert.ok(modelLabel(undefined));
 });

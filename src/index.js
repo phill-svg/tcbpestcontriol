@@ -12,7 +12,17 @@ import { loadPageEdits, applyContentEdits, handleContentApi, handleSeoSocialFix 
 import { normalisePath } from "../assets/js/content-address.js";
 import { handleBlogApi } from "./blog-api.js";
 import { pathsFromSitemap, scanBatch, extractPageSummary } from "./seo-scan.js";
-import { suggest, fixGaps, extractContent, extractMeta, examplePaths, HEADING_MIN, HEADING_MAX } from "./seo-suggest.js";
+import {
+	suggest,
+	fixGaps,
+	extractContent,
+	extractMeta,
+	examplePaths,
+	HEADING_MIN,
+	HEADING_MAX,
+	MODEL_CHOICES,
+	DEFAULT_MODEL,
+} from "./seo-suggest.js";
 import { TITLE_MIN, TITLE_MAX, DESCRIPTION_MIN, DESCRIPTION_MAX } from "../assets/js/seo-check.js";
 import { findGaps, describeGap, fixForGap } from "./seo-gaps.js";
 import { fetchAsset, fetchNegotiatedImage } from "./assets.js";
@@ -801,7 +811,7 @@ function editorLauncherHtml({ editing, previewing }) {
 		// browsers by the old immutable rule -- a year-long cache entry cannot be
 		// revalidated away, only stepped around with a different URL. The
 		// no-cache rule in _headers is what stops it happening again.
-		`<link rel="stylesheet" href="/assets/css/editor.css?v=11">` +
+		`<link rel="stylesheet" href="/assets/css/editor.css?v=12">` +
 		`<script src="/assets/js/editor.js?v=1" type="module"></script>` +
 		`</div>`
 	);
@@ -948,18 +958,45 @@ async function handleSeoSuggest(request, url, env) {
 	// anywhere; four real examples of it are worth more than any adjective.
 	const examples = await styleExamples(request, url, env, path);
 
-	try {
-		const { candidates, rejected } = await suggest(env, {
-			kind,
-			page: { title: summary.title, description: summary.description, h1: content.h1, body: content.body },
-			queries,
-			examples,
-			gaps,
-			steer: typeof body.steer === "string" ? body.steer : "",
-			min: kind === "title" ? TITLE_MIN : DESCRIPTION_MIN,
-			max: kind === "title" ? TITLE_MAX : DESCRIPTION_MAX,
+	const shared = {
+		kind,
+		page: { title: summary.title, description: summary.description, h1: content.h1, body: content.body },
+		queries,
+		examples,
+		gaps,
+		steer: typeof body.steer === "string" ? body.steer : "",
+		min: kind === "title" ? TITLE_MIN : DESCRIPTION_MIN,
+		max: kind === "title" ? TITLE_MAX : DESCRIPTION_MAX,
+	};
+	const context = { usedSearches: queries.length, usedExamples: examples.length, usedGaps: gaps.length };
+
+	// Comparison mode. Copy quality is the one thing here with no test for it
+	// -- there is no assertion for "reads like the rest of the site" -- so
+	// three rounds of tuning happened blind. Running the shortlist at once and
+	// labelling the output puts the judgement with the person who can make it.
+	if (body.compare) {
+		const runs = await Promise.all(
+			MODEL_CHOICES.map(async (choice) => {
+				try {
+					const result = await suggest(env, { ...shared, model: choice.id });
+					return { model: choice.id, label: choice.label, ...result };
+				} catch (error) {
+					// One model being unavailable should not lose the others.
+					return { model: choice.id, label: choice.label, candidates: [], rejected: [], error: error.message };
+				}
+			})
+		);
+		return new Response(JSON.stringify({ kind, compare: runs, ...context }), {
+			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
 		});
-		return new Response(JSON.stringify({ kind, candidates, rejected, usedSearches: queries.length, usedExamples: examples.length, usedGaps: gaps.length }), {
+	}
+
+	try {
+		const { candidates, rejected, model } = await suggest(env, {
+			...shared,
+			model: env.SEO_AI_MODEL || DEFAULT_MODEL,
+		});
+		return new Response(JSON.stringify({ kind, candidates, rejected, model, ...context }), {
 			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
 		});
 	} catch (error) {
@@ -1028,6 +1065,7 @@ async function handleSeoFix(request, url, env) {
 	try {
 		const result = await fixGaps(env, {
 			gaps,
+			model: env.SEO_AI_MODEL || DEFAULT_MODEL,
 			page: { title: summary.title, description: summary.description, h1: content.h1, body: content.body },
 			examples,
 			limits: {

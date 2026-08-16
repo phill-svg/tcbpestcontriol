@@ -2181,6 +2181,10 @@ class Editor {
 		const status = el("p", { class: "tcb-hint" });
 		const options = el("div", { class: "tcb-suggestions" });
 		const button = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Suggest one" });
+		// The escape hatch for "these aren't good". Copy quality is the one
+		// thing in this panel with no test behind it, so the judgement has to
+		// come from whoever can read them side by side.
+		const compareButton = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Compare models" });
 		// Somewhere to push back. Without this the only response to a weak
 		// suggestion is to press the button again and hope, which is a poor
 		// way to spend anyone's afternoon.
@@ -2258,7 +2262,61 @@ class Editor {
 			}
 		});
 
-		return el("div", { class: "tcb-suggest-row" }, [button, steer, status, options]);
+		compareButton.addEventListener("click", async () => {
+			compareButton.disabled = true;
+			options.replaceChildren();
+			status.className = "tcb-hint";
+			status.textContent = "Asking four models the same question…";
+
+			let result;
+			try {
+				result = await api("/api/seo/suggest", {
+					method: "POST",
+					body: JSON.stringify({ kind, path: PATH, steer: steer.value.trim(), compare: true }),
+				});
+			} catch (error) {
+				compareButton.disabled = false;
+				status.className = "tcb-hint tcb-hint-warn";
+				status.textContent = error.message;
+				return;
+			}
+
+			compareButton.disabled = false;
+			status.textContent = "Same page, same instructions, four different models. Click whichever reads best — then tell me which model wrote it and I will make it the default.";
+
+			for (const run of result.compare) {
+				const block = el("div", { class: "tcb-compare" }, [el("p", { class: "tcb-compare-model", text: run.label })]);
+
+				if (run.error) {
+					block.appendChild(el("p", { class: "tcb-hint tcb-hint-warn", text: `Not available: ${run.error}` }));
+				} else if (!run.candidates.length) {
+					block.appendChild(
+						el("p", {
+							class: "tcb-hint",
+							text: run.rejected.length ? `Everything it wrote was thrown out — ${run.rejected[0].reason}.` : "Nothing came back.",
+						})
+					);
+				}
+
+				for (const candidate of run.candidates) {
+					const option = el("button", { type: "button", class: "tcb-suggestion" }, [
+						el("span", { class: "tcb-suggestion-text", text: candidate }),
+						el("span", { class: "tcb-suggestion-count", text: `${candidate.length}` }),
+					]);
+					option.addEventListener("click", () => {
+						input.value = candidate;
+						onPick();
+						input.focus();
+						status.textContent = `Used the ${run.label} option. Save it below if you are happy with it.`;
+					});
+					block.appendChild(option);
+				}
+
+				options.appendChild(block);
+			}
+		});
+
+		return el("div", { class: "tcb-suggest-row" }, [el("div", { class: "tcb-btn-row" }, [button, compareButton]), steer, status, options]);
 	}
 
 	async saveMeta(address, value, original) {

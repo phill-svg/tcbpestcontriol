@@ -305,8 +305,9 @@ export default {
 		}
 
 		// Public online-booking form (/book) -> creates a ServiceM8 Quote job.
-		// Protected by a honeypot + strict validation (Turnstile can be layered on
-		// later by setting TURNSTILE_SECRET and adding the widget to the form).
+		// Protected by a honeypot + strict validation, plus Turnstile (widget is
+		// already on the form; siteverify only runs once TURNSTILE_SECRET is set
+		// as a Cloudflare secret -- see docs/BOOKING-EDITING-GUIDE.md).
 		if (url.pathname === "/api/booking" && request.method === "POST") {
 			return handleBooking(request, env, ctx);
 		}

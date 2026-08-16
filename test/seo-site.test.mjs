@@ -9,7 +9,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { checkSite, linkTarget, unverifiedTargets, bodySketch, sketchSimilarity, NEAR_DUPLICATE } from "../assets/js/seo-site.js";
+import {
+	checkSite,
+	linkTarget,
+	unverifiedTargets,
+	bodySketch,
+	sketchSimilarity,
+	suffixWaste,
+	NEAR_DUPLICATE,
+} from "../assets/js/seo-site.js";
 
 const page = (path, extra = {}) => ({
 	path,
@@ -252,6 +260,69 @@ test("near-identical bodies are grouped into one finding", () => {
 	const copies = findings.filter((finding) => /nearly identical body text/.test(finding.message));
 	assert.equal(copies.length, 1);
 	assert.deepEqual(copies[0].pages.sort(), ["/a", "/b"]);
+});
+
+// The shared title ending.
+//
+// The per-page checks measure size and nothing else, so a title that says the
+// same three words twice passes as a perfectly good 49 characters. The naive
+// version of this check -- flag any title repeating a word -- fires on 115 of
+// this site's 134 pages, which is a wall rather than a finding. These tests
+// pin the thing that makes it useful: it speaks once, about the one edit, and
+// stays silent when the ending is already short.
+
+const suffixed = (path, head, ending = "TCB Pest Control Canberra") => page(path, { title: `${head} | ${ending}` });
+
+test("one shared ending is one finding, not one per page", () => {
+	const pages = ["ant", "flea", "rodent", "spider", "wasp", "possum", "bird", "bee", "moth", "mite", "tick", "borer"].map(
+		(pest, at) => suffixed(`/${pest}-control`, `${pest} Control Canberra`, "TCB Pest Control Canberra")
+	);
+	const findings = checkSite({ pages, complete: false });
+	const ending = findings.filter((finding) => /end with/.test(finding.message));
+	assert.equal(ending.length, 1, "twelve pages sharing one ending is one edit");
+	assert.match(ending[0].message, /12 titles end with/);
+	// The characters it gives back, which is the whole reason to care.
+	assert.match(ending[0].detail, /frees 22 characters/);
+	assert.equal(ending[0].level, "worth a look");
+	assert.equal(ending[0].pages.length, 12);
+});
+
+test("a short ending is left alone", () => {
+	// "| TCB" repeats nothing. A check that complained here would be
+	// complaining about having a business name at all.
+	const pages = ["ant", "flea", "rodent", "spider", "wasp", "possum", "bird", "bee", "moth", "mite", "tick", "borer"].map(
+		(pest) => suffixed(`/${pest}-control`, `${pest} Control Canberra`, "TCB")
+	);
+	assert.equal(suffixWaste(pages), null);
+	assert.deepEqual(checkSite({ pages, complete: false }).filter((f) => /end with/.test(f.message)), []);
+});
+
+test("only the titles that actually repeat the ending are counted", () => {
+	// "About Us | TCB Pest Control Canberra" repeats nothing and has no
+	// business being named in a finding about repetition.
+	const pages = [
+		...["ant", "flea", "rodent", "spider", "wasp", "possum", "bird", "bee", "moth", "mite"].map((pest) =>
+			suffixed(`/${pest}-control`, `${pest} Control Canberra`)
+		),
+		suffixed("/about", "About Us"),
+		suffixed("/contact", "Get In Touch"),
+	];
+	const waste = suffixWaste(pages);
+	assert.equal(waste.used, 12, "all twelve use the ending");
+	assert.equal(waste.redundant.length, 10, "only ten of them repeat it");
+	assert.ok(!waste.redundant.includes("/about"));
+});
+
+test("a handful of pages sharing an ending is not a site-wide pattern", () => {
+	// Below the threshold this is somebody's stylistic choice on a few pages,
+	// not a structural cost worth a finding.
+	const pages = ["ant", "flea", "rodent"].map((pest) => suffixed(`/${pest}-control`, `${pest} Control Canberra`));
+	assert.equal(suffixWaste(pages), null);
+});
+
+test("titles with no ending at all do not invent one", () => {
+	const pages = [page("/a", { title: "Ant Control Canberra" }), page("/b", { title: "Flea Control Canberra" })];
+	assert.equal(suffixWaste(pages), null);
 });
 
 test("findings are ordered worst first", () => {

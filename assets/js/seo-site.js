@@ -121,6 +121,18 @@ export function checkSite({ pages = [], broken = [], redirected = [], extraPages
 		});
 	}
 
+	// The shared title ending. One finding, because it is one edit.
+	const waste = suffixWaste(pages);
+	if (waste) {
+		findings.push({
+			level: "worth a look",
+			message: `${waste.redundant.length} titles end with “| ${waste.ending}” and already say those words earlier in the title.`,
+			detail: `Shortening the ending to “| ${waste.brand}” frees ${waste.freed} characters on each of them.`,
+			fix: `Google cuts titles off around ${62} characters, so those ${waste.freed} characters are the difference between naming the suburb, the pest or the species and running out of room. “Ant Control Canberra | ${waste.ending}” says control and Canberra twice; “Ant Control Canberra — Black, Coastal Brown, Argentine | ${waste.brand}” fits in the same space and answers three more searches. Worth doing as one pass rather than a page at a time.`,
+			pages: waste.redundant,
+		});
+	}
+
 	// The business block in the structured data is one shared template, so a
 	// field missing from it is missing everywhere at once -- one fact, one
 	// finding, however many pages carry the block.
@@ -301,6 +313,68 @@ function nearDuplicateBodies(pages) {
 		}
 	}
 	return [...new Set(groupOf.values())].filter((group) => group.length > 1);
+}
+
+// The ending most titles share, and what it is costing them.
+//
+// This exists because the per-page checks are a ruler. They measure whether a
+// title is the right size and say nothing about what is in it, so
+// "Pest Control Canberra | TCB Pest Control Canberra" passes as a perfectly
+// good 49 characters while spending 22 of them saying the same three words
+// twice.
+//
+// The obvious fix -- flag any title that repeats a word -- fires on 115 of
+// this site's 134 pages, which is not a check, it is a wall. The repetition
+// is not really a property of each page: it comes from one shared ending
+// appended to every title, and it is one decision to change, not 115. So it
+// is measured once, across the site, and reported once.
+//
+// Returns null when there is nothing worth saying, which is the usual case
+// for a site whose ending is already short.
+export function suffixWaste(pages, { minPages = 10 } = {}) {
+	const endings = new Map();
+	for (const page of pages) {
+		const title = String(page.title || "").trim();
+		const at = title.lastIndexOf("|");
+		if (at < 0) continue;
+		const ending = title.slice(at + 1).trim();
+		if (!ending) continue;
+		if (!endings.has(ending)) endings.set(ending, []);
+		endings.get(ending).push(page);
+	}
+
+	let commonest = null;
+	for (const [ending, using] of endings) {
+		if (!commonest || using.length > commonest.using.length) commonest = { ending, using };
+	}
+	if (!commonest || commonest.using.length < minPages) return null;
+
+	// The first word is the name of the business. Everything after it is a
+	// description of the business, and a description is what the rest of the
+	// title is already for.
+	const words = commonest.ending.split(/\s+/);
+	if (words.length < 2) return null;
+	const brand = words[0];
+	const trailing = words.slice(1).map((word) => word.toLowerCase().replace(/[^a-z0-9]/g, "")).filter(Boolean);
+	if (!trailing.length) return null;
+
+	// Only the pages whose front half already says one of those words. A page
+	// titled "About Us | TCB Pest Control Canberra" is not repeating anything
+	// and has no reason to be counted.
+	const redundant = commonest.using.filter((page) => {
+		const head = String(page.title).slice(0, String(page.title).lastIndexOf("|")).toLowerCase();
+		return trailing.some((word) => head.includes(word));
+	});
+	if (redundant.length < minPages) return null;
+
+	return {
+		ending: commonest.ending,
+		brand,
+		used: commonest.using.length,
+		redundant: redundant.map((page) => page.path),
+		// What shortening it to the business name alone gives back.
+		freed: commonest.ending.length - brand.length,
+	};
 }
 
 // Which link destinations still need checking. Anything that was scanned and

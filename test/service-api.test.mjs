@@ -87,3 +87,18 @@ test("the address check is linear, and still says the same thing", () => {
 	// A path on the site, not a paragraph.
 	assert.ok(!isSlug("a".repeat(81)));
 });
+
+test("deriving an address trims hyphens without a backtracking pattern", () => {
+	// /^-+|-+$/ was what the security scan objected to: an alternation of two
+	// quantifiers, the trailing half retried from every position in a run of
+	// hyphens. These pin the behaviour the hand-written trim replaced.
+	assert.equal(serviceSlug("---Borer Control---"), "borer-control");
+	assert.equal(serviceSlug("  Borer  &  Timber  "), "borer-timber");
+	assert.equal(serviceSlug("!!!"), "");
+	assert.equal(serviceSlug(""), "");
+	assert.equal(serviceSlug(null), "");
+	// And the shape that prompted it stays cheap.
+	const started = Date.now();
+	serviceSlug("-".repeat(200000) + "a");
+	assert.ok(Date.now() - started < 1000, "trimming a long run of hyphens should not stall");
+});

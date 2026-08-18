@@ -31,10 +31,19 @@ async function readJsonBody(request) {
 // /blog-borer-control -- a service page filed as a blog post, at an address
 // this module's own validator then refuses.
 export function serviceSlug(name) {
-	return String(name || "")
+	// The trimming is done by hand rather than with /^-+|-+$/, which is the
+	// pattern CodeQL objected to: an alternation of two quantifiers, where the
+	// trailing half has to be retried from every position in a run of hyphens.
+	// Walking in from both ends does the same job in one pass and cannot
+	// backtrack at all.
+	const cleaned = String(name || "")
 		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-+|-+$/g, "");
+		.replace(/[^a-z0-9]+/g, "-");
+	let start = 0;
+	let end = cleaned.length;
+	while (start < end && cleaned[start] === "-") start += 1;
+	while (end > start && cleaned[end - 1] === "-") end -= 1;
+	return cleaned.slice(start, end);
 }
 
 // Lower-case words joined by single hyphens, with none at either end.

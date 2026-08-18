@@ -554,6 +554,104 @@ export async function draftPage(env, { query, examples = [], model = CLAUDE_MODE
 	};
 }
 
+// Drafting a service page -- the commercial kind, not a blog post.
+//
+// A richer shape than draftPage: a hero lead, a heading split into a plain
+// half and an accented half, three sections of prose, five questions with
+// answers, and a closing paragraph. All of it goes through the same rule, and
+// the rule is the strict one -- a page that does not exist yet has no words to
+// check a claim against, so no claim is allowed. What comes back is structure
+// and voice; the licences, the guarantees and the response times are added by
+// whoever can stand behind them.
+//
+// Everything is length-checked against the same limits the panel enforces,
+// because a generated page that the site's own SEO check would immediately
+// flag is not finished work.
+export async function draftServicePage(env, { query, serviceName, examples = [], model = CLAUDE_MODEL, run } = {}) {
+	const sample = examples
+		.map((example) => [example.title, example.description].filter(Boolean).join(" — "))
+		.filter(Boolean)
+		.slice(0, 4);
+
+	const messages = [
+		{
+			role: "system",
+			content:
+				"You write service pages for a pest control company's website in Canberra, Australia. Use Australian " +
+				"spelling. Be concrete: name the species, the timber, the room, the season, the sign someone would " +
+				"actually notice. Never write that a service is professional, trusted, reliable or expert. " +
+				"You may not state any fact about the business: no numbers, no prices, no years in business, no response " +
+				"times, no licences, no guarantees, no warranties, no awards. Write about the pest and the problem. " +
+				"Reply as JSON only, in this shape: " +
+				'{"title":"","description":"","headingLead":"","headingAccent":"","heroLead":"","bannerText":"",' +
+				'"sections":[{"eyebrow":"","heading":"","paragraphs":["",""]}],"faqs":[{"question":"","answer":""}]}',
+		},
+		{
+			role: "user",
+			content: [
+				`People search for “${query}” and this site has no page about it. Write the service page.`,
+				"",
+				`The title must contain the words from “${query}” and be between ${TITLE_MIN} and ${TITLE_MAX} characters.`,
+				`The description must be between ${DESCRIPTION_MIN} and ${DESCRIPTION_MAX} characters.`,
+				`Three sections, each with a short eyebrow label of one or two words and two paragraphs. Five questions.`,
+				`headingLead and headingAccent are the two halves of the main heading: "${serviceName || "Borer control"}," and a short phrase that finishes it.`,
+				...(sample.length ? ["", "Match the voice of these, which are real pages from elsewhere on this site:", ...sample.map((text) => `- ${text}`)] : []),
+			].join("\n"),
+		},
+	];
+
+	const answered = run
+		? { model, result: await run({ messages, max_tokens: 4000 }) }
+		: await runModel(env, model, { messages, max_tokens: 4000 });
+	const raw = typeof answered.result === "string" ? answered.result : answered.result.response || "";
+
+	let draft;
+	try {
+		const start = raw.indexOf("{");
+		const end = raw.lastIndexOf("}");
+		draft = JSON.parse(raw.slice(start, end + 1));
+	} catch {
+		throw new Error("The draft came back in a shape this could not read. Worth trying again.");
+	}
+
+	// Nothing to check a claim against but the query itself, which is the point.
+	const clean = (text, { min, max } = {}) => {
+		const verdict = validateSuggestion(text, { source: query, min, max });
+		return verdict.ok ? String(text).trim() : null;
+	};
+	const plain = (text) => {
+		const value = String(text || "").trim();
+		if (!value) return "";
+		return claimsIn(value).size || numbersIn(value).size ? "" : value;
+	};
+
+	const sections = (Array.isArray(draft.sections) ? draft.sections : [])
+		.map((section) => ({
+			eyebrow: plain(section?.eyebrow).slice(0, 24),
+			heading: plain(section?.heading),
+			paragraphs: (Array.isArray(section?.paragraphs) ? section.paragraphs : []).map(plain).filter(Boolean),
+		}))
+		.filter((section) => section.heading && section.paragraphs.length);
+
+	const faqs = (Array.isArray(draft.faqs) ? draft.faqs : [])
+		.map((faq) => ({ question: plain(faq?.question), answer: plain(faq?.answer) }))
+		.filter((faq) => faq.question && faq.answer);
+
+	return {
+		query,
+		title: clean(draft.title, { min: TITLE_MIN, max: TITLE_MAX }),
+		description: clean(draft.description, { min: DESCRIPTION_MIN, max: DESCRIPTION_MAX }),
+		headingLead: plain(draft.headingLead),
+		headingAccent: plain(draft.headingAccent),
+		heroLead: plain(draft.heroLead),
+		bannerText: plain(draft.bannerText),
+		sections,
+		faqs,
+		model: answered.model,
+		cost: answered.cost,
+	};
+}
+
 export function coversGap(text, gap) {
 	const haystack = normalise(text);
 	return (gap.missing || []).every((word) => haystack.includes(normalise(word)));

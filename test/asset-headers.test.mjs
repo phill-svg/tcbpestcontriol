@@ -111,3 +111,21 @@ test("every module the editor imports is exempt from the year-long freeze", () =
 		assert.match(rule, /Cache-Control:\s*no-cache/, `/assets/js/${name} is not exempt from the freeze`);
 	}
 });
+
+test("page templates are not served to the public", () => {
+	// The templates sit at the repository root, and assets.directory is the
+	// whole repository -- so anything not listed in .assetsignore is fetchable
+	// by URL. A template is a page full of {{PLACEHOLDER}} with no content,
+	// and Google will index it given the chance.
+	//
+	// Derived from the directory rather than listed here, so a template added
+	// later is covered without anybody remembering to come back.
+	const ignored = readFileSync(new URL("../.assetsignore", import.meta.url), "utf8")
+		.split("\n")
+		.map((line) => line.trim());
+	const templates = readdirSync(new URL("..", import.meta.url)).filter((name) => /-template\.html$/.test(name));
+	assert.ok(templates.length, "expected at least one template at the repository root");
+	for (const template of templates) {
+		assert.ok(ignored.includes(template), `${template} would be served to the public`);
+	}
+});

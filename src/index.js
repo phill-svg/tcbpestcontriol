@@ -17,11 +17,13 @@ import {
 } from "./content-edits.js";
 import { normalisePath } from "../assets/js/content-address.js";
 import { handleBlogApi } from "./blog-api.js";
+import { handleServiceApi } from "./service-api.js";
 import { pathsFromSitemap, scanBatch, extractPageSummary } from "./seo-scan.js";
 import {
 	suggest,
 	fixGaps,
 	draftPage,
+	draftServicePage,
 	extractContent,
 	extractMeta,
 	examplePaths,
@@ -281,6 +283,15 @@ export default {
 			});
 		}
 
+		// Drafting a service page -- the commercial kind. Drafts only; the
+		// page is created by /api/service/create after somebody has read it.
+		if (url.pathname === "/api/seo/draft-service-page") {
+			const session = await getStaffSession(request, env);
+			if (!session) return new Response("Unauthorized", { status: 401 });
+			if (!session.isAdmin) return new Response("Forbidden", { status: 403 });
+			return handleSeoDraftServicePage(request, url, env);
+		}
+
 		// Drafting a page for a search nothing on the site answers. The other
 		// half of the advice the gap panel has always given in words -- see
 		// draftPage, and note it drafts only: creating the page is still the
@@ -331,6 +342,16 @@ export default {
 			if (!session) return new Response("Unauthorized", { status: 401 });
 			if (!session.isAdmin) return new Response("Forbidden", { status: 403 });
 			return handleSeoLinks(request, url, env);
+		}
+
+		// Creating service pages from the editor -- the commercial pest pages,
+		// as opposed to blog posts. Same admin gate as the blog API below and
+		// for the same reason: it writes to the repository.
+		if (url.pathname.startsWith("/api/service/")) {
+			const session = await getStaffSession(request, env);
+			if (!session) return new Response("Unauthorized", { status: 401 });
+			if (!session.isAdmin) return new Response("Forbidden", { status: 403 });
+			return handleServiceApi(request, url, env, session);
 		}
 
 		// Creating blog posts from the editor -- see src/blog-api.js. Same admin
@@ -1065,6 +1086,41 @@ async function handleSeoDraftPage(request, url, env) {
 		const draft = await draftPage(env, { query, examples, model: preferredModel(env) });
 		if (!draft.title || !draft.description) {
 			return jsonError(502, "The draft came back missing a title or description, or with a claim it could not make. Worth trying again.");
+		}
+		return new Response(JSON.stringify(draft), {
+			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
+		});
+	} catch (error) {
+		if (error instanceof NotConfigured) return jsonError(409, error.message);
+		return jsonError(502, `Could not draft a page (${error.message}).`);
+	}
+}
+
+// Drafts a service page for a search nothing on the site answers.
+//
+// Separate from handleSeoDraftPage because the shape is different, not just
+// bigger: a service page needs the two halves of its heading, a hero lead,
+// sections of prose and its own questions, and every one of those is another
+// place a licence or a guarantee could be asserted. Drafting only -- creating
+// the page is /api/service/create, after somebody has read what came back.
+async function handleSeoDraftServicePage(request, url, env) {
+	const body = await readJsonBody(request);
+	const query = String(body?.query || "").trim();
+	if (!query) return jsonError(400, "Expected a search to write about.");
+
+	try {
+		const examples = await styleExamples(request, url, env, "/");
+		const draft = await draftServicePage(env, {
+			query,
+			serviceName: String(body?.serviceName || "").trim(),
+			examples,
+			model: preferredModel(env),
+		});
+		if (!draft.title || !draft.description || !draft.sections.length) {
+			return jsonError(
+				502,
+				"The draft came back missing a title, a description or its body — or with claims it could not make. Worth trying again."
+			);
 		}
 		return new Response(JSON.stringify(draft), {
 			headers: { "content-type": "application/json", "Cache-Control": "no-store" },

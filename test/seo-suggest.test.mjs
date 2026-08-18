@@ -11,7 +11,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { validateSuggestion, parseCandidates, buildPrompt, suggest, numbersIn, claimsIn, examplePaths, draftPage } from "../src/seo-suggest.js";
+import { validateSuggestion, parseCandidates, buildPrompt, suggest, numbersIn, claimsIn, examplePaths, draftPage, draftServicePage } from "../src/seo-suggest.js";
 
 const PAGE = {
 	title: "Termite Treatment Canberra | TCB Pest Control",
@@ -460,4 +460,67 @@ test("the title still has to be a usable length", async () => {
 		run: reply({ title: "Borer", description: "x".repeat(120), intro: "", sections: [] }),
 	});
 	assert.equal(draft.title, null, "five characters is not a title");
+});
+
+// The service-page draft: the same rule, over a much bigger surface.
+//
+// draftPage produces a title, a description and a few sections. This produces
+// a whole commercial page -- hero, three sections of prose, five questions --
+// and every one of those is somewhere a licence or a guarantee could be
+// asserted. The rule has to hold across all of it, not just the title.
+
+test("a drafted service page drops every claim, wherever it appears", async () => {
+	const draft = await draftServicePage(null, {
+		query: "borer control canberra",
+		serviceName: "Borer Control",
+		run: reply({
+			title: "Borer Control Canberra | TCB Pest Control",
+			description: "Borer in Canberra floorboards and roof timbers — how to spot the frass and what treatment involves.",
+			headingLead: "Borer control,",
+			headingAccent: "guaranteed for 12 months",
+			heroLead: "Fine powder under the skirting board.",
+			bannerText: "Our licensed technicians treat borer across Canberra.",
+			sections: [
+				{ eyebrow: "Species", heading: "The borers in Canberra timber.", paragraphs: ["Lyctus favours hardwood sapwood.", "We have treated borer for over 20 years."] },
+				{ eyebrow: "Promise", heading: "Our guarantee.", paragraphs: ["Every treatment is guaranteed."] },
+			],
+			faqs: [
+				{ question: "How do I know if borer is active?", answer: "Fresh frass is the clearest sign." },
+				{ question: "Is it insured?", answer: "Every job is fully insured." },
+			],
+		}),
+	});
+
+	assert.equal(draft.headingAccent, "", "a guarantee is not a heading");
+	assert.equal(draft.bannerText, "", "nor is a licence");
+	// The section about the pest survives; the one promising something does not,
+	// and inside the surviving section the twenty-years paragraph is gone.
+	assert.deepEqual(draft.sections.map((section) => section.heading), ["The borers in Canberra timber."]);
+	assert.deepEqual(draft.sections[0].paragraphs, ["Lyctus favours hardwood sapwood."]);
+	assert.deepEqual(draft.faqs.map((faq) => faq.question), ["How do I know if borer is active?"]);
+	// What is left is usable.
+	assert.ok(draft.title && draft.description && draft.heroLead);
+});
+
+test("a clean service-page draft keeps its shape", async () => {
+	const draft = await draftServicePage(null, {
+		query: "borer control canberra",
+		serviceName: "Borer Control",
+		run: reply({
+			title: "Borer Control Canberra | TCB Pest Control",
+			description: "Borer in Canberra floorboards and roof timbers — how to spot the frass and what treatment involves.",
+			headingLead: "Borer control,",
+			headingAccent: "treated at the timber",
+			heroLead: "Fine powder under the skirting board, and small round holes that were not there last summer.",
+			bannerText: "Borer works from the inside out.",
+			sections: [
+				{ eyebrow: "Species", heading: "The borers in Canberra timber.", paragraphs: ["Lyctus favours hardwood sapwood.", "Anobium prefers older softwood."] },
+			],
+			faqs: [{ question: "How do I know if borer is active?", answer: "Fresh frass is the clearest sign." }],
+		}),
+	});
+	assert.equal(draft.headingAccent, "treated at the timber");
+	assert.equal(draft.sections.length, 1);
+	assert.equal(draft.sections[0].paragraphs.length, 2);
+	assert.equal(draft.faqs.length, 1);
 });

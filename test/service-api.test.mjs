@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { validateServicePage, serviceSlug } from "../src/service-api.js";
+import { validateServicePage, serviceSlug, isSlug } from "../src/service-api.js";
 
 const GOOD = {
 	slug: "borer-control",
@@ -71,4 +71,19 @@ test("the address is derived without the blog prefix", () => {
 	assert.equal(serviceSlug("Borer Control"), "borer-control");
 	assert.equal(serviceSlug("Borer & Timber Pests"), "borer-timber-pests");
 	assert.ok(!serviceSlug("Borer Control").startsWith("blog-"));
+});
+
+test("the address check is linear, and still says the same thing", () => {
+	// Replaced /^[a-z0-9]+(?:-[a-z0-9]+)*$/, which pairs two quantifiers in a
+	// way that can backtrack. Not a live risk here -- about a millisecond on a
+	// 40KB input, behind an admin-only endpoint -- but a linear check is free.
+	// These pin that the rewrite kept the meaning.
+	for (const good of ["borer-control", "borer", "a1-b2", "pre-purchase-inspections"]) {
+		assert.ok(isSlug(good), `${good} should be a valid address`);
+	}
+	for (const bad of ["borer--control", "-borer", "borer-", "Borer", "borer control", "borer_control", "", "borer/control"]) {
+		assert.ok(!isSlug(bad), `${bad} should not be a valid address`);
+	}
+	// A path on the site, not a paragraph.
+	assert.ok(!isSlug("a".repeat(81)));
 });

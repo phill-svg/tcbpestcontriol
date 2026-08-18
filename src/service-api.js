@@ -37,6 +37,26 @@ export function serviceSlug(name) {
 		.replace(/^-+|-+$/g, "");
 }
 
+// Lower-case words joined by single hyphens, with none at either end.
+//
+// Written as a split rather than as /^[a-z0-9]+(?:-[a-z0-9]+)*$/, which says
+// the same thing and pairs two quantifiers in a way that can backtrack. In V8
+// that pattern costs about a millisecond on a 40KB input and the endpoint is
+// admin-only, so it was never a live risk here -- but a linear check is free
+// and there is no argument for keeping the shape.
+//
+// The cap is separate from the pattern on purpose: this becomes a path on the
+// site, and no address anybody wants is longer than this.
+const MAX_SLUG = 80;
+
+export function isSlug(value) {
+	const slug = String(value || "");
+	if (!slug || slug.length > MAX_SLUG) return false;
+	const parts = slug.split("-");
+	// An empty part is a hyphen at an end, or two in a row.
+	return parts.every((part) => part.length > 0 && !/[^a-z0-9]/.test(part));
+}
+
 // A service page lives at the top level, like /ant-control, so its address has
 // to be one nothing else has claimed. Blog posts are namespaced under `blog-`
 // and can be checked against a table; these have to be checked against the
@@ -44,7 +64,7 @@ export function serviceSlug(name) {
 export function validateServicePage(body) {
 	const errors = [];
 	const slug = String(body.slug || "").trim() || serviceSlug(body.serviceName);
-	if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) errors.push("The web address should be lower-case words joined by hyphens.");
+	if (!isSlug(slug)) errors.push("The web address should be lower-case words joined by hyphens.");
 	if (/^blog-/.test(slug)) errors.push("That address is reserved for blog posts.");
 	if (!String(body.title || "").trim()) errors.push("The page needs a title.");
 	if (!String(body.description || "").trim()) errors.push("The page needs a description.");

@@ -104,10 +104,18 @@ function titleCase(query) {
 // which is the one that actually decides -- this only fills the box, and the
 // server refuses anything it does not like rather than trusting this.
 function slugFrom(name) {
-	return String(name || "")
+	// Trimmed by hand rather than with /^-+|-+$/, matching serviceSlug on the
+	// server. The pattern is the one the security scan objected to there, and
+	// keeping a copy of it here because "this side only fills a box" is how a
+	// fixed thing comes back.
+	const cleaned = String(name || "")
 		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-+|-+$/g, "");
+		.replace(/[^a-z0-9]+/g, "-");
+	let start = 0;
+	let end = cleaned.length;
+	while (start < end && cleaned[start] === "-") start += 1;
+	while (end > start && cleaned[end - 1] === "-") end -= 1;
+	return cleaned.slice(start, end);
 }
 
 function el(tag, props = {}, children = []) {

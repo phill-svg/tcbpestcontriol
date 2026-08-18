@@ -98,6 +98,39 @@ number or a claim the page does not already make — a price, a response time,
 it reads well. Occasionally that means all three are thrown out and it asks
 you to try again. That is the rule doing its job, not a fault.
 
+### When a search has no page at all
+
+Sometimes the panel finds a search Google already shows you for where nothing
+on the site is actually about it. "Borer control canberra" is the standing
+example: people search it, you appear a long way down, and there is no borer
+page to send them to.
+
+Where that happens the fix offers three things rather than one:
+
+- **Work it into this page** — the wording goes into this page's title,
+  description or heading. Right when the page is nearly about it already.
+- **Build a service page** — a full page like the ones under Pests We Treat,
+  with its own sections, questions and structured data. This is the one for a
+  search somebody types when they are ready to book.
+- **Write a blog post** — for a search somebody is reading rather than buying.
+
+Both kinds are created **unlisted**: the page exists at its address so you can
+read it and edit it in place, but it carries a "do not index" tag and is kept
+out of the sitemap until you publish it. Nothing appears in Google because a
+button was pressed.
+
+Before it creates anything it shows you the whole draft — heading, every
+section, every question — and the service name and web address are yours to
+change, because those go into the address bar and cannot be quietly fixed
+later.
+
+**It will not write anything about the business.** No licences, no guarantees,
+no response times, no years in business, no prices. On an existing page the
+rule is "nothing the page does not already say"; on a page that does not exist
+yet there is nothing to check against, so nothing is allowed at all. You get
+the shape and the voice, and you add the facts. The picture is the same: it
+picks the nearest one already on the site, and you change it on the page.
+
 ### Suggestions come from Claude, and cost about a cent each
 
 There was briefly a **Compare models** button here that ran four free models

@@ -3,6 +3,7 @@
 **/node_modules
 **/.DS_Store
 _blog-template.html
+_service-template.html
 BLOG-GUIDE.md
 
 # Server-side and author-time files. `assets.directory` in wrangler.jsonc is

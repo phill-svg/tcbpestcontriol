@@ -89,6 +89,27 @@ function modelNote(result) {
 	return ` Written by ${result.label}.`;
 }
 
+// A service name from a search phrase: "borer control canberra" is not a
+// heading, and neither is "Borer Control Canberra" -- the city belongs in the
+// title and the breadcrumb, not in the name of the service.
+function titleCase(query) {
+	return String(query || "")
+		.replace(/\b(canberra|act|near me)\b/gi, "")
+		.trim()
+		.replace(/\s+/g, " ")
+		.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+}
+
+// The address the page will live at. Mirrors serviceSlug() on the server,
+// which is the one that actually decides -- this only fills the box, and the
+// server refuses anything it does not like rather than trusting this.
+function slugFrom(name) {
+	return String(name || "")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+}
+
 function el(tag, props = {}, children = []) {
 	const node = document.createElement(tag);
 	for (const [key, value] of Object.entries(props)) {
@@ -1773,14 +1794,122 @@ class Editor {
 		// whether or not it was the better one. The biggest gap is the one
 		// worth a page, so that is the one this offers.
 		const biggest = gaps.slice().sort((a, b) => (b.impressions || 0) - (a.impressions || 0))[0];
+		// Two kinds of page, because they are not interchangeable. Somebody
+		// typing "borer control canberra" is ready to book, and a blog post is
+		// the wrong thing to land them on; somebody typing "why do borers
+		// appear in summer" is reading. Offering only the blog post -- which
+		// is what this did first -- quietly made the wrong one the default for
+		// exactly the searches worth having.
 		const pageButton = el("button", {
 			type: "button",
 			class: "tcb-btn tcb-btn-small",
-			text: "Give it its own page",
+			text: "Build a service page",
+		});
+		const postButton = el("button", {
+			type: "button",
+			class: "tcb-btn tcb-btn-small",
+			text: "Write a blog post",
 		});
 
+		// The service page: drafted, shown in full, and only then created.
+		//
+		// This is the one thing in the editor that adds a page to the site
+		// rather than editing one, so it shows everything it is about to write
+		// -- heading, hero, every section, every question -- before the button
+		// that writes it appears. The page is committed with a noindex and is
+		// not put in the sitemap, so it exists at its address to be read and
+		// edited, and Google does not see it until it is published.
 		pageButton.addEventListener("click", async () => {
 			pageButton.disabled = true;
+			options.replaceChildren();
+			status.className = "tcb-hint";
+			status.textContent = `Writing a service page about “${biggest.query}”…`;
+
+			let draft;
+			try {
+				draft = await api("/api/seo/draft-service-page", {
+					method: "POST",
+					body: JSON.stringify({ query: biggest.query }),
+				});
+			} catch (error) {
+				pageButton.disabled = false;
+				status.className = "tcb-hint tcb-hint-warn";
+				status.textContent = error.message;
+				return;
+			}
+			pageButton.disabled = false;
+
+			// Editable, not just readable. The address and the service name go
+			// into the URL, the canonical tag, the breadcrumb and the schema,
+			// and a model's guess at either is worth a look before it is set.
+			const nameInput = el("input", { type: "text", class: "tcb-input tcb-input-small" });
+			nameInput.value = draft.serviceName || titleCase(biggest.query);
+			const slugInput = el("input", { type: "text", class: "tcb-input tcb-input-small" });
+			slugInput.value = slugFrom(nameInput.value);
+			nameInput.addEventListener("input", () => {
+				slugInput.value = slugFrom(nameInput.value);
+			});
+			const titleInput = el("input", { type: "text", class: "tcb-input tcb-input-small" });
+			titleInput.value = draft.title || "";
+
+			const create = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Create the page" });
+			const outcome = el("p", { class: "tcb-hint" });
+
+			create.addEventListener("click", async () => {
+				create.disabled = true;
+				outcome.className = "tcb-hint";
+				outcome.textContent = "Creating…";
+				try {
+					const made = await api("/api/service/create", {
+						method: "POST",
+						body: JSON.stringify({
+							...draft,
+							slug: slugInput.value.trim(),
+							serviceName: nameInput.value.trim(),
+							title: titleInput.value.trim(),
+							// The hero picture cannot be written, only chosen,
+							// and there is no borer photograph on this site.
+							// The nearest existing one, changeable on the page.
+							heroImage: "pest-termite-macro.webp",
+							heroImageSmall: "pest-termite-macro-sm.webp",
+							heroImageAlt: `${nameInput.value.trim()} in Canberra`,
+						}),
+					});
+					outcome.textContent = `Created at ${made.url}, not yet visible to Google. Open it to read it through and change the picture.`;
+					create.remove();
+				} catch (error) {
+					create.disabled = false;
+					outcome.className = "tcb-hint tcb-hint-warn";
+					outcome.textContent = error.message;
+				}
+			});
+
+			status.textContent = `Drafted.${modelNote(draft)}${priceNote(draft)} Nothing has been created yet — read it through first.`;
+			options.replaceChildren(
+				el("label", { class: "tcb-label" }, [el("span", { text: "Service name" }), nameInput]),
+				el("label", { class: "tcb-label" }, [el("span", { text: "Web address" }), slugInput]),
+				el("label", { class: "tcb-label" }, [el("span", { text: "Page title" }), titleInput]),
+				el("p", { class: "tcb-hint", text: draft.description || "" }),
+				...draft.sections.map((section) =>
+					el("div", { class: "tcb-compare" }, [
+						el("p", { class: "tcb-compare-model", text: section.eyebrow || "" }),
+						el("p", { class: "tcb-suggestion-text", text: section.heading || "" }),
+						...(section.paragraphs || []).map((text) => el("p", { class: "tcb-hint", text })),
+					])
+				),
+				...(draft.faqs || []).map((faq) =>
+					el("p", { class: "tcb-hint", text: `${faq.question} — ${faq.answer}` })
+				),
+				el("p", {
+					class: "tcb-hint",
+					text: "It will not have written anything about the business — no licences, no guarantees, no response times. There is nothing on a new page to check those against, so none are allowed through. Add them yourself once it exists.",
+				}),
+				el("div", { class: "tcb-suggest-row" }, [create, outcome])
+			);
+		});
+
+		postButton.addEventListener("click", async () => {
+			postButton.disabled = true;
 			options.replaceChildren();
 			status.className = "tcb-hint";
 			status.textContent = `Drafting a page about “${biggest.query}”…`;
@@ -1792,13 +1921,13 @@ class Editor {
 					body: JSON.stringify({ query: biggest.query }),
 				});
 			} catch (error) {
-				pageButton.disabled = false;
+				postButton.disabled = false;
 				status.className = "tcb-hint tcb-hint-warn";
 				status.textContent = error.message;
 				return;
 			}
 
-			pageButton.disabled = false;
+			postButton.disabled = false;
 			status.textContent = `Drafted.${modelNote(draft)}${priceNote(draft)} Check it over — nothing is created until you save it.`;
 			// Opened rather than created. A new page on a real business's site
 			// is not a thing to bring into existence from one click, and the
@@ -1886,10 +2015,10 @@ class Editor {
 		});
 
 		return el("div", { class: "tcb-suggest-row" }, [
-			el("div", { class: "tcb-btn-row" }, [button, pageButton]),
+			el("div", { class: "tcb-btn-row" }, [button, pageButton, postButton]),
 			el("p", {
 				class: "tcb-hint",
-				text: `A new page here is a blog post — the only kind this editor can create. For a search someone types when they are ready to book, a service page like the ones under Pests We Treat converts better, and that one still has to be built by hand.`,
+				text: "A service page is the kind under Pests We Treat — the one to land somebody on when they are ready to book. A blog post is for a search someone is reading rather than buying. Either way the page is created unlisted and invisible to Google until you publish it.",
 			}),
 			status,
 			options,

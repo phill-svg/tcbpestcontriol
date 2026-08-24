@@ -2,3 +2,23 @@
 **/.wrangler
 **/node_modules
 **/.DS_Store
+_blog-template.html
+_service-template.html
+BLOG-GUIDE.md
+
+# Server-side and author-time files. `assets.directory` in wrangler.jsonc is
+# the whole repository, so anything not listed here is uploaded as a public
+# static file and can be fetched by URL. None of these are ever requested by
+# a browser -- the Worker is bundled from `main` at deploy time rather than
+# fetched from assets -- so excluding them changes nothing about how the site
+# runs, and keeps the Worker's source (including the staff auth and the
+# editor's admin API) from being downloadable.
+#
+# assets/ deliberately stays public: assets/js/content-address.js really is
+# loaded by the browser, as part of the visual editor.
+src
+scripts
+test
+schema.sql
+.dev.vars
+EDITING-GUIDE.md

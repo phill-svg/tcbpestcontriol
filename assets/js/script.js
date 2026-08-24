@@ -21,15 +21,29 @@ document.addEventListener("DOMContentLoaded", function () {
 
   var header = document.querySelector(".site-header");
   if (header) {
+    // The shadow only has two states, so only write the style when the state
+    // actually flips. Writing it on every scroll event invalidated layout each
+    // time, and the next event's window.scrollY read then had to force a fresh
+    // one to answer -- read/write/read/write all the way down a scroll, which
+    // is what Lighthouse reports as a forced reflow.
+    var hasShadow = null;
     var applyShadow = function () {
-      if (window.scrollY > 8) {
-        header.style.boxShadow = "0 1px 0 rgba(17, 17, 20, 0.04)";
-      } else {
-        header.style.boxShadow = "none";
-      }
+      var wantsShadow = window.scrollY > 8;
+      if (wantsShadow === hasShadow) return;
+      hasShadow = wantsShadow;
+      header.style.boxShadow = wantsShadow ? "0 1px 0 rgba(17, 17, 20, 0.04)" : "none";
     };
-    applyShadow();
+
     window.addEventListener("scroll", applyShadow, { passive: true });
+
+    // Deliberately not called here. Reading window.scrollY during
+    // DOMContentLoaded makes the browser lay the whole page out on the spot to
+    // answer -- Lighthouse measured 39ms of it, spent before the first paint,
+    // to decide something that is almost always "no shadow". The initial state
+    // only differs from that when the page opens already scrolled: a reload
+    // part-way down, or a link to a #fragment. By load the layout is settled
+    // and the same read is free.
+    window.addEventListener("load", applyShadow, { once: true });
   }
 
   if (navigator.modelContext && typeof navigator.modelContext.provideContext === "function") {
@@ -67,7 +81,7 @@ document.addEventListener("DOMContentLoaded", function () {
             required: ["name", "email", "service", "message"],
           },
           execute: function (input) {
-            var form = document.querySelector('form[action="https://api.web3forms.com/submit"]');
+            var form = document.querySelector('form[action="/api/contact"]');
             if (!form) {
               return {
                 status: "navigate_required",
@@ -79,11 +93,11 @@ document.addEventListener("DOMContentLoaded", function () {
               var el = form.elements.namedItem(fieldName);
               if (el && value != null) el.value = value;
             };
-            setValue("Name", input.name);
-            setValue("Email", input.email);
-            setValue("Phone", input.phone);
-            setValue("Service", input.service);
-            setValue("Message", input.message);
+            setValue("name", input.name);
+            setValue("email", input.email);
+            setValue("phone", input.phone);
+            setValue("service", input.service);
+            setValue("message", input.message);
             form.requestSubmit();
             return { status: "submitted" };
           },

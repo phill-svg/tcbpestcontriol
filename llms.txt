@@ -1,6 +1,6 @@
 # TCB Pest Control Canberra
 
-> Family-run, fully licensed and insured pest control company servicing homes and businesses across the ACT and surrounding NSW (Queanbeyan). Same technician where possible, written report after every visit, family-safe products. Services include general pest control, termite treatment and inspection, ant, spider, rodent, cockroach, flea, bee, silverfish, bird, possum and stored-product-pest control, for residential and commercial customers.
+> Family-run, fully licensed and insured pest control company servicing homes and businesses across the ACT and surrounding NSW (Queanbeyan). Same technician where possible, written report after every visit, family-safe products. Services include general pest control, termite treatment and inspection, ant, spider, rodent, cockroach, flea, bee, silverfish, bird, possum and stored-product-pest control, for residential and commercial customers. Rated 4.8 from 61 Google reviews.
 
 ## Services
 
@@ -8,33 +8,67 @@
 - [Commercial Pest Control](/commercial): Pest management for businesses, retail, hospitality and strata.
 - [Pests We Treat](/pests-we-treat): Overview of every pest type serviced.
 - [Termite Treatment & Inspection](/termite-treatment): Termite inspections, barriers and treatment.
+- [Pre-Purchase Inspections](/pre-purchase-inspection): Timber pest inspections for property purchases.
 - [Rodent Control](/rodent-control): Rat and mouse baiting and proofing.
-- [Ant Control](/pest-control-for-ants): Ant treatment for homes and businesses.
-- [Spider Control](/spider-control.html): Spider treatment including redbacks and funnel-webs.
-- [Bee Control](/bees): Bee removal and hive relocation.
-- [Cockroach Control](/cockroach-control.html): German and American cockroach treatment.
-- [Flea Control](/flea-control.html): Flea treatment for homes and pets' environments.
+- [Ant Control](/ant-control): Ant treatment for homes and businesses.
+- [Spider Control](/spider-control): Spider treatment including redbacks and funnel-webs.
+- [Bee Control](/bees): Bee removal and hive relocation; wasp nest removal.
+- [Cockroach Control](/cockroach-control): German and American cockroach treatment.
+- [Flea Control](/flea-control): Flea treatment for homes and pets' environments.
 - [Silverfish Control](/silverfish-control): Silverfish treatment.
-- [Bird Control](/bird-control.html): Bird proofing and deterrents.
-- [Possum Control](/possum-control.html): Possum removal and exclusion.
-- [Stored Product Pest Control](/stored-product-pest-control.html): Pantry and stored-product pest treatment.
+- [Bird Control](/bird-control): Bird proofing and deterrents.
+- [Possum Control](/possum-control): Possum removal and exclusion.
+- [Stored Product Pest Control](/stored-product-pest-control): Pantry and stored-product pest treatment.
+- [General Pest Control](/general-pest-control): One-visit, inside-and-out seasonal treatment.
+- [Bed Bug Treatment](/bed-bug-treatment-canberra): Bed bug identification and treatment.
+- [Carpenter Ants](/carpenter-ants): Carpenter ant identification and treatment.
+- [Earwig Control](/earwig-control): Earwig treatment.
+- [Ladybug Control](/ladybug-control): Ladybug/ladybird treatment.
+- [Millipede Control](/millipede-control): Millipede treatment.
+- [Mosquito Control](/mosquito-control): Mosquito treatment.
+- [Mud Wasp Control](/mud-wasp-control): Mud wasp treatment.
+- [Slater Control](/slater-control): Slater (woodlouse) treatment.
+- [Pricing](/pricing): Starting prices for the most-booked services.
 
 ## Locations
 
-- [Locations Overview](/locations)
-- [Pest Control Woden](/locations/pest-control-woden)
-- [Pest Control Belconnen](/locations/pest-control-belconnen)
-- [Pest Control Gungahlin](/locations/pest-control-gungahlin)
-- [Pest Control Tuggeranong](/locations/pest-control-tuggeranong)
-- [Pest Control Inner North Canberra](/locations/pest-control-inner-north-canberra)
-- [Pest Control Queanbeyan](/locations/pest-control-queanbeyan)
+- [Locations Overview](/locations): Full list of every Canberra and Queanbeyan-area suburb serviced.
+- [Pest Control Belconnen](/locations-pest-control-belconnen)
+- [Pest Control Gungahlin](/locations-pest-control-gungahlin)
+- [Pest Control Tuggeranong](/locations-pest-control-tuggeranong)
+- [Pest Control Woden Valley](/locations-pest-control-woden)
+- [Pest Control Inner North Canberra](/locations-pest-control-inner-north-canberra)
+- [Pest Control Inner South](/locations-pest-control-inner-south)
+- [Pest Control Molonglo Valley](/locations-pest-control-molonglo-valley)
+- [Pest Control Weston Creek](/locations-pest-control-weston-creek)
+- [Pest Control Canberra City](/locations-pest-control-canberra-city)
+- [Pest Control Queanbeyan](/locations-pest-control-queanbeyan)
+- [Pest Control Jerrabomberra](/locations-pest-control-jerrabomberra)
+- [Pest Control Fyshwick](/locations-pest-control-fyshwick)
+
+Every ACT suburb and surrounding NSW town has its own dedicated page at `/locations-pest-control-<suburb-name>` (e.g. `/locations-pest-control-kambah`); see the sitemap for the complete list of roughly 80 suburb pages.
+
+## About & Trust
+
+- [About TCB](/about): Company background, accreditations, service area.
+- [Reviews](/reviews): Google reviews, rated 4.8 from 61 reviews.
+- [FAQ](/faq): Frequently asked questions about booking, pricing and treatments.
 
 ## Resources
 
 - [Preparation Guides](/preparation): Downloadable PDF guides for preparing a property before a treatment visit.
-- [Blog](/blog.html): Articles on pest identification, prevention and treatment.
+- [Blog](/blog): Articles on pest identification, prevention and treatment.
+- [Sitemap](/sitemap.xml): Complete list of every page on the site.
+- [Structured site index](/index.json): typed JSON manifest of every service, location, key page and the MCP endpoint -- for agents that want structured data instead of crawling HTML.
+- Any page is also available as clean Markdown by appending `.md` to its URL, e.g. `/spider-control.md`.
+
+## For AI agents (MCP)
+
+- [MCP server](/mcp): Model Context Protocol endpoint (Streamable HTTP, POST only, stateless — call `initialize` then `tools/list`). Four tools: `check_suburb_coverage` (is a given suburb serviced, and its page URL), `list_services` (every service with description and URL), `get_service_pricing` (published starting prices only — General Pest Control, Termite Inspection and Rodent Control; every other service is quoted for free, and the tool says so rather than guessing a number), and `submit_booking_enquiry` (creates a real customer and Quote job in TCB's live system, exactly like the `/book` form — staff follow up to confirm timing; there is no self-service time-slot booking).
 
 ## Contact
 
-- [Contact / Get a Quote](/contact)
+- [Contact](/contact)
+- [Book Online / Get a Quote](/book)
+- Phone: 02 6105 9771
 - Email: office@tcbpestcontrolcanberra.com.au

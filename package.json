@@ -1,0 +1,22 @@
+{
+	"name": "tcbpestreal",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build:css": "node scripts/build-css.js",
+		"check:booking": "node scripts/check-booking-config.js",
+		"test": "node --test test/*.test.mjs",
+		"build:images": "node scripts/build-image-manifest.js",
+		"build:avif": "node scripts/build-avif.js",
+		"sync:content": "node scripts/sync-content-edits.js",
+		"test:parity": "TCB_PARITY=1 node --test test/address-parity.test.mjs",
+		"test:seo-parity": "TCB_PARITY=1 node --test test/seo-parity.test.mjs"
+	},
+	"dependencies": {
+		"@anthropic-ai/sdk": "^0.117.1",
+		"@pushforge/builder": "^2.0.5"
+	},
+	"devDependencies": {
+		"sharp": "^0.35.3"
+	}
+}

@@ -1,0 +1,98 @@
+{
+  "name": "tcb-pest-control",
+  "version": "1.0.0",
+  "description": "Model Context Protocol server for TCB Pest Control Canberra. Family-run, fully licensed and insured pest control company servicing homes and businesses across the ACT and surrounding NSW (Queanbeyan).",
+  "endpoint": "https://www.tcbpestcontrolcanberra.com.au/mcp",
+  "transport": "streamable-http",
+  "protocolVersion": "2025-03-26",
+  "capabilities": {
+    "tools": {}
+  },
+  "tools": [
+    {
+      "name": "check_suburb_coverage",
+      "description": "Check whether TCB Pest Control services a given Canberra/ACT or Queanbeyan-region (NSW) suburb, and return the URL of that suburb's page if so.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "suburb": {
+            "type": "string",
+            "description": "Suburb or area name, e.g. 'Kambah' or 'Queanbeyan'."
+          }
+        },
+        "required": [
+          "suburb"
+        ]
+      }
+    },
+    {
+      "name": "list_services",
+      "description": "List every pest control service TCB Pest Control offers, with a short description and page URL for each.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_service_pricing",
+      "description": "Get TCB Pest Control's published starting prices. Only General Pest Control, Termite Inspection and Rodent Control have a published starting price -- every other service is quoted for free after a look at the property, and this tool will say so rather than guess a number.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "description": "Optional service name to filter to, e.g. 'termite inspection'. Omit to get all published starting prices."
+          }
+        }
+      }
+    },
+    {
+      "name": "submit_booking_enquiry",
+      "description": "Submit a real pest control booking enquiry to TCB Pest Control -- creates an actual customer and Quote job in TCB's live system, exactly like the /book form on the website. TCB staff follow up by phone or email to confirm timing and provide a written quote before any work begins; this does not book a specific time slot. Only call this when the person has clearly asked to book or request a quote, using their real contact details -- never invent contact details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Full name"
+          },
+          "email": {
+            "type": "string",
+            "description": "Email address"
+          },
+          "phone": {
+            "type": "string",
+            "description": "Phone number"
+          },
+          "address": {
+            "type": "string",
+            "description": "Service address"
+          },
+          "service": {
+            "type": "string",
+            "description": "Which service is needed, e.g. 'General Pest Control' or 'Termite Inspection'"
+          },
+          "date": {
+            "type": "string",
+            "description": "Optional preferred date"
+          },
+          "time": {
+            "type": "string",
+            "description": "Optional preferred time"
+          },
+          "message": {
+            "type": "string",
+            "description": "Optional additional notes"
+          }
+        },
+        "required": [
+          "name",
+          "email",
+          "phone",
+          "address",
+          "service"
+        ]
+      }
+    }
+  ]
+}

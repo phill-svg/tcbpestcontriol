@@ -1,0 +1,4 @@
+// Config for test/address-parity.test.mjs's Worker probe. Not a deployable
+// site config -- it exists only so the parity test can run the real
+// applyContentEdits() inside real workerd. See test/probe/worker.js.
+{ "name": "tcb-address-probe", "main": "worker.js", "compatibility_date": "2026-07-09" }

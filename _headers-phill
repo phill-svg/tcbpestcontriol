@@ -1,0 +1,74 @@
+/
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+  Link: </llms.txt>; rel="describedby", </.well-known/api-catalog>; rel="api-catalog"
+
+/.well-known/api-catalog
+  Content-Type: application/linkset+json
+
+/assets/images/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/css/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The visual editor's stylesheet is the exception to the rule above, and has
+# to come after it to win.
+#
+# style.css is safe to freeze for a year because every page links it with a
+# ?v= that gets bumped on release. editor.css is injected by the Worker and
+# its ?v= was easy to forget -- which duly happened: rules added after the
+# first version were invisible for anyone who had already loaded it, because
+# their browser had been told to keep the old copy for a year and never ask
+# again. The symptom was a settings panel with half its styling missing.
+#
+# It only ever loads for a signed-in admin, so there is nothing to gain from
+# caching it hard. Revalidating costs one conditional request per page view
+# for one person.
+/assets/css/editor.css
+  Cache-Control: no-cache
+
+# Every script under /assets/js is requested with a ?v= that gets bumped when
+# the file changes -- the same arrangement style.css already relies on -- so a
+# year is safe. Without this rule they fell through to the default and were
+# re-downloaded on every page view; script.js is on all 138 pages, so that was
+# a fetch per navigation for a file that changes a few times a year.
+/assets/js/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# editor.js is the one script the Worker injects rather than the pages linking,
+# so its ?v= is as easy to forget as editor.css's was -- and it is admin-only,
+# where there is nothing to gain from freezing it. Must come after the glob to
+# win. See the editor.css note above for the incident this mirrors.
+/assets/js/editor.js
+  Cache-Control: no-cache
+
+# ...and everything editor.js imports, for the same reason and more sharply.
+# editor.js at least carries a ?v=; an ES module import specifier does not,
+# so `import "./seo-check.js"` is fetched at a bare URL, matches the glob
+# above, and is frozen for a year. That is exactly what happened: the editor
+# script was being served fresh while the modules holding the actual checks
+# were served from a year-old cache, so changes to them appeared to do
+# nothing. Same trap as editor.css, one level further in. These are fetched
+# only in edit mode, by one admin, so there is nothing to gain by caching
+# them. Must come after the glob to win.
+/assets/js/content-address.js
+  Cache-Control: no-cache
+
+/assets/js/seo-check.js
+  Cache-Control: no-cache
+
+/assets/js/seo-site.js
+  Cache-Control: no-cache
+
+/assets/favicon/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The push service worker has no cache-busting query string to lean on -- it's
+# fetched by URL from navigator.serviceWorker.register. Keep it uncached so a
+# change to notification handling reaches already-installed phones on the next
+# update check rather than whenever a stale copy happens to expire.
+/chat-sw.js
+  Cache-Control: no-cache

@@ -1,0 +1,18 @@
+{
+  "@context": [
+    "https://www.w3.org/ns/did/v1"
+  ],
+  "id": "did:web:www.tcbpestcontrolcanberra.com.au",
+  "service": [
+    {
+      "id": "did:web:www.tcbpestcontrolcanberra.com.au#website",
+      "type": "LinkedDomains",
+      "serviceEndpoint": "https://www.tcbpestcontrolcanberra.com.au/"
+    },
+    {
+      "id": "did:web:www.tcbpestcontrolcanberra.com.au#ai-catalog",
+      "type": "AICatalog",
+      "serviceEndpoint": "https://www.tcbpestcontrolcanberra.com.au/.well-known/ai-catalog.json"
+    }
+  ]
+}

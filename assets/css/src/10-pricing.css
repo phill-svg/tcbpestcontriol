@@ -1,0 +1,29 @@
+/* Pricing page */
+
+.pricing-card {
+  position: relative;
+}
+
+.pricing-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.pricing-figure .from {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--ink-dim);
+}
+
+.pricing-figure .amount {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.pricing-card .btn-primary {
+  align-self: flex-start;
+}

@@ -1,0 +1,823 @@
+/* Visual site editor chrome (see assets/js/editor.js).
+ *
+ * Deliberately NOT part of assets/css/style.css: this only ever loads for a
+ * signed-in admin, and folding it into the site's single stylesheet would
+ * make every visitor download an editor they can't use.
+ *
+ * Everything is namespaced .tcb-* and every value is written out in full
+ * rather than reusing the site's custom properties -- the editor sits on top
+ * of 200 pages of other people's CSS, and a page that redefines --accent
+ * shouldn't be able to restyle the toolbar out of legibility.
+ */
+
+.tcb-launch {
+	position: fixed;
+	right: 1rem;
+	bottom: 1rem;
+	z-index: 2147483000;
+}
+
+.tcb-btn {
+	font: 500 0.875rem/1.2 "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+	padding: 0.55rem 0.9rem;
+	border: 1px solid #3f3f46;
+	border-radius: 0.3rem;
+	background: #ffffff;
+	color: #111114;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.tcb-btn:hover:not(:disabled) {
+	background: #f5f5f7;
+}
+
+.tcb-btn:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.tcb-btn-primary {
+	background: #e5251a;
+	border-color: #c41613;
+	color: #ffffff;
+}
+
+.tcb-btn-primary:hover:not(:disabled) {
+	background: #c41613;
+}
+
+.tcb-btn-quiet {
+	border-color: transparent;
+	background: transparent;
+	color: #3f3f46;
+}
+
+.tcb-btn-quiet:hover:not(:disabled) {
+	background: rgba(0, 0, 0, 0.06);
+}
+
+/* Toolbar ------------------------------------------------------------------ */
+
+.tcb-bar {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 2147483000;
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	flex-wrap: wrap;
+	padding: 0.6rem 1rem;
+	background: #111114;
+	color: #ffffff;
+	font: 400 0.875rem/1.3 "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+	box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.25);
+}
+
+.tcb-bar-preview {
+	background: #1d4ed8;
+}
+
+.tcb-bar-badge {
+	background: #e5251a;
+	border-radius: 0.2rem;
+	padding: 0.2rem 0.45rem;
+	font-weight: 600;
+	font-size: 0.75rem;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+}
+
+.tcb-bar-label {
+	flex: 1 1 12rem;
+	min-width: 0;
+}
+
+.tcb-bar-actions {
+	display: flex;
+	gap: 0.4rem;
+	flex-wrap: wrap;
+}
+
+.tcb-bar .tcb-btn-quiet {
+	color: #ffffff;
+}
+
+.tcb-bar .tcb-btn-quiet:hover:not(:disabled) {
+	background: rgba(255, 255, 255, 0.16);
+}
+
+/* The toolbar is fixed to the bottom of the window, so the last section of
+ * every page would otherwise sit underneath it and be unreachable. */
+body.tcb-editing-mode {
+	padding-bottom: 5rem;
+}
+
+/* Hover + click targets ---------------------------------------------------- */
+
+.tcb-hover {
+	position: absolute;
+	z-index: 2147482000;
+	display: none;
+	pointer-events: none;
+	outline: 2px solid #e5251a;
+	outline-offset: 2px;
+	border-radius: 0.15rem;
+	background: rgba(229, 37, 26, 0.06);
+}
+
+body.tcb-editing-mode {
+	cursor: default;
+}
+
+/* Anything already carrying an edit gets a quiet underline, so it is obvious
+ * at a glance which parts of the page have been touched. */
+body.tcb-editing-mode .tcb-has-edit {
+	box-shadow: inset 0 -2px 0 0 rgba(29, 78, 216, 0.55);
+}
+
+.tcb-chip {
+	position: absolute;
+	z-index: 2147482500;
+	transform: translate(-100%, -100%);
+}
+
+.tcb-chip-btn {
+	font: 500 0.75rem/1 "Inter", ui-sans-serif, system-ui, sans-serif;
+	background: #111114;
+	color: #ffffff;
+	border: 0;
+	border-radius: 0.25rem;
+	padding: 0.35rem 0.5rem;
+	cursor: pointer;
+}
+
+.tcb-chip-btn:hover {
+	background: #e5251a;
+}
+
+/* The field being typed into -------------------------------------------- */
+
+.tcb-field {
+	outline: 2px solid #1d4ed8;
+	outline-offset: 2px;
+	border-radius: 0.15rem;
+	background: rgba(29, 78, 216, 0.08);
+	/* Inherit everything else: the whole point is that the text keeps looking
+	 * exactly like the page while it is being edited. */
+	font: inherit;
+	color: inherit;
+	white-space: pre-wrap;
+}
+
+/* Stands in for text that has been deleted, so the one change with nothing
+ * left on screen to click is still visible and still undoable from the page.
+ * Only ever rendered in edit mode -- visitors see the gap, not this. */
+.tcb-deleted {
+	font: 500 0.6875rem/1 "Inter", ui-sans-serif, system-ui, sans-serif;
+	vertical-align: middle;
+	display: inline-block;
+	padding: 0.25rem 0.4rem;
+	border: 1px dashed #6c6c74;
+	border-radius: 0.25rem;
+	background: #f5f5f7;
+	color: #111114;
+	cursor: pointer;
+	/* The surrounding text can be any size; this must not inherit it. */
+	letter-spacing: 0;
+	text-transform: none;
+	white-space: nowrap;
+}
+
+.tcb-deleted:hover {
+	border-color: #e5251a;
+	color: #c41613;
+}
+
+.tcb-change-gone {
+	color: #111114;
+	font-style: italic;
+}
+
+/* Dialogs ------------------------------------------------------------------ */
+
+.tcb-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 2147483100;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 1rem;
+	background: rgba(17, 17, 20, 0.55);
+}
+
+.tcb-dialog {
+	background: #ffffff;
+	color: #111114;
+	border-radius: 0.5rem;
+	width: min(38rem, 100%);
+	max-height: min(85vh, 44rem);
+	overflow: auto;
+	padding: 1.25rem;
+	font: 400 0.9375rem/1.5 "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+	box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+}
+
+.tcb-dialog-title {
+	font: 600 1.125rem/1.3 "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+	margin: 0 0 0.75rem;
+}
+
+.tcb-dialog-body {
+	display: grid;
+	gap: 0.85rem;
+}
+
+.tcb-label {
+	display: grid;
+	gap: 0.3rem;
+	font-size: 0.8125rem;
+	font-weight: 500;
+	color: #3f3f46;
+}
+
+.tcb-input {
+	font: 400 0.9375rem/1.4 "Inter", ui-sans-serif, system-ui, sans-serif;
+	padding: 0.5rem 0.6rem;
+	border: 1px solid #d4d4d8;
+	border-radius: 0.3rem;
+	color: #111114;
+	background: #ffffff;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.tcb-input:focus {
+	outline: 2px solid #1d4ed8;
+	outline-offset: -1px;
+	border-color: #1d4ed8;
+}
+
+.tcb-textarea {
+	resize: vertical;
+	min-height: 4.5rem;
+}
+
+.tcb-hint {
+	margin: 0;
+	font-size: 0.8125rem;
+	color: #111114;
+}
+
+.tcb-preview {
+	max-width: 100%;
+	max-height: 11rem;
+	object-fit: contain;
+	background: #f5f5f7;
+	border-radius: 0.3rem;
+}
+
+.tcb-picker-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+	gap: 0.4rem;
+	max-height: 14rem;
+	overflow: auto;
+	margin-top: 0.4rem;
+}
+
+.tcb-picker-item {
+	padding: 0;
+	border: 1px solid #e6e6ea;
+	border-radius: 0.3rem;
+	background: #ffffff;
+	cursor: pointer;
+	aspect-ratio: 4 / 3;
+	overflow: hidden;
+}
+
+.tcb-picker-item:hover {
+	border-color: #e5251a;
+}
+
+.tcb-picker-item img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+.tcb-dialog-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 0.5rem;
+	margin-top: 1rem;
+}
+
+.tcb-dialog-error {
+	margin: 0.6rem 0 0;
+	color: #c41613;
+	font-size: 0.8125rem;
+}
+
+/* Style panel -------------------------------------------------------------- */
+
+.tcb-style-row {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	flex-wrap: wrap;
+}
+
+.tcb-size-value {
+	font: 500 0.8125rem/1 "IBM Plex Mono", ui-monospace, monospace;
+	min-width: 3.5rem;
+	text-align: center;
+	color: #111114;
+}
+
+.tcb-btn-on {
+	background: #111114;
+	border-color: #111114;
+	color: #ffffff;
+}
+
+.tcb-btn-on:hover:not(:disabled) {
+	background: #3f3f46;
+}
+
+.tcb-swatches {
+	display: flex;
+	gap: 0.35rem;
+	flex-wrap: wrap;
+}
+
+.tcb-swatch {
+	width: 1.75rem;
+	height: 1.75rem;
+	border-radius: 0.25rem;
+	border: 1px solid #d4d4d8;
+	cursor: pointer;
+	padding: 0;
+	font-size: 0.875rem;
+	line-height: 1;
+	color: #111114;
+}
+
+.tcb-swatch-on {
+	outline: 2px solid #1d4ed8;
+	outline-offset: 1px;
+}
+
+/* The live-preview wrapper the editor puts around a styled run. It must not
+ * contribute any appearance of its own -- everything visible comes from the
+ * inline style attribute, which is exactly what the Worker will serve. */
+.tcb-styled {
+	all: unset;
+}
+
+/* Change list -------------------------------------------------------------- */
+
+.tcb-changes {
+	display: grid;
+	gap: 0.6rem;
+}
+
+.tcb-change {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	gap: 0.6rem;
+	align-items: start;
+	padding: 0.6rem;
+	border: 1px solid #e6e6ea;
+	border-radius: 0.35rem;
+}
+
+.tcb-tag {
+	font-size: 0.6875rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	padding: 0.2rem 0.4rem;
+	border-radius: 0.2rem;
+}
+
+.tcb-tag-draft {
+	background: #dbeafe;
+	color: #1d4ed8;
+}
+
+.tcb-tag-live {
+	background: #dcfce7;
+	color: #15803d;
+}
+
+.tcb-change-body {
+	min-width: 0;
+}
+
+.tcb-change-was,
+.tcb-change-now {
+	margin: 0;
+	font-size: 0.8125rem;
+	overflow-wrap: anywhere;
+}
+
+.tcb-change-was {
+	color: #111114;
+	text-decoration: line-through;
+}
+
+.tcb-change-now {
+	color: #111114;
+}
+
+/* Sync-to-code panel ------------------------------------------------------- */
+
+.tcb-sync {
+	margin-top: 1rem;
+	padding-top: 1rem;
+	border-top: 1px solid #e6e6ea;
+	display: grid;
+	gap: 0.5rem;
+	justify-items: start;
+}
+
+.tcb-sync-title {
+	margin: 0;
+	font-weight: 600;
+	font-size: 0.9375rem;
+}
+
+.tcb-hint-warn {
+	color: #c41613;
+}
+
+/* Toast -------------------------------------------------------------------- */
+
+.tcb-toast {
+	position: fixed;
+	left: 50%;
+	bottom: 4.5rem;
+	transform: translateX(-50%);
+	z-index: 2147483200;
+	background: #111114;
+	color: #ffffff;
+	padding: 0.6rem 0.9rem;
+	border-radius: 0.35rem;
+	font: 400 0.875rem/1.35 "Inter", ui-sans-serif, system-ui, sans-serif;
+	max-width: min(32rem, calc(100vw - 2rem));
+	box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.tcb-toast-error {
+	background: #c41613;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.tcb-toast {
+		animation: tcb-toast-in 140ms ease-out;
+	}
+
+	@keyframes tcb-toast-in {
+		from {
+			opacity: 0;
+			transform: translate(-50%, 0.4rem);
+		}
+	}
+}
+
+/* New-post form ------------------------------------------------------------ */
+
+.tcb-sections {
+	display: grid;
+	gap: 0.75rem;
+}
+
+.tcb-section {
+	display: grid;
+	gap: 0.4rem;
+	padding: 0.6rem;
+	border: 1px solid #e6e6ea;
+	border-radius: 0.35rem;
+	justify-items: start;
+}
+
+.tcb-section .tcb-input {
+	width: 100%;
+}
+
+/* Draft banner. Sits above the editing toolbar rather than replacing it --
+ * a draft post is still an ordinary page you can edit. */
+.tcb-bar-draft {
+	bottom: 3.5rem;
+	background: #92400e;
+}
+
+.tcb-bar-draft .tcb-bar-badge {
+	background: #ffffff;
+	color: #92400e;
+}
+
+body.tcb-editing-mode {
+	padding-bottom: 8rem;
+/* SEO check ---------------------------------------------------------------- */
+
+.tcb-findings {
+	display: grid;
+	gap: 0.5rem;
+}
+
+.tcb-finding {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 0.6rem;
+	align-items: start;
+	padding: 0.55rem;
+	border: 1px solid #e6e6ea;
+	border-radius: 0.35rem;
+}
+
+.tcb-finding-level {
+	font-size: 0.6875rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	padding: 0.2rem 0.4rem;
+	border-radius: 0.2rem;
+	white-space: nowrap;
+}
+
+.tcb-finding-problem .tcb-finding-level {
+	background: #fee2e2;
+	color: #c41613;
+}
+
+.tcb-finding-worth-a-look .tcb-finding-level {
+	background: #fef3c7;
+	color: #92400e;
+}
+
+.tcb-finding-good .tcb-finding-level {
+	background: #dcfce7;
+	color: #15803d;
+}
+
+.tcb-finding-message {
+	margin: 0;
+	font-size: 0.875rem;
+}
+
+/* A rough imitation of a Google result, so a length limit means something
+ * concrete. Deliberately not pixel-exact -- it is a sanity check, not a
+ * simulator. */
+.tcb-serp {
+	border: 1px solid #e6e6ea;
+	border-radius: 0.35rem;
+	padding: 0.7rem;
+	background: #ffffff;
+}
+
+.tcb-serp-url {
+	margin: 0.2rem 0 0;
+	font-size: 0.75rem;
+	color: #15803d;
+	overflow-wrap: anywhere;
+}
+
+.tcb-serp-title {
+	margin: 0.15rem 0 0;
+	font-size: 1.0625rem;
+	line-height: 1.3;
+	color: #1a0dab;
+}
+
+.tcb-serp-desc {
+	margin: 0.2rem 0 0;
+	font-size: 0.8125rem;
+	line-height: 1.4;
+	color: #4d5156;
+}
+
+.tcb-serp-cut {
+	border-right: 2px solid #c41613;
+	padding-right: 0.25rem;
+}
+
+/* Site-wide scan results --------------------------------------------------- */
+
+.tcb-scan-page {
+	padding: 0.5rem 0.6rem;
+	border: 1px solid #e6e6ea;
+	border-radius: 0.35rem;
+}
+
+.tcb-scan-link {
+	font: 500 0.8125rem/1.3 "IBM Plex Mono", ui-monospace, monospace;
+	color: #1d4ed8;
+	overflow-wrap: anywhere;
+}
+
+.tcb-scan-findings {
+	margin-top: 0.3rem;
+	display: grid;
+	gap: 0.15rem;
+}
+
+.tcb-scan-problem {
+	color: #c41613;
+}
+
+.tcb-scan-worth-a-look {
+	color: #92400e;
+}
+
+/* What to do about a finding. Set apart from the message above it, because
+   the message is the diagnosis and this is the instruction — running them
+   together as one paragraph makes the actionable half easy to skim past. */
+.tcb-finding-fix {
+	margin-top: 0.35rem;
+	padding-left: 0.6rem;
+	border-left: 2px solid #d4d4d8;
+	font-size: 0.8125rem;
+	line-height: 1.5;
+	color: #3f3f46;
+}
+
+/* Drafted titles and descriptions ------------------------------------------- */
+
+.tcb-suggest-row {
+	margin: -0.35rem 0 0.6rem;
+	display: grid;
+	gap: 0.35rem;
+	justify-items: start;
+}
+
+.tcb-btn-small {
+	padding: 0.3rem 0.6rem;
+	font-size: 0.75rem;
+}
+
+.tcb-suggest-row {
+	width: 100%;
+}
+
+.tcb-input-small {
+	width: 100%;
+	font-size: 0.8125rem;
+	padding: 0.35rem 0.5rem;
+}
+
+.tcb-suggestions {
+	width: 100%;
+	display: grid;
+	gap: 0.3rem;
+}
+
+.tcb-rejected summary {
+	font-size: 0.75rem;
+	color: #111114;
+	cursor: pointer;
+}
+
+.tcb-rejected p {
+	margin-top: 0.2rem;
+}
+
+/* Each option is a button, not a line of text: it is clickable, and it has to
+   look clickable or nobody discovers that it is. */
+.tcb-suggestion {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.75rem;
+	width: 100%;
+	padding: 0.45rem 0.6rem;
+	border: 1px solid #e6e6ea;
+	border-radius: 0.35rem;
+	background: #ffffff;
+	font: inherit;
+	font-size: 0.875rem;
+	line-height: 1.4;
+	text-align: left;
+	color: #111114;
+	cursor: pointer;
+}
+
+.tcb-suggestion:hover,
+.tcb-suggestion:focus-visible {
+	border-color: #1d4ed8;
+	background: #f5f7ff;
+}
+
+.tcb-suggestion-count {
+	flex-shrink: 0;
+	font-variant-numeric: tabular-nums;
+	font-size: 0.75rem;
+	color: #111114;
+}
+
+/* Search Console figures ---------------------------------------------------- */
+
+/* Four columns: the search phrase takes what is left, the three numbers get
+   only what they need. Numbers are right-aligned and tabular so the eye can
+   compare them down the column, which is the entire reason to show them. */
+.tcb-sc-table {
+	margin-top: 0.4rem;
+	display: grid;
+	gap: 0.1rem;
+	overflow-x: auto;
+}
+
+.tcb-sc-row {
+	display: grid;
+	grid-template-columns: minmax(8rem, 1fr) 3.5rem 4rem 4.5rem;
+	gap: 0.5rem;
+	align-items: baseline;
+	padding: 0.25rem 0.35rem;
+	border-radius: 0.25rem;
+	font-size: 0.8125rem;
+}
+
+.tcb-sc-row:nth-child(even) {
+	background: #f5f5f7;
+}
+
+.tcb-sc-row > span:not(:first-child),
+.tcb-sc-row > a ~ span {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+	color: #3f3f46;
+}
+
+.tcb-sc-head {
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: #111114;
+	background: none;
+}
+
+.tcb-sc-term {
+	overflow-wrap: anywhere;
+}
+
+.tcb-sc-steps {
+	margin: 0.5rem 0 0 1.1rem;
+	display: grid;
+	gap: 0.4rem;
+	font-size: 0.8125rem;
+	line-height: 1.45;
+	color: #3f3f46;
+}
+
+/* The pages a whole-site finding refers to. Laid out as chips rather than a
+   sentence because they are links, and a run of links with no gap between
+   them reads as one long address. */
+.tcb-scan-pages {
+	margin-top: 0.3rem;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.15rem 0.5rem;
+}
+
+/* One search gap: what was observed, then what to do about it. Separated so
+   the instruction is not read as more description. */
+.tcb-gap {
+	padding: 0.5rem 0.6rem;
+	border: 1px solid #e6e6ea;
+	border-radius: 0.35rem;
+}
+
+/* A suggestion that cannot be applied in one click — offered as wording to
+   copy rather than as a button, so it never looks clickable and inert. */
+.tcb-suggestion-plain {
+	cursor: default;
+	color: #3f3f46;
+}
+
+/* Model comparison. Grouped and labelled, because the whole point is knowing
+   which model wrote which line. */
+.tcb-btn-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+}
+
+/* Used by the service-page review panel: one block per drafted section. */
+.tcb-compare {
+	display: grid;
+	gap: 0.25rem;
+	padding: 0.5rem 0;
+	border-top: 1px solid #e6e6ea;
+}
+
+.tcb-compare-model {
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: #8a8a92;
+}

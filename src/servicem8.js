@@ -21,8 +21,11 @@ function normEmail(e) {
 	return (e || "").trim().toLowerCase();
 }
 
-// ServiceM8 stores AU numbers digits-only with country code (e.g. 61425080413).
-// Normalise so our comparisons and writes match that shape.
+// Customers type their number as they know it (e.g. 0425080413); we write that
+// straight into ServiceM8's mobile field. normPhone is used for COMPARISON only
+// (dedup) -- it collapses both "04..." and "61..." to the same "61..." string
+// so a match works regardless of which format a record was saved in. It is NOT
+// used for what we store any more.
 function normPhone(p) {
 	let d = (p || "").replace(/\D/g, "");
 	if (!d) return "";
@@ -83,10 +86,20 @@ async function findExistingCompanyUuid(env, email, phone) {
 	}
 	const p = normPhone(phone);
 	if (p) {
-		const rows = await sm8Get(env, `/companycontact.json?%24filter=${encodeURIComponent(`phone eq '${p}'`)}`);
-		const hit =
-			Array.isArray(rows) &&
-			rows.find((r) => (normPhone(r.phone) === p || normPhone(r.mobile) === p) && String(r.active) !== "0");
+		// Two exact-match queries rather than one `or` filter: the file only ever
+		// uses filters proven against the live API, and a filter ServiceM8 might
+		// reject would throw here and fail a real booking (bookScheduledSlot turns
+		// a throw into a released slot). The `phone eq` query catches legacy records
+		// (we used to write 61... into both fields); the `mobile eq` query catches
+		// the new records (mobile only, in the customer's 04... format). The final
+		// match still normalises both fields, so format never breaks the compare --
+		// the server filter only has to return the candidate row.
+		const [byPhone, byMobile] = await Promise.all([
+			sm8Get(env, `/companycontact.json?%24filter=${encodeURIComponent(`phone eq '${p}'`)}`),
+			sm8Get(env, `/companycontact.json?%24filter=${encodeURIComponent(`mobile eq '${phone}'`)}`),
+		]);
+		const rows = [...(Array.isArray(byPhone) ? byPhone : []), ...(Array.isArray(byMobile) ? byMobile : [])];
+		const hit = rows.find((r) => (normPhone(r.phone) === p || normPhone(r.mobile) === p) && String(r.active) !== "0");
 		if (hit) return hit.company_uuid;
 	}
 	return null;
@@ -127,8 +140,9 @@ export async function createServiceM8Lead(env, lead, opts = {}) {
 			first: first || name || "Website",
 			last,
 			email: normEmail(email),
-			phone: normPhone(phone),
-			mobile: normPhone(phone),
+			// Number goes in the mobile slot only, as the customer typed it (04...) --
+			// no landline `phone` field, no 61... conversion.
+			mobile: phone,
 			type: "JOB",
 			is_primary_contact: 1,
 			active: 1,
@@ -162,8 +176,9 @@ export async function createServiceM8Lead(env, lead, opts = {}) {
 		first: first || name || "Website",
 		last,
 		email: normEmail(email),
-		phone: normPhone(phone),
-		mobile: normPhone(phone),
+		// Number goes in the mobile slot only, as the customer typed it (04...) --
+		// no landline `phone` field, no 61... conversion.
+		mobile: phone,
 		type: "JOB",
 	});
 
@@ -555,8 +570,9 @@ export async function createWorkOrderJob(env, lead, opts = {}) {
 			first: first || name || "Website",
 			last,
 			email: normEmail(email),
-			phone: normPhone(phone),
-			mobile: normPhone(phone),
+			// Number goes in the mobile slot only, as the customer typed it (04...) --
+			// no landline `phone` field, no 61... conversion.
+			mobile: phone,
 			type: "JOB",
 			is_primary_contact: 1,
 			active: 1,
@@ -575,8 +591,9 @@ export async function createWorkOrderJob(env, lead, opts = {}) {
 		first: first || name || "Website",
 		last,
 		email: normEmail(email),
-		phone: normPhone(phone),
-		mobile: normPhone(phone),
+		// Number goes in the mobile slot only, as the customer typed it (04...) --
+		// no landline `phone` field, no 61... conversion.
+		mobile: phone,
 		type: "JOB",
 	});
 

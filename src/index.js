@@ -35,7 +35,7 @@ import {
 } from "./seo-suggest.js";
 import { TITLE_MIN, TITLE_MAX, DESCRIPTION_MIN, DESCRIPTION_MAX } from "../assets/js/seo-check.js";
 import { findGaps, describeGap, fixForGap } from "./seo-gaps.js";
-import { fetchAsset, fetchNegotiatedImage } from "./assets.js";
+import { fetchAsset, fetchNegotiatedImage, fetchMinifiedAsset } from "./assets.js";
 import {
 	insights as searchInsights,
 	isConfigured as isSearchConsoleConfigured,
@@ -428,6 +428,12 @@ export default {
 		// one of those and the ordinary asset path below handles it.
 		const negotiatedImage = await fetchNegotiatedImage(request, url, env);
 		if (negotiatedImage) return negotiatedImage;
+
+		// Same idea for the handful of scripts and the stylesheet every page
+		// links: serve the minified copy at the exact URL the HTML already
+		// asks for. See fetchMinifiedAsset.
+		const minifiedAsset = await fetchMinifiedAsset(request, url, env);
+		if (minifiedAsset) return minifiedAsset;
 
 		const response = await fetchAsset(request, url, env);
 

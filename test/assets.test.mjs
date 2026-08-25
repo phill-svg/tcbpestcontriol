@@ -15,7 +15,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { fetchAsset, fetchNegotiatedImage } from "../src/assets.js";
+import { fetchAsset, fetchNegotiatedImage, fetchMinifiedAsset } from "../src/assets.js";
 
 // Records every URL the binding is asked for. `present` is the set of paths
 // that exist; anything else 404s, the way not_found_handling does.
@@ -188,4 +188,50 @@ test("everything that is not a webp under /assets/images is left alone", async (
 		headers: { Accept: CHROME_ACCEPT },
 	});
 	assert.equal(await fetchNegotiatedImage(post, imageUrl(HERO), env), null, "and only GET/HEAD are negotiated");
+});
+
+// The minified-JS/CSS swap. A third-party audit flagged 261 issues for
+// shipping the unminified script.js, search.js, chat.js and style.css to
+// every one of 130+ pages. Fixing it had to cost zero changes to any of
+// those pages, so this works the same way as the AVIF swap above: same URL
+// in, smaller bytes out, decided by which file exists.
+const SCRIPT = "/assets/js/script.js";
+const SCRIPT_MIN = "/assets/js/script.min.js";
+const STYLE = "/assets/css/style.css";
+const STYLE_MIN = "/assets/css/style.min.css";
+
+test("a script with a minified copy alongside it is served minified", async () => {
+	const { asked, env } = bindingWith([SCRIPT, SCRIPT_MIN]);
+	const response = await fetchMinifiedAsset(get(SCRIPT), imageUrl(SCRIPT), env);
+	assert.equal(response.status, 200);
+	assert.deepEqual(asked.map((entry) => entry.path), [SCRIPT_MIN], "the unminified file is never fetched");
+});
+
+test("the stylesheet is served minified the same way", async () => {
+	const { asked, env } = bindingWith([STYLE, STYLE_MIN]);
+	const response = await fetchMinifiedAsset(get(STYLE), imageUrl(STYLE), env);
+	assert.equal(response.status, 200);
+	assert.deepEqual(asked.map((entry) => entry.path), [STYLE_MIN]);
+});
+
+test("a script with no minified copy yet falls through, not 404s", async () => {
+	// build-min-assets.js has not run since the file was added, or has never
+	// run at all on this checkout. Either way the page must still load.
+	const { env } = bindingWith([SCRIPT]);
+	assert.equal(await fetchMinifiedAsset(get(SCRIPT), imageUrl(SCRIPT), env), null);
+});
+
+test("only the allowlisted public scripts are swapped", async () => {
+	// The admin editor's own scripts are deliberately never minified -- see
+	// the comment at the top of build-min-assets.js -- and nothing outside
+	// /assets/js or /assets/css should be touched at all.
+	const editorJs = "/assets/js/editor.js";
+	const { env } = bindingWith([editorJs, `${editorJs.replace(/\.js$/, ".min.js")}`, "/index.html"]);
+	for (const path of [editorJs, "/index.html", "/assets/documents/guide.pdf"]) {
+		assert.equal(await fetchMinifiedAsset(get(path), imageUrl(path), env), null, path);
+	}
+
+	const post = new Request(`https://www.tcbpestcontrolcanberra.com.au${SCRIPT}`, { method: "POST" });
+	const { env: postEnv } = bindingWith([SCRIPT, SCRIPT_MIN]);
+	assert.equal(await fetchMinifiedAsset(post, imageUrl(SCRIPT), postEnv), null, "and only GET/HEAD are negotiated");
 });

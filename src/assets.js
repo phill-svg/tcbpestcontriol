@@ -68,6 +68,40 @@ export async function fetchNegotiatedImage(request, url, env) {
 	return withVaryOnAccept(await env.ASSETS.fetch(new Request(url, request)));
 }
 
+// Which public script or stylesheet each get a minified sibling committed
+// alongside it by scripts/build-min-assets.js. Kept as an explicit allowlist
+// rather than "any .js under /assets/js" because that directory also holds
+// the admin editor's own scripts, which are unminified on purpose -- see the
+// comment at the top of build-min-assets.js.
+const MINIFIABLE = new Set(["/assets/js/script.js", "/assets/js/search.js", "/assets/js/chat.js", "/assets/js/booking.js", "/assets/css/style.css"]);
+
+// Hands back the minified copy of a script or stylesheet the pages link
+// unminified, if one has been built. `null` means this request is not one of
+// these and the ordinary asset path should handle it -- same contract as
+// fetchNegotiatedImage.
+//
+// Unlike the AVIF swap this needs no Accept-header negotiation and so no
+// Vary: every browser gets the same minified bytes, at the same URL the HTML
+// already links. That is the whole point -- shipping this costs zero changes
+// across the 130+ pages that reference these files, because none of them
+// have to start asking for a different name.
+//
+// A source file with no .min copy next to it (the build script has not been
+// run since it was added, or was run before terser/clean-css were installed)
+// falls through to serving the file as written, unminified -- never a 404.
+export async function fetchMinifiedAsset(request, url, env) {
+	if (request.method !== "GET" && request.method !== "HEAD") return null;
+	if (!MINIFIABLE.has(url.pathname)) return null;
+
+	const minUrl = new URL(url);
+	minUrl.pathname = url.pathname.replace(/\.(js|css)$/, ".min.$1");
+	const minified = await env.ASSETS.fetch(new Request(minUrl, request));
+	if (minified.status === 200) return minified;
+
+	if (minified.body) await minified.body.cancel().catch(() => {});
+	return null;
+}
+
 function withVaryOnAccept(response) {
 	const headers = new Headers(response.headers);
 	headers.set("Vary", "Accept");

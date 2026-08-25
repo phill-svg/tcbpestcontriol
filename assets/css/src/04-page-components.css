@@ -510,3 +510,30 @@
   letter-spacing: 0.22em;
   color: var(--ink-dim);
 }
+
+/* Keyless Google Maps embed (Maps Embed API via plain iframe -- no API key,
+   no billing). Wrapper keeps it responsive; the iframe has no intrinsic
+   aspect ratio of its own. */
+
+.map-embed {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+}
+
+@media (max-width: 640px) {
+  .map-embed {
+    aspect-ratio: 4 / 3;
+  }
+}
+
+.map-embed iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}

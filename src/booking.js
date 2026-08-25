@@ -8,11 +8,12 @@ import {
 	createWorkOrderJob,
 	createJobActivity,
 	createInvoiceLineItem,
+	createJobNote,
 	notifyStaffOfNewJob,
 	allocateJobToStaff,
 } from "./servicem8.js";
 import { sendBookingNotification, sendBookingConfirmation } from "./email.js";
-import { STAFF_UUID } from "./booking-config.js";
+import { STAFF_UUID, SERVICE_CATEGORIES } from "./booking-config.js";
 import { sydneyLocalToMs } from "./availability.js";
 
 // Deliberately not a single regex like /^[^\s@]+@[^\s@]+\.[^\s@]+$/ -- since
@@ -54,6 +55,32 @@ export function validateEnquiryFields(f) {
 	return errors;
 }
 
+// What the customer typed, formatted for the job's Notes section. Labelled so
+// it reads unambiguously as their words rather than a staff note. Empty when
+// they didn't write anything -- an empty note is worse than no note.
+function customerNote(f) {
+	return f.message ? `Notes from the customer:\n${f.message}` : "";
+}
+
+// Save the customer's own words on the job, best-effort. Their message is
+// always in the office email too, so a failure here is a "someone copy this
+// across" flag, never a failed booking. Returns a warning string ("" if fine)
+// for the office email and the staff message to carry.
+async function attachCustomerNote(env, jobUuid, f) {
+	const note = customerNote(f);
+	if (!note || !jobUuid) return "";
+	try {
+		await createJobNote(env, jobUuid, note);
+		return "";
+	} catch (e) {
+		console.error(
+			`Booking job note FAILED for job ${jobUuid} (job itself is fine) -- the customer's notes are in the office email and need copying onto the job:`,
+			e && (e.stack || e.message)
+		);
+		return "⚠ Couldn't save the customer's notes onto the job — they're in this email, please copy them across.";
+	}
+}
+
 // f = { name, email, phone, address, service, date, time, message } -- all
 // already trimmed strings. sourceLabel is prepended to the ServiceM8 job
 // description so staff can tell at a glance where the enquiry came from
@@ -79,21 +106,20 @@ export async function createBookingAndNotify(env, ctx, f, sourceLabel, opts = {}
 	if (opts.slot) return bookScheduledSlot(env, ctx, f, sourceLabel, opts);
 
 	const { alertLabel = "New booking", emailLabel = "booking", notifyOffice = true, confirmCustomer = true } = opts;
-	const description = [
-		sourceLabel,
-		`Service: ${f.service}`,
-		f.date || f.time ? `Preferred: ${[f.date, f.time].filter(Boolean).join(" ")}` : "",
-		"",
-		f.message || "(no additional notes)",
-	]
+	// Description is the headline only. What the customer wrote goes to the job's
+	// Notes section below, once the job exists to attach it to.
+	const description = [sourceLabel, `Service: ${f.service}`, f.date || f.time ? `Preferred: ${[f.date, f.time].filter(Boolean).join(" ")}` : ""]
 		.filter((l) => l !== "")
 		.join("\n");
 
-	const booking = { name: f.name, email: f.email, phone: f.phone, address: f.address, service: f.service, date: f.date, time: f.time, message: f.message };
 	let jobUrl = null;
 	let jobUuid = null;
 	try {
-		const result = await createServiceM8Lead(env, { name: f.name, email: f.email, phone: f.phone, address: f.address, description }, { force: true });
+		const result = await createServiceM8Lead(
+			env,
+			{ name: f.name, email: f.email, phone: f.phone, address: f.address, description, categoryUuid: SERVICE_CATEGORIES[opts.serviceKey] },
+			{ force: true }
+		);
 		jobUrl = result && result.jobUrl;
 		jobUuid = result && result.jobUuid;
 	} catch (e) {
@@ -101,6 +127,19 @@ export async function createBookingAndNotify(env, ctx, f, sourceLabel, opts = {}
 		// below still captures the lead (flagged for manual entry).
 		console.error("Booking -> ServiceM8 failed:", e && (e.stack || e.message));
 	}
+
+	const noteWarning = await attachCustomerNote(env, jobUuid, f);
+	const booking = {
+		name: f.name,
+		email: f.email,
+		phone: f.phone,
+		address: f.address,
+		service: f.service,
+		date: f.date,
+		time: f.time,
+		message: f.message,
+		warning: noteWarning,
+	};
 
 	// Fire the office notification + customer confirmation without blocking the
 	// response (allSettled so one failing send never affects the other). Log the
@@ -132,6 +171,7 @@ export async function createBookingAndNotify(env, ctx, f, sourceLabel, opts = {}
 	// First line is what shows in the push, so it carries the useful bit.
 	const alert = notifyStaffOfNewJob(env, jobUuid, [
 		`${alertLabel}: ${f.name} — ${f.service}`,
+		noteWarning,
 		f.phone,
 		f.address,
 		f.date || f.time ? `Preferred: ${[f.date, f.time].filter(Boolean).join(" ")}` : "",
@@ -225,8 +265,10 @@ async function bookScheduledSlot(env, ctx, f, sourceLabel, opts) {
 
 	// Service first (it's the headline), then price, then where it came from.
 	// No "Preferred" line on this path -- the slot is already booked in, so the
-	// scheduled time on the job is the answer and a preferred date just muddies it.
-	const description = [serviceLine, descPriceLine, sourceLabel, "", f.message || "(no additional notes)"].filter((l) => l !== "").join("\n");
+	// scheduled time on the job is the answer and a preferred date just muddies
+	// it. What the customer wrote isn't here either: it goes to the job's Notes
+	// section further down, so the description stays a three-line headline.
+	const description = [serviceLine, descPriceLine, sourceLabel].filter((l) => l !== "").join("\n");
 
 	const confirmedTime = formatConfirmedTime(slot.startIso);
 	const id = crypto.randomUUID();
@@ -284,7 +326,7 @@ async function bookScheduledSlot(env, ctx, f, sourceLabel, opts) {
 	try {
 		const res = await createWorkOrderJob(
 			env,
-			{ name: f.name, email: f.email, phone: f.phone, address: f.address, description },
+			{ name: f.name, email: f.email, phone: f.phone, address: f.address, description, categoryUuid: SERVICE_CATEGORIES[slot.serviceKey] },
 			{ status: pricing.quote ? "Quote" : "Work Order" }
 		);
 		jobUuid = res && res.jobUuid;
@@ -354,9 +396,15 @@ async function bookScheduledSlot(env, ctx, f, sourceLabel, opts) {
 	//    internal scheduling/invoicing hiccup isn't their problem -- the office
 	//    will fix it up). The office copy and the ServiceM8 StaffMessage carry
 	//    the warning(s) so someone follows up by hand.
+	// 4c. The customer's own words go on the job as a note, not in the
+	//     description. Best-effort for the same reason as the line item: the
+	//     booking is already made, and their message is in the office email too.
+	const noteWarning = await attachCustomerNote(env, jobUuid, f);
+
 	const warning = [
 		schedulingFailed ? "⚠ Booking created but auto-scheduling failed — set the time in ServiceM8 manually." : "",
 		lineItemFailed ? `⚠ Couldn't add the $${pricing.amount} price to the ServiceM8 invoice — add it manually.` : "",
+		noteWarning,
 	]
 		.filter(Boolean)
 		.join(" ");

@@ -60,9 +60,14 @@ Produces:
 Rodents (mice & rats)
 Fixed online price: $289 inc GST
 Online booking (website /book form)
-
-(no additional notes)
 ```
+
+**What the customer typed is not in the description.** It goes onto the job as
+a note instead (the Notes section on the job in ServiceM8), so a long message
+can't bury the headline. That's `attachCustomerNote()` in the same file, which
+calls `createJobNote()` in `src/servicem8.js`. It's best-effort: if the note
+won't save, the booking still stands and the office email carries a warning
+telling you to copy the notes across by hand.
 
 The array is the whole layout — reorder it, delete an entry, or add a new
 string and it appears in that order. Empty strings are dropped, so the `""`
@@ -130,6 +135,22 @@ It needs an entry in **all four** places, under the same key:
 `src/booking-config.js`), the copy in `assets/js/booking.js`, plus an
 `<option>` in `book/index.html`. `npm run check:booking` will tell you which
 one you missed.
+
+### The ServiceM8 job category
+
+`SERVICE_CATEGORIES` in `src/booking-config.js` maps each service to a
+ServiceM8 category UUID, so a job booked online lands in the category you would
+have picked by hand:
+
+| Service | Category |
+|---|---|
+| Rodents | Rodent Treatment |
+| Termite inspection | Termite Inspection |
+| General pest, Ants / Spiders / Cockroaches, Wasps / Bees | Premium Pest Treatment |
+
+The API wants the UUID, not the name -- read a category's UUID off the
+ServiceM8 account. A service with no entry here gets no category rather than a
+wrong one.
 
 ### The follow-up question ("How many bedrooms?")
 
@@ -244,6 +265,15 @@ built at `src/booking.js:357`.
 | `allocateJobToStaff()` | Assigns a lead to staff (leads only — bookings are already on the calendar) |
 | `readStaffOccupancy()` | Reads your diary to work out what's free |
 
+### What lands on the customer's record
+
+- **Phone** is written in national format (`0412345678`), to the contact's
+  **mobile** field only -- `auPhone()` in `src/servicem8.js`. Records created
+  before this stored it with the country code (`61412345678`) on both fields,
+  so the duplicate-customer lookup deliberately still recognises that shape.
+- **Address** goes on the client card as well as the job. Bookings used to
+  leave the client record's address blank.
+
 The invoice line item's wording is set in `src/booking.js:341`:
 `"Rodents (mice & rats) — online booking"`. GST is handled there too: the price
 you set is treated as GST-inclusive and divided by 1.1 for ServiceM8's ex-tax
@@ -280,5 +310,8 @@ field.
 | The phone notification | `src/booking.js` `notifyStaffOfNewJob(...)` |
 | Form labels and buttons | `book/index.html` |
 | Price note / quote toggle text | `assets/js/booking.js` (top of the DOM section) |
+| Which ServiceM8 category a job gets | `src/booking-config.js` — `SERVICE_CATEGORIES` |
+| The wording of the customer's job note | `src/booking.js` — `customerNote()` |
+| Whether a live chat creates a job | `src/chat-hub.js` — only the "Send to ServiceM8" button does |
 
 **After any change:** `npm run check:booking` and `npm test`.

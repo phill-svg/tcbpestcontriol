@@ -61,6 +61,19 @@ export const SERVICE_LABELS = {
 	"termite-treatment": "Termite Treatment"
 };
 
+// ServiceM8 job category for each bookable service, so a job created from the
+// website lands in the same category the office would have picked by hand.
+// UUIDs are read straight off the ServiceM8 account (Settings > Job
+// Categories) -- a name isn't enough, the API wants the uuid. A service with
+// no entry here simply gets no category rather than a guessed one.
+export const SERVICE_CATEGORIES = {
+	"general-pest": "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment
+	"ants-spiders-roaches": "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment
+	"wasps-bees": "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment
+	"rodents": "65374f33-5111-4411-976d-232fc24a43ab", // Rodent Treatment
+	"termite-inspection": "41bd4556-8fed-4626-b853-241e0b8b876b", // Termite Inspection
+};
+
 // True only for a service the widget is allowed to book. Callers validate up
 // front; availability.js also guards defensively.
 export function isBookableService(key) {

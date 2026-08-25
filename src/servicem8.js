@@ -21,14 +21,26 @@ function normEmail(e) {
 	return (e || "").trim().toLowerCase();
 }
 
-// ServiceM8 stores AU numbers digits-only with country code (e.g. 61425080413).
-// Normalise so our comparisons and writes match that shape.
-function normPhone(p) {
+// Comparison key for a phone number: digits only, with any country code and
+// leading zero stripped, so "0412 345 678", "+61 412 345 678" and
+// "61412345678" all reduce to "412345678" and match each other. Only strips
+// when what's left is a full 9-digit national number, so a short or malformed
+// entry is compared as typed rather than silently mangled.
+export function phoneKey(p) {
 	let d = (p || "").replace(/\D/g, "");
-	if (!d) return "";
-	if (d.startsWith("0")) d = "61" + d.slice(1);
-	else if (d.length === 9 && !d.startsWith("61")) d = "61" + d; // 4xxxxxxxx -> 614xxxxxxxx
+	if (d.startsWith("61") && d.length === 11) d = d.slice(2);
+	if (d.startsWith("0") && d.length === 10) d = d.slice(1);
 	return d;
+}
+
+// How a number is WRITTEN to ServiceM8: AU national format, "0412345678" --
+// what staff read and dial. Records created before this used digits-with-
+// country-code ("61412345678") instead, which is why lookups have to know
+// about both shapes.
+export function auPhone(p) {
+	const k = phoneKey(p);
+	if (!k) return "";
+	return k.length === 9 ? "0" + k : k;
 }
 
 function jobUrl(uuid) {
@@ -87,11 +99,17 @@ async function findExistingCompanyUuid(env, email, phone) {
 		const hit = Array.isArray(rows) && rows.find((r) => normEmail(r.email) === e);
 		if (hit) return hit.company_uuid;
 	}
-	const p = normPhone(phone);
-	if (p) {
-		const rows = await sm8Get(env, `/companycontact.json?%24filter=${encodeURIComponent(`phone eq '${p}'`)}`);
-		const hit = Array.isArray(rows) && rows.find((r) => normPhone(r.phone) === p || normPhone(r.mobile) === p);
-		if (hit) return hit.company_uuid;
+	const key = phoneKey(phone);
+	if (key) {
+		// Two shapes to look for: contacts written now carry the number on
+		// `mobile` in national format, while ones written before that change
+		// carry it on `phone` with the country code. Ask for each in turn and
+		// confirm on either field, so dedup keeps working across both.
+		for (const filter of [`mobile eq '${auPhone(phone)}'`, `phone eq '61${key}'`]) {
+			const rows = await sm8Get(env, `/companycontact.json?%24filter=${encodeURIComponent(filter)}`);
+			const hit = Array.isArray(rows) && rows.find((r) => phoneKey(r.phone) === key || phoneKey(r.mobile) === key);
+			if (hit) return hit.company_uuid;
+		}
 	}
 	return null;
 }
@@ -125,14 +143,21 @@ export async function createServiceM8Lead(env, lead, opts = {}) {
 			name: name || email || "Website enquiry",
 			active: 1,
 			is_individual: 1,
+			// The client card gets the address too, not just the job. Without this
+			// a customer who booked online showed up with a blank address on their
+			// record, so anything driven off the client (rather than the job) had
+			// nothing to work with.
+			address: address || "",
 		});
 		await sm8Create(env, "companycontact", {
 			company_uuid: companyUuid,
 			first: first || name || "Website",
 			last,
 			email: normEmail(email),
-			phone: normPhone(phone),
-			mobile: normPhone(phone),
+			// Mobile only, in national format: this is the number staff dial, and
+			// writing it to `phone` as well just duplicated it into a field the
+			// office doesn't use.
+			mobile: auPhone(phone),
 			type: "JOB",
 			is_primary_contact: 1,
 			active: 1,
@@ -160,14 +185,17 @@ export async function createServiceM8Lead(env, lead, opts = {}) {
 		company_uuid: companyUuid,
 		job_description: description || "",
 		job_address: address || "",
+		// Only sent when the caller knows which category this is (booking-config's
+		// SERVICE_CATEGORIES). A free-text enquiry has no reliable category, and
+		// an empty category_uuid is better than a wrong one.
+		...(lead.categoryUuid ? { category_uuid: lead.categoryUuid } : {}),
 	});
 	await sm8Create(env, "jobcontact", {
 		job_uuid: jobUuid,
 		first: first || name || "Website",
 		last,
 		email: normEmail(email),
-		phone: normPhone(phone),
-		mobile: normPhone(phone),
+		mobile: auPhone(phone),
 		type: "JOB",
 	});
 
@@ -553,8 +581,11 @@ export async function createWorkOrderJob(env, lead, opts = {}) {
 	let companyUuid = await findExistingCompanyUuid(env, email, phone);
 	if (!companyUuid) {
 		const baseName = name || email || "Website booking";
+		// address goes on the client card as well as the job -- a customer who
+		// booked online used to end up with a blank address on their record.
+		const companyFields = { active: 1, is_individual: 1, address: address || "" };
 		try {
-			companyUuid = await sm8Create(env, "company", { name: baseName, active: 1, is_individual: 1 });
+			companyUuid = await sm8Create(env, "company", { name: baseName, ...companyFields });
 		} catch (e) {
 			// ServiceM8 enforces company-NAME uniqueness as a separate constraint
 			// from our email/phone dedup above -- two unrelated customers can
@@ -564,12 +595,8 @@ export async function createWorkOrderJob(env, lead, opts = {}) {
 			// correctly found no matching contact. Disambiguate with email/phone
 			// (guaranteed to differ per distinct customer) and retry once.
 			if (e && e.status === 400 && /name must be unique/i.test(e.detail || e.message || "")) {
-				const suffix = normEmail(email) || normPhone(phone) || String(Date.now());
-				companyUuid = await sm8Create(env, "company", {
-					name: `${baseName} (${suffix})`,
-					active: 1,
-					is_individual: 1,
-				});
+				const suffix = normEmail(email) || auPhone(phone) || String(Date.now());
+				companyUuid = await sm8Create(env, "company", { name: `${baseName} (${suffix})`, ...companyFields });
 			} else {
 				throw e;
 			}
@@ -579,8 +606,10 @@ export async function createWorkOrderJob(env, lead, opts = {}) {
 			first: first || name || "Website",
 			last,
 			email: normEmail(email),
-			phone: normPhone(phone),
-			mobile: normPhone(phone),
+			// Mobile only, in national format: this is the number staff dial, and
+			// writing it to `phone` as well just duplicated it into a field the
+			// office doesn't use.
+			mobile: auPhone(phone),
 			type: "JOB",
 			is_primary_contact: 1,
 			active: 1,
@@ -593,18 +622,41 @@ export async function createWorkOrderJob(env, lead, opts = {}) {
 		company_uuid: companyUuid,
 		job_description: description || "",
 		job_address: address || "",
+		// Set from the booked service via booking-config's SERVICE_CATEGORIES, so
+		// an online booking lands in the same category the office would have
+		// picked by hand. Omitted entirely when the service has no mapping.
+		...(lead.categoryUuid ? { category_uuid: lead.categoryUuid } : {}),
 	});
 	await sm8Create(env, "jobcontact", {
 		job_uuid: jobUuid,
 		first: first || name || "Website",
 		last,
 		email: normEmail(email),
-		phone: normPhone(phone),
-		mobile: normPhone(phone),
+		mobile: auPhone(phone),
 		type: "JOB",
 	});
 
 	return { jobUuid, jobUrl: jobUrl(jobUuid) };
+}
+
+// Adds a note to the job -- the Notes section on the job in ServiceM8, which
+// is where free text about a job belongs. The job description is the headline
+// (service, price, where it came from); whatever the customer actually typed
+// into the form goes here instead, so a long note can't bury the description.
+//
+// Throws on failure so the caller can decide: every caller treats this as
+// best-effort, because the customer's words are also in the office email and
+// a note that didn't save must never fail a booking that did.
+export async function createJobNote(env, jobUuid, note) {
+	if (!env.SERVICEM8_API_KEY) throw new Error("ServiceM8 is not configured (no API key set)");
+	if (!jobUuid || !note) return null;
+
+	return sm8Create(env, "note", {
+		related_object: "job",
+		related_object_uuid: jobUuid,
+		note,
+		active: 1,
+	});
 }
 
 // Puts the booking on Phill's ServiceM8 calendar -- this is the write that

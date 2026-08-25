@@ -673,6 +673,9 @@ async function handleBooking(request, env, ctx) {
 		await createBookingAndNotify(env, ctx, quoteFields, "Custom quote request (website /book form)", {
 			alertLabel: "New quote request",
 			emailLabel: "quote request",
+			// The key (not the label) is what SERVICE_CATEGORIES is keyed by, so the
+			// quote job lands in the right ServiceM8 category too.
+			serviceKey: service,
 		});
 		return okJson({ ok: true, quote: true });
 	}
@@ -716,7 +719,7 @@ async function handleBooking(request, env, ctx) {
 		return okJson({ ok: true, booked: true });
 	}
 
-	await createBookingAndNotify(env, ctx, fields, "Online booking request (website /book form)");
+	await createBookingAndNotify(env, ctx, fields, "Online booking request (website /book form)", { serviceKey: service });
 
 	return okJson({ ok: true });
 }

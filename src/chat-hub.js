@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { sendPushNotification } from "./push.js";
 import { passcodeMatches, hashPassword, verifyPassword, loginCookieHeader } from "./staff-auth.js";
-import { createServiceM8Lead, notifyStaffOfNewJob, allocateJobToStaff } from "./servicem8.js";
+import { createServiceM8Lead, allocateJobToStaff } from "./servicem8.js";
 // Note: the actual reset email is sent by the Worker (src/index.js), not here --
 // the send_email binding is only reliably available in the Worker request context.
 // (ServiceM8 is a plain fetch to an external API, which works fine here in the DO.)
@@ -561,76 +561,16 @@ export class ChatHub extends DurableObject {
 
 		// Created -> record it against the conversation so it can't be duplicated.
 		sql.exec("UPDATE conversations SET servicem8_job_uuid = ? WHERE id = ?", result.jobUuid, conversationId);
+
+		// Assign it, the same as a job from the website forms, so a chat job doesn't
+		// sit unallocated. No staff message with it: whoever pressed the button is
+		// already looking at the chat, so a push back to them would be noise.
+		this.ctx.waitUntil(allocateJobToStaff(this.env, result.jobUuid));
 		this.broadcastToStaff({ type: "conversations", ...this.getConversationLists() });
 		return new Response(
 			JSON.stringify({ ok: true, created: true, jobUuid: result.jobUuid, jobUrl: result.jobUrl, reusedCustomer: result.reusedCustomer }),
 			{ status: 200, headers: { "content-type": "application/json" } }
 		);
-	}
-
-	// Turns a chat into a ServiceM8 Quote job on its own, and tells staff about
-	// it in the ServiceM8 app -- the same treatment the /book and /contact forms
-	// get, so every lead the website takes ends up in one place.
-	//
-	// Called from waitUntil, so it must never throw. It also must never
-	// duplicate: the conversation stores the job UUID it produced, and any
-	// customer who already has an open Quote is linked to that instead of
-	// getting a second one. A failure leaves servicem8_job_uuid unset, so the
-	// visitor's next message simply tries again.
-	async autoCreateJobForConversation(conversationId) {
-		try {
-			const sql = this.ctx.storage.sql;
-			const conv = sql
-				.exec(
-					"SELECT visitor_name, visitor_email, visitor_phone, visitor_page, servicem8_job_uuid FROM conversations WHERE id = ?",
-					conversationId
-				)
-				.toArray()[0];
-
-			if (!conv || conv.servicem8_job_uuid) return;
-			// Nothing to identify or contact them by -- not a lead worth a job.
-			if (!conv.visitor_email && !conv.visitor_phone) return;
-			if (!this.env.SERVICEM8_API_KEY) return;
-
-			const msgs = sql
-				.exec("SELECT sender, body FROM messages WHERE conversation_id = ? ORDER BY id ASC LIMIT 30", conversationId)
-				.toArray();
-			const transcript = msgs
-				.map((m) => `${m.sender === "staff" ? "TCB" : conv.visitor_name || "Customer"}: ${m.body}`)
-				.join("\n");
-			const description =
-				`Website chat enquiry` + (conv.visitor_page ? ` (from ${conv.visitor_page})` : "") + `.\n\n` + (transcript || "No messages.");
-
-			// force:false -- if this customer already has an open Quote, reuse it
-			// rather than opening a second one for the same person.
-			const result = await createServiceM8Lead(
-				this.env,
-				{ name: conv.visitor_name, email: conv.visitor_email, phone: conv.visitor_phone, description },
-				{ force: false }
-			);
-			if (!result || !result.jobUuid) return;
-
-			// Recorded for the duplicate case too: the lead is in ServiceM8 either
-			// way, and without this every later message would retry the lookup.
-			sql.exec("UPDATE conversations SET servicem8_job_uuid = ? WHERE id = ?", result.jobUuid, conversationId);
-			this.broadcastToStaff({ type: "conversations", ...this.getConversationLists() });
-
-			// Same as the website forms: allocating the job is what makes the
-			// ServiceM8 app itself raise a notification, and open the job in the
-			// app rather than a browser when it's tapped.
-			await allocateJobToStaff(this.env, result.jobUuid);
-
-			const firstVisitorMessage = (msgs.find((m) => m.sender === "visitor") || {}).body || "";
-			await notifyStaffOfNewJob(this.env, result.jobUuid, [
-				`${result.duplicate ? "Chat from an existing quote" : "New chat enquiry"}: ${conv.visitor_name || "Website visitor"}`,
-				conv.visitor_phone,
-				conv.visitor_email,
-				conv.visitor_page ? `Page: ${conv.visitor_page}` : "",
-				firstVisitorMessage ? `\n${firstVisitorMessage}` : "",
-			]);
-		} catch (e) {
-			console.error("Chat -> ServiceM8 auto-create failed:", e && (e.stack || e.message));
-		}
 	}
 
 	listStaffUsers() {
@@ -1377,12 +1317,12 @@ export class ChatHub extends DurableObject {
 		this.broadcastToStaff({ type: "message", conversationId: attachment.conversationId, message: saved });
 		this.broadcastToStaff({ type: "conversations", ...this.getConversationLists() });
 
-		// A chat lead is a lead like any other, so it becomes a ServiceM8 job by
-		// itself rather than waiting for someone to remember the "Send to
-		// ServiceM8" button. Triggered by the visitor's first message, not by the
-		// intake form, so details typed in and then abandoned don't leave empty
-		// jobs behind.
-		this.ctx.waitUntil(this.autoCreateJobForConversation(attachment.conversationId));
+		// Deliberately NOT creating a ServiceM8 job here. A chat is a conversation,
+		// not yet a lead -- auto-creating a Quote off the first message filled
+		// ServiceM8 with jobs for questions that never became work. A chat becomes
+		// a job when staff press "Send to ServiceM8" (handleSendToServiceM8 above),
+		// and staff still hear about the chat itself: live on the dashboard, and by
+		// push below when nobody has it open.
 
 		// Only push if nobody's actually watching the dashboard right now --
 		// if a staff device is connected, the broadcasts above already reached

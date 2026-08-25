@@ -15,7 +15,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { fetchAsset, fetchNegotiatedImage, fetchMinifiedAsset } from "../src/assets.js";
+import { fetchAsset, fetchNegotiatedImage, fetchMinifiedAsset, wantsBareNotFound, bareNotFound } from "../src/assets.js";
 
 // Records every URL the binding is asked for. `present` is the set of paths
 // that exist; anything else 404s, the way not_found_handling does.
@@ -234,4 +234,57 @@ test("only the allowlisted public scripts are swapped", async () => {
 	const post = new Request(`https://www.tcbpestcontrolcanberra.com.au${SCRIPT}`, { method: "POST" });
 	const { env: postEnv } = bindingWith([SCRIPT, SCRIPT_MIN]);
 	assert.equal(await fetchMinifiedAsset(post, imageUrl(SCRIPT), postEnv), null, "and only GET/HEAD are negotiated");
+});
+
+// A missing *file* answers with a bare 404, not the HTML 404 page.
+//
+// `not_found_handling: "404-page"` is right for a mistyped page address and
+// wrong for a file: an audit tool probing /.webmcp/bridge.js (the WebMCP
+// agent-bridge convention, a well-known probe like /llms.txt) got 27KB of
+// unminified HTML back at a .js address, and reported "unminified
+// JavaScript" against all 94 crawled pages for a file this site has never
+// had. The page fallback has to stay for pages, so the split is by whether
+// the address names a file.
+
+test("a missing file is a file-shaped 404, not the HTML 404 page", () => {
+	for (const path of [
+		"/.webmcp/bridge.js",
+		"/assets/js/never-existed.js",
+		"/assets/css/gone.css",
+		"/assets/images/missing.webp",
+		"/assets/fonts/absent.woff2",
+		"/assets/documents/removed.pdf",
+	]) {
+		assert.equal(wantsBareNotFound(new URL(`https://www.tcbpestcontrolcanberra.com.au${path}`)), true, path);
+	}
+});
+
+test("a mistyped page address still gets the real 404 page", () => {
+	// This is the half that has to keep working: somebody who types a page
+	// name wrong should land somewhere useful, not on the word "Not found".
+	for (const path of [
+		"/",
+		"/spider-control",
+		"/locations-pest-control-kambah",
+		"/spider-control/garden-orb-weaver-spider",
+		"/blog-dangerous-spiders-canberra",
+		"/mistyped-page-name",
+		"/locations.pest.control",
+	]) {
+		assert.equal(wantsBareNotFound(new URL(`https://www.tcbpestcontrolcanberra.com.au${path}`)), false, path);
+	}
+});
+
+test("a dotfile is not mistaken for a file with an extension", () => {
+	// ".well-known/did.json" ends in a real extension and is a file; a bare
+	// dotfile like "/.htaccess" has no extension at all, so it is left alone.
+	assert.equal(wantsBareNotFound(new URL("https://www.tcbpestcontrolcanberra.com.au/.well-known/did.json")), true);
+	assert.equal(wantsBareNotFound(new URL("https://www.tcbpestcontrolcanberra.com.au/.htaccess")), false);
+});
+
+test("the bare 404 is small, plain and uncached", () => {
+	const response = bareNotFound();
+	assert.equal(response.status, 404);
+	assert.match(response.headers.get("content-type"), /text\/plain/);
+	assert.match(response.headers.get("Cache-Control"), /no-store/);
 });

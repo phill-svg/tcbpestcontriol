@@ -35,7 +35,7 @@ import {
 } from "./seo-suggest.js";
 import { TITLE_MIN, TITLE_MAX, DESCRIPTION_MIN, DESCRIPTION_MAX } from "../assets/js/seo-check.js";
 import { findGaps, describeGap, fixForGap } from "./seo-gaps.js";
-import { fetchAsset, fetchNegotiatedImage, fetchMinifiedAsset } from "./assets.js";
+import { fetchAsset, fetchNegotiatedImage, fetchMinifiedAsset, wantsBareNotFound, bareNotFound } from "./assets.js";
 import {
 	insights as searchInsights,
 	isConfigured as isSearchConsoleConfigured,
@@ -436,6 +436,13 @@ export default {
 		if (minifiedAsset) return minifiedAsset;
 
 		const response = await fetchAsset(request, url, env);
+
+		// A missing *file* answers with a bare 404 rather than the HTML 404
+		// page. See wantsBareNotFound for the audit finding that prompted this.
+		if (response.status === 404 && wantsBareNotFound(url)) {
+			if (response.body) await response.body.cancel().catch(() => {});
+			return bareNotFound();
+		}
 
 		// Force every served HTML page's canonical tag to self-reference the
 		// exact URL it was actually served at. A past URL-structure migration

@@ -179,15 +179,12 @@ export function blogCardHtml(post) {
 	return (
 		`<a class="blog-card" href="/${post.slug}"><div class="blog-media"><img alt="${escapeHtml(post.heroAlt)}" ` +
 		`loading="lazy" src="${escapeHtml(post.heroSrc)}" width="1376" height="768"/></div><div class="blog-tag">` +
-		`<svg aria-hidden="true" class="lucide lucide-tag size-3 icon" fill="none" height="24" stroke="currentColor" ` +
-		`stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24">` +
-		`<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"></path>` +
-		`<circle cx="7.5" cy="7.5" fill="currentColor" r=".5"></circle></svg><span>${escapeHtml(post.category)}</span></div>` +
+		`<svg aria-hidden="true" class="icon-line icon" height="24" viewbox="0 0 24 24" width="24">` +
+		`<use href="/assets/icons.svg?v=1#tag"></use></svg><span>${escapeHtml(post.category)}</span></div>` +
 		`<h3>${escapeHtml(post.title)}</h3><p>${escapeHtml(post.description)}</p><div class="card-foot">` +
 		`<div class="meta">${dates.short} · ${post.readTime} min read</div><div class="read">Read` +
-		`<svg aria-hidden="true" class="icon" fill="none" height="12" stroke="currentColor" stroke-linecap="round" ` +
-		`stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="12"><path d="M5 12h14"></path>` +
-		`<path d="m12 5 7 7-7 7"></path></svg></div></div></a>`
+		`<svg aria-hidden="true" class="icon-line icon" height="12" viewbox="0 0 24 24" width="12">` +
+		`<use href="/assets/icons.svg?v=1#arrow-right"></use></svg></div></div></a>`
 	);
 }
 

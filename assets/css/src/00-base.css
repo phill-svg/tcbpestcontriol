@@ -7,7 +7,7 @@
    that N (repo-wide, e.g. `sed -i 's/style.css?v=OLD/style.css?v=NEW/g'
    across every *.html file) whenever the built output changes, or
    visitors' browsers will keep using their old cached copy for up to a
-   year regardless of what's actually deployed. Current version: v=34. */
+   year regardless of what's actually deployed. Current version: v=37. */
 
 @font-face {
   font-family: "Inter";
@@ -151,6 +151,22 @@ svg {
 
 .icon {
   flex-shrink: 0;
+}
+
+/* Every line icon on the site is drawn the same way: no fill, a 2px round
+   stroke in the current colour. That used to be five presentation attributes
+   written into the HTML at each of the ~5,700 uses -- 543 KiB of repetition.
+   It is one class now, and scripts/build-icon-sprite.js puts it on any icon
+   carrying exactly that set. The three icons drawn at stroke-width 1.5 keep
+   their own attributes, which still win: a presentation attribute is beaten
+   by a stylesheet rule, so anything set here has to be something they
+   override rather than something they need. */
+.icon-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* Buttons */

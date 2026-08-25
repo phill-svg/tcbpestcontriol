@@ -60,6 +60,14 @@
 /assets/js/seo-site.js
   Cache-Control: no-cache
 
+# The icon sprite every page's <use> elements point at. Frozen for a year like
+# the other assets, and safe to freeze for the same reason: each reference
+# carries a ?v= that scripts/build-icon-sprite.js bumps when the file changes.
+# Without that version an icon added later would resolve to a symbol the
+# visitor's year-old sprite does not contain, and would silently not draw.
+/assets/icons.svg
+  Cache-Control: public, max-age=31536000, immutable
+
 /assets/favicon/*
   Cache-Control: public, max-age=31536000, immutable
 

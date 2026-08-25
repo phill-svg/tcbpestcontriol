@@ -17,10 +17,12 @@ import { escapeHtml, findUnfilledPlaceholders } from "./blog-posts.js";
 const SITE = "https://www.tcbpestcontrolcanberra.com.au";
 
 // The arrow that follows every link in the related-services strip.
+// Points at the shared sprite, like every other icon on the site -- see
+// scripts/build-icon-sprite.js. Generated pages have to match the hand-written
+// ones or that script would find inline icons to convert every time it runs.
 const ARROW =
-	'<svg aria-hidden="true" class="lucide lucide-arrow-up-right size-3 icon" fill="none" height="24" ' +
-	'stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" ' +
-	'width="24"><path d="M7 7h10v10"></path><path d="M7 17 17 7"></path></svg>';
+	'<svg aria-hidden="true" class="icon-line icon" height="24" viewbox="0 0 24 24" width="24">' +
+	'<use href="/assets/icons.svg?v=1#arrow-up-right"></use></svg>';
 
 const pad = (n) => String(n).padStart(2, "0");
 

@@ -39,7 +39,7 @@ BUSINESS FACTS (only state what's here -- never invent details):
 - Products are family-safe and pet-friendly.
 - TCB ALWAYS treats the interior of the home as part of a general treatment -- the inside is always included, not just "when required". Reassure customers of this if they ask.
 - 100% satisfaction guarantee with complimentary follow-up treatments on covered pests. Structural warranty on qualifying termite work. All technicians licensed and insured.
-- 4.9-star Google rating (60+ reviews). Upfront written quotes, 24-hour quote turnaround, and often same-week availability.
+- 4.8-star Google rating (61 reviews). Upfront written quotes, 24-hour quote turnaround, and often same-week availability.
 - Hours: Monday to Saturday, 8am-5pm.
 - Phone: 02 6105 9771. Email: office@tcbpestcontrolcanberra.com.au.
 

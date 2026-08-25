@@ -9,6 +9,7 @@
 		"build:images": "node scripts/build-image-manifest.js",
 		"build:avif": "node scripts/build-avif.js",
 		"build:min": "node scripts/build-min-assets.js",
+		"build:icons": "node scripts/build-icon-sprite.js",
 		"sync:content": "node scripts/sync-content-edits.js",
 		"test:parity": "TCB_PARITY=1 node --test test/address-parity.test.mjs",
 		"test:seo-parity": "TCB_PARITY=1 node --test test/seo-parity.test.mjs"

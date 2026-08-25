@@ -160,9 +160,21 @@
   height: 1.5rem;
 }
 
-.service-card h3 {
+.service-card h3,
+.service-card .service-title {
   font-size: 1.5rem;
   font-weight: 700;
+}
+
+/* The card titles are <p class="service-title"> rather than headings, so the
+   page's heading outline runs h1 -> h2 without a rung of h3s that are really
+   just card labels. They still have to look like the headings they replaced.
+   Restored here after living only in the generated style.css: commit 2650173
+   edited that file directly, so the rule was lost the first time anything
+   rebuilt it from source, and the titles silently dropped to body size. */
+.service-card .service-title {
+  margin-top: 0;
+  color: var(--ink);
 }
 
 .service-card p {

@@ -102,6 +102,47 @@ export async function fetchMinifiedAsset(request, url, env) {
 	return null;
 }
 
+// Extensions that name a file rather than a page. A request for one of these
+// that does not exist wants a 404, not a web page.
+const ASSET_EXTENSIONS = new Set([
+	"js", "mjs", "cjs", "css", "map",
+	"png", "jpg", "jpeg", "gif", "webp", "avif", "svg", "ico", "bmp",
+	"woff", "woff2", "ttf", "otf", "eot",
+	"pdf", "zip", "mp4", "webm", "mp3", "wav",
+	"json", "xml", "txt", "csv", "wasm",
+]);
+
+// Should a missing `url` answer with the HTML 404 page, or with a bare 404?
+//
+// `not_found_handling` is "404-page" in wrangler.jsonc, which is right for a
+// mistyped page address -- a visitor gets somewhere useful. It is wrong for a
+// file: a request for a script that does not exist gets 27KB of HTML with a
+// .js address on it, which is bytes nobody wanted and a lie about what lives
+// there.
+//
+// This is not hypothetical. An audit tool probes every site for
+// /.webmcp/bridge.js (the WebMCP agent-bridge convention, the same kind of
+// well-known probe as /llms.txt). The probe got the 404 page back, saw a .js
+// URL answering with content, and reported "unminified JavaScript" against
+// all 94 crawled pages -- one finding per page, for a file this site does not
+// have and never referenced.
+//
+// The `.md` route in src/index.js is deliberately not covered here: it is
+// handled earlier and renders real pages.
+export function wantsBareNotFound(url) {
+	const lastSegment = url.pathname.split("/").pop() || "";
+	const dot = lastSegment.lastIndexOf(".");
+	if (dot <= 0) return false;
+	return ASSET_EXTENSIONS.has(lastSegment.slice(dot + 1).toLowerCase());
+}
+
+export function bareNotFound() {
+	return new Response("Not found", {
+		status: 404,
+		headers: { "content-type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+	});
+}
+
 function withVaryOnAccept(response) {
 	const headers = new Headers(response.headers);
 	headers.set("Vary", "Accept");

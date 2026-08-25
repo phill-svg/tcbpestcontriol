@@ -12,8 +12,11 @@
 - [Rodent Control](/rodent-control): Rat and mouse baiting and proofing.
 - [Ant Control](/ant-control): Ant treatment for homes and businesses.
 - [Spider Control](/spider-control): Spider treatment including redbacks and funnel-webs.
+- [Orb Weaver Spider](/spider-control/orb-weaver-spider): Identifying and treating orb weaver spiders.
+- [Garden Orb Weaver Spider](/spider-control/garden-orb-weaver-spider): Identifying and treating garden orb weavers.
 - [Bee Control](/bees): Bee removal and hive relocation; wasp nest removal.
 - [Cockroach Control](/cockroach-control): German and American cockroach treatment.
+- [Australian Cockroach](/cockroach-control/australian-cockroach): Identifying and treating Australian cockroaches.
 - [Flea Control](/flea-control): Flea treatment for homes and pets' environments.
 - [Silverfish Control](/silverfish-control): Silverfish treatment.
 - [Bird Control](/bird-control): Bird proofing and deterrents.
@@ -56,6 +59,7 @@ Every ACT suburb and surrounding NSW town has its own dedicated page at `/locati
 
 ## Resources
 
+- [Resources & Guides](/resources): Hub for preparation guides and species fact sheets.
 - [Preparation Guides](/preparation): Downloadable PDF guides for preparing a property before a treatment visit.
 - [Blog](/blog): Articles on pest identification, prevention and treatment.
 - [Sitemap](/sitemap.xml): Complete list of every page on the site.

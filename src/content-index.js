@@ -12,7 +12,11 @@ export const SITE_INFO = {
 		"Family-run, fully licensed and insured pest control company servicing homes and businesses across the ACT and surrounding NSW (Queanbeyan).",
 	phone: "02 6105 9771",
 	email: "office@tcbpestcontrolcanberra.com.au",
-	rating: { value: 4.8, count: 62, url: `${SITE}/reviews` },
+	// Kept in step with the aggregateRating in the pages' structured data, the
+	// figure quoted in llms.txt and the one the chat assistant is told. Four
+	// places said three different things -- 4.8/61, 4.8/62 and "4.9-star, 60+
+	// reviews" -- and the assistant was the one overstating it to customers.
+	rating: { value: 4.8, count: 61, url: `${SITE}/reviews` },
 };
 
 // Generated from the site's locations-pest-control-* pages.
@@ -28,8 +32,11 @@ export const SERVICES = [
 	{ name: "Rodent Control", url: "/rodent-control", description: "Rat and mouse baiting and proofing." },
 	{ name: "Ant Control", url: "/ant-control", description: "Ant treatment for homes and businesses." },
 	{ name: "Spider Control", url: "/spider-control", description: "Spider treatment including redbacks and funnel-webs." },
+	{ name: "Orb Weaver Spider", url: "/spider-control/orb-weaver-spider", description: "Identifying and treating orb weaver spiders." },
+	{ name: "Garden Orb Weaver Spider", url: "/spider-control/garden-orb-weaver-spider", description: "Identifying and treating garden orb weavers." },
 	{ name: "Bee Control", url: "/bees", description: "Bee removal and hive relocation; wasp nest removal." },
 	{ name: "Cockroach Control", url: "/cockroach-control", description: "German and American cockroach treatment." },
+	{ name: "Australian Cockroach", url: "/cockroach-control/australian-cockroach", description: "Identifying and treating Australian cockroaches." },
 	{ name: "Flea Control", url: "/flea-control", description: "Flea treatment for homes and pets' environments." },
 	{ name: "Silverfish Control", url: "/silverfish-control", description: "Silverfish treatment." },
 	{ name: "Bird Control", url: "/bird-control", description: "Bird proofing and deterrents." },
@@ -58,7 +65,8 @@ export const PRICING = [
 // Other key pages that aren't services or suburbs, for the /index.json manifest.
 export const PAGES = [
 	{ title: "About TCB", url: "/about", description: "Company background, accreditations, service area." },
-	{ title: "Reviews", url: "/reviews", description: "Google reviews, rated 4.8 from 62 reviews." },
+	{ title: "Resources & Guides", url: "/resources", description: "Hub for preparation guides and species fact sheets." },
+	{ title: "Reviews", url: "/reviews", description: "Google reviews, rated 4.8 from 61 reviews." },
 	{ title: "FAQ", url: "/faq", description: "Frequently asked questions about booking, pricing and treatments." },
 	{ title: "Pricing", url: "/pricing", description: "Starting prices for the most-booked services." },
 	{ title: "Locations Overview", url: "/locations", description: "Full list of every Canberra and Queanbeyan-area suburb serviced." },

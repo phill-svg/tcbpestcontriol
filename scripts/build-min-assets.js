@@ -25,7 +25,7 @@
 // committed, and a source file with no .min copy alongside it is served as
 // itself, unminified, until this is rerun. See fetchMinifiedAsset's fallback.
 
-import { readFileSync, writeFileSync, statSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { minify } from "terser";
@@ -42,13 +42,27 @@ const JS_FILES = [
 ];
 const CSS_FILES = ["assets/css/style.css"];
 
-// A source file older than its .min copy is already reflected in it. Pass
-// --force to rebuild everything regardless, e.g. after upgrading terser or
-// clean-css and wanting the new output.
+// --force is kept for the case where the output should be rewritten even
+// though it already matches, but it no longer decides whether work happens:
+// every file is minified on every run and written only if the result differs
+// from what is on disk.
+//
+// It used to skip any file whose .min copy had a newer mtime, and that was
+// wrong in a way that reached the live site. Timestamps say nothing after a
+// git checkout -- every file is stamped when it was written to disk, in
+// whatever order that happened -- so a rebase onto a branch with a newer
+// source left the stale .min looking current, and it was skipped. The site
+// served a booking.js missing a whole service's pricing entry, and the build
+// reported "already current" every time it was run.
+//
+// Minifying five small files takes well under a second, so there is nothing
+// to gain by trying to avoid it.
 const force = process.argv.includes("--force");
 
-function isCurrent(sourcePath, minPath) {
-	return !force && existsSync(minPath) && statSync(minPath).mtimeMs >= statSync(sourcePath).mtimeMs;
+function writeIfChanged(minPath, code) {
+	if (!force && existsSync(minPath) && readFileSync(minPath, "utf8") === code) return false;
+	writeFileSync(minPath, code);
+	return true;
 }
 
 function report(name, before, after) {
@@ -66,12 +80,6 @@ for (const relative of JS_FILES) {
 	const source = readFileSync(sourcePath, "utf8");
 	totalBefore += Buffer.byteLength(source);
 
-	if (isCurrent(sourcePath, minPath)) {
-		totalAfter += statSync(minPath).size;
-		skipped += 1;
-		continue;
-	}
-
 	// mangle: false. These are plain scripts with no bundler and no build-time
 	// scope isolation -- top-level `const` and `function` names in script.js,
 	// search.js and chat.js are only ever referenced within their own file, so
@@ -81,10 +89,13 @@ for (const relative of JS_FILES) {
 	// last few percent of byte savings is worth.
 	const result = await minify(source, { mangle: false, compress: true, format: { comments: false } });
 	if (result.error) throw result.error;
-	writeFileSync(minPath, result.code);
 	totalAfter += Buffer.byteLength(result.code);
-	written += 1;
-	report(relative, Buffer.byteLength(source), Buffer.byteLength(result.code));
+	if (writeIfChanged(minPath, result.code)) {
+		written += 1;
+		report(relative, Buffer.byteLength(source), Buffer.byteLength(result.code));
+	} else {
+		skipped += 1;
+	}
 }
 
 const cleanCss = new CleanCSS({ level: 2 });
@@ -94,18 +105,15 @@ for (const relative of CSS_FILES) {
 	const source = readFileSync(sourcePath, "utf8");
 	totalBefore += Buffer.byteLength(source);
 
-	if (isCurrent(sourcePath, minPath)) {
-		totalAfter += statSync(minPath).size;
-		skipped += 1;
-		continue;
-	}
-
 	const result = cleanCss.minify(source);
 	if (result.errors.length) throw new Error(result.errors.join("\n"));
-	writeFileSync(minPath, result.styles);
 	totalAfter += Buffer.byteLength(result.styles);
-	written += 1;
-	report(relative, Buffer.byteLength(source), Buffer.byteLength(result.styles));
+	if (writeIfChanged(minPath, result.styles)) {
+		written += 1;
+		report(relative, Buffer.byteLength(source), Buffer.byteLength(result.styles));
+	} else {
+		skipped += 1;
+	}
 }
 
 const saved = totalBefore - totalAfter;

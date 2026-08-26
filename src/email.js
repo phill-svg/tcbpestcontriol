@@ -167,7 +167,7 @@ export async function sendBookingConfirmation(env, booking, label = "booking") {
 		`Hi ${first},\n\n` +
 		`${opening}\n\n` +
 		(priceBit ? `${priceBit}\n\n` : "") +
-		`please visit www.tcbpestcontrolcanberra.com.au/preparation for all preparation details\n\n` +
+		(isBooking ? `please visit www.tcbpestcontrolcanberra.com.au/preparation for all preparation details\n\n` : "") +
 		`Need us sooner? Call 02 6105 9771 (Mon-Sat 8am-5pm).\n\n` +
 		`-- TCB Pest Control Canberra`;
 
@@ -176,7 +176,7 @@ export async function sendBookingConfirmation(env, booking, label = "booking") {
 		`<p>Hi ${escapeHtml(first)},</p>` +
 		`<p>${escapeHtml(opening).replace("TCB Pest Control Canberra", "<strong>TCB Pest Control Canberra</strong>")}</p>` +
 		(priceBit ? `<p style="font-weight:700">${escapeHtml(priceBit)}</p>` : "") +
-		`<p style="color:#5a5a62">please visit <a href="https://www.tcbpestcontrolcanberra.com.au/preparation" style="color:#c41613">www.tcbpestcontrolcanberra.com.au/preparation</a> for all prep details!</p>` +
+		(isBooking ? `<p style="color:#5a5a62">please visit <a href="https://www.tcbpestcontrolcanberra.com.au/preparation" style="color:#c41613">www.tcbpestcontrolcanberra.com.au/preparation</a> for all prep details!</p>` : "") +
 		`<p style="color:#5a5a62">Need us sooner? Call <a href="tel:0261059771" style="color:#c41613">02 6105 9771</a> (Mon–Sat 8am–5pm).</p>` +
 		`<p style="margin-top:22px">&mdash; TCB Pest Control Canberra</p>` +
 		`</div>`;

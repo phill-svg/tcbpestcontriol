@@ -119,7 +119,7 @@ export async function createBookingAndNotify(env, ctx, f, sourceLabel, opts = {}
 		const result = await createServiceM8Lead(
 			env,
 			{ name: f.name, email: f.email, phone: f.phone, address: f.address, description, categoryUuid: SERVICE_CATEGORIES[opts.serviceKey] },
-			{ force: true, templateUuid: SERVICE_TEMPLATES[opts.serviceKey] }
+			{ force: true }
 		);
 		jobUrl = result && result.jobUrl;
 		jobUuid = result && result.jobUuid;
@@ -364,7 +364,13 @@ async function bookScheduledSlot(env, ctx, f, sourceLabel, opts) {
 			const res = await createWorkOrderJob(
 				env,
 				{ name: f.name, email: f.email, phone: f.phone, address: f.address, description, categoryUuid: SERVICE_CATEGORIES[slot.serviceKey] },
-				{ status: pricing.quote ? "Quote" : "Work Order", templateUuid: SERVICE_TEMPLATES[slot.serviceKey] }
+				{
+					status: pricing.quote ? "Quote" : "Work Order",
+					// Templates only on a real Work Order. They default to Work Order and
+					// the template endpoint ignores `status`, so using one for a quote
+					// leaves the job as a Work Order unless a follow-up update lands.
+					templateUuid: pricing.quote ? undefined : SERVICE_TEMPLATES[slot.serviceKey],
+				}
 			);
 			jobUuid = res && res.jobUuid;
 			jobUrl = res && res.jobUrl;

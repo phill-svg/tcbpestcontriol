@@ -179,40 +179,25 @@ export async function createServiceM8Lead(env, lead, opts = {}) {
 		}
 	}
 
-	// 3. Create the Quote job + its job contact. Cloned from the service's job
-	//    template when there is one, so an enquiry lands with the same checklist
-	//    a job raised by hand would have; a template failure falls back to a
-	//    plain create rather than losing the lead.
-	let jobUuid = null;
-	if (opts.templateUuid) {
-		try {
-			jobUuid = await sm8CreateFromTemplate(env, opts.templateUuid, {
-				company_uuid: companyUuid,
-				job_description: description || "",
-				job_address: address || "",
-			});
-			const after = { status: "Quote" };
-			if (lead.categoryUuid) after.category_uuid = lead.categoryUuid;
-			await sm8Update(env, "job", jobUuid, after);
-		} catch (e) {
-			console.error(
-				`ServiceM8 template ${opts.templateUuid} failed, falling back to a plain job create:`,
-				e && (e.stack || e.message)
-			);
-			jobUuid = null;
-		}
-	}
-	if (!jobUuid)
-		jobUuid = await sm8Create(env, "job", {
-			status: "Quote",
-			company_uuid: companyUuid,
-			job_description: description || "",
-			job_address: address || "",
-			// Only sent when the caller knows which category this is
-			// (booking-config's SERVICE_CATEGORIES). A free-text enquiry has no
-			// reliable category, and an empty category_uuid beats a wrong one.
-			...(lead.categoryUuid ? { category_uuid: lead.categoryUuid } : {}),
-		});
+	// 3. Create the Quote job + its job contact.
+	//
+	//    Deliberately NOT built from a job template. Templates in this account
+	//    default to Work Order and POST /jobtemplate/{uuid}/job.json ignores any
+	//    status you send, so a Quote would depend on a follow-up update landing.
+	//    When that update failed, the template job was stranded as a Work Order
+	//    and a second job was created as the Quote -- one custom quote request,
+	//    two jobs. A quote is not a visit yet and does not need the on-site
+	//    checklist; the template goes on when the office turns it into a job.
+	const jobUuid = await sm8Create(env, "job", {
+		status: "Quote",
+		company_uuid: companyUuid,
+		job_description: description || "",
+		job_address: address || "",
+		// Only sent when the caller knows which category this is (booking-config's
+		// SERVICE_CATEGORIES). A free-text enquiry has no reliable category, and
+		// an empty category_uuid is better than a wrong one.
+		...(lead.categoryUuid ? { category_uuid: lead.categoryUuid } : {}),
+	});
 	await sm8Create(env, "jobcontact", {
 		job_uuid: jobUuid,
 		first: first || name || "Website",
@@ -729,17 +714,30 @@ export async function createWorkOrderJob(env, lead, opts = {}) {
 				job_description: description || "",
 				job_address: address || "",
 			});
-			// Everything the template endpoint ignored, applied in a second call.
-			const after = { status };
-			if (lead.categoryUuid) after.category_uuid = lead.categoryUuid;
-			if (Array.isArray(opts.badges) && opts.badges.length) after.badges = opts.badges;
-			await sm8Update(env, "job", jobUuid, after);
 		} catch (e) {
+			// Create failed -- nothing exists yet, so the plain create below is safe.
 			console.error(
-				`ServiceM8 template ${opts.templateUuid} failed, falling back to a plain job create:`,
+				`ServiceM8 template ${opts.templateUuid} create failed, falling back to a plain job create:`,
 				e && (e.stack || e.message)
 			);
 			jobUuid = null;
+		}
+		// The job exists from here. See the note in createServiceM8Lead: a failure
+		// past this point is logged, never retried by falling back, or the customer
+		// ends up with two jobs for one booking.
+		if (jobUuid) {
+			try {
+				// Everything the template endpoint ignored, applied in a second call.
+				const after = { status };
+				if (lead.categoryUuid) after.category_uuid = lead.categoryUuid;
+				if (Array.isArray(opts.badges) && opts.badges.length) after.badges = opts.badges;
+				await sm8Update(env, "job", jobUuid, after);
+			} catch (e) {
+				console.error(
+					`ServiceM8 job ${jobUuid} created from template but status/category NOT applied -- check it in ServiceM8:`,
+					e && (e.stack || e.message)
+				);
+			}
 		}
 	}
 	if (!jobUuid) {

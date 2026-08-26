@@ -11,9 +11,10 @@ import {
 	createJobNote,
 	notifyStaffOfNewJob,
 	allocateJobToStaff,
+	findOpenWorkOrderForCustomer,
 } from "./servicem8.js";
 import { sendBookingNotification, sendBookingConfirmation } from "./email.js";
-import { STAFF_UUID, SERVICE_CATEGORIES } from "./booking-config.js";
+import { STAFF_UUID, SERVICE_CATEGORIES, SERVICE_TEMPLATES } from "./booking-config.js";
 import { sydneyLocalToMs } from "./availability.js";
 
 // Deliberately not a single regex like /^[^\s@]+@[^\s@]+\.[^\s@]+$/ -- since
@@ -118,7 +119,7 @@ export async function createBookingAndNotify(env, ctx, f, sourceLabel, opts = {}
 		const result = await createServiceM8Lead(
 			env,
 			{ name: f.name, email: f.email, phone: f.phone, address: f.address, description, categoryUuid: SERVICE_CATEGORIES[opts.serviceKey] },
-			{ force: true }
+			{ force: true, templateUuid: SERVICE_TEMPLATES[opts.serviceKey] }
 		);
 		jobUrl = result && result.jobUrl;
 		jobUuid = result && result.jobUuid;
@@ -319,22 +320,59 @@ async function bookScheduledSlot(env, ctx, f, sourceLabel, opts) {
 		return { conflict: true };
 	}
 
-	// 3. Create the confirmed Work Order. If ServiceM8 can't be reached the slot
-	//    should go back on the market, so release our lock and report the error.
+	// 3. Create the confirmed Work Order -- unless this customer already has one
+	//    open, in which case the new visit goes onto that job rather than
+	//    spawning a second. A Completed job is finished work and does not count:
+	//    the next booking after it is genuinely new and gets its own job.
+	//
+	//    Only the job is reused. The calendar entry is still placed (it is a real
+	//    second visit at a real second time) but the price is NOT added to the
+	//    existing job's invoice -- one open job now carries two visits, and
+	//    whether that is one charge or two is a call for the office, not for us.
 	let jobUuid = null;
 	let jobUrl = null;
+	let reusedOpenJob = null;
 	try {
-		const res = await createWorkOrderJob(
-			env,
-			{ name: f.name, email: f.email, phone: f.phone, address: f.address, description, categoryUuid: SERVICE_CATEGORIES[slot.serviceKey] },
-			{ status: pricing.quote ? "Quote" : "Work Order" }
-		);
-		jobUuid = res && res.jobUuid;
-		jobUrl = res && res.jobUrl;
+		reusedOpenJob = await findOpenWorkOrderForCustomer(env, { email: f.email, phone: f.phone });
 	} catch (e) {
-		console.error("Booking -> ServiceM8 Work Order failed:", e && (e.stack || e.message));
-		await releaseSlotLock(env, id);
-		return { error: true };
+		// A dedup lookup failure must never cost us a booking -- fall through and
+		// create the job as we always did.
+		console.error("Booking open-job lookup failed (creating a new job):", e && (e.stack || e.message));
+	}
+	if (reusedOpenJob) {
+		jobUuid = reusedOpenJob.jobUuid;
+		jobUrl = reusedOpenJob.jobUrl;
+		try {
+			await createJobNote(
+				env,
+				jobUuid,
+				[
+					`Another online booking came in for this customer on ${confirmedTime}.`,
+					description,
+					pricing.quote || pricing.amount == null
+						? ""
+						: `NOT added to this job's invoice -- $${pricing.amount} still to be priced by the office.`,
+				]
+					.filter(Boolean)
+					.join("\n")
+			);
+		} catch (e) {
+			console.error("Booking reuse note failed (booking still made):", e && (e.stack || e.message));
+		}
+	} else {
+		try {
+			const res = await createWorkOrderJob(
+				env,
+				{ name: f.name, email: f.email, phone: f.phone, address: f.address, description, categoryUuid: SERVICE_CATEGORIES[slot.serviceKey] },
+				{ status: pricing.quote ? "Quote" : "Work Order", templateUuid: SERVICE_TEMPLATES[slot.serviceKey] }
+			);
+			jobUuid = res && res.jobUuid;
+			jobUrl = res && res.jobUrl;
+		} catch (e) {
+			console.error("Booking -> ServiceM8 Work Order failed:", e && (e.stack || e.message));
+			await releaseSlotLock(env, id);
+			return { error: true };
+		}
 	}
 
 	// 4. Schedule it on the calendar. If THIS fails the job already exists, so we
@@ -376,7 +414,7 @@ async function bookScheduledSlot(env, ctx, f, sourceLabel, opts) {
 	//     logged and flagged to the office -- never treated as a booking failure.
 	//     Skipped entirely for a custom-quote booking, which has no fixed amount.
 	let lineItemFailed = false;
-	if (!pricing.quote && pricing.amount != null) {
+	if (!reusedOpenJob && !pricing.quote && pricing.amount != null) {
 		try {
 			await createInvoiceLineItem(env, {
 				jobUuid,
@@ -402,6 +440,9 @@ async function bookScheduledSlot(env, ctx, f, sourceLabel, opts) {
 	const noteWarning = await attachCustomerNote(env, jobUuid, f);
 
 	const warning = [
+		reusedOpenJob
+			? `⚠ Customer already had an open job (${reusedOpenJob.generatedJobId || reusedOpenJob.jobUuid}) -- this visit was added to it, and the ${pricing.quote || pricing.amount == null ? "price" : `$${pricing.amount}`} has NOT been put on its invoice.`
+			: "",
 		schedulingFailed ? "⚠ Booking created but auto-scheduling failed — set the time in ServiceM8 manually." : "",
 		lineItemFailed ? `⚠ Couldn't add the $${pricing.amount} price to the ServiceM8 invoice — add it manually.` : "",
 		noteWarning,

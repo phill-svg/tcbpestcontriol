@@ -66,6 +66,32 @@ export const SERVICE_LABELS = {
 // UUIDs are read straight off the ServiceM8 account (Settings > Job
 // Categories) -- a name isn't enough, the API wants the uuid. A service with
 // no entry here simply gets no category rather than a guessed one.
+// ServiceM8 job template for each bookable service. Creating a job FROM a
+// template (POST /jobtemplate/{uuid}/job.json) clones its checklists, tasks,
+// materials and custom fields, which is what an online booking was missing:
+// a job created by hand off a template arrived with a service-report
+// checklist, one created by the website arrived bare.
+//
+// Note these are TEMPLATES, not the categories above -- ServiceM8 keeps the
+// two separate and the names differ (the 'Premium Pest Treatment' category
+// pairs with the 'Premium Control Treatment' template). A service with no
+// entry here falls back to a plain job create, exactly as before.
+export const SERVICE_TEMPLATES = {
+	"general-pest": "4122de2a-6289-46e5-9b26-2319a3e5c2ed", // Premium Control Treatment
+	"ants-spiders-roaches": "4122de2a-6289-46e5-9b26-2319a3e5c2ed", // Premium Control Treatment
+	"wasps-bees": "4122de2a-6289-46e5-9b26-2319a3e5c2ed", // Premium Control Treatment
+	"rodents": "1e590dc3-57d5-468b-a752-232d13aebcfd", // Rodent Pest Treatment
+	"termite-inspection": "d44e1074-edc9-4e55-82aa-2319a559b6cd", // Termite Inspection
+	"termite-treatment": "ad68a5b4-ded4-479e-b240-235c3f04a14d", // Termite Treatment
+};
+
+// Badges to stamp on a job created from the website, by service. Left empty
+// deliberately: the templates above are expected to carry their own badges,
+// and the API reference lists only tasks/materials/checklists/quotes/custom
+// fields as cloned -- badges are not named either way. Fill a service in here
+// if a booking turns up without the badges its template should have applied;
+// setting the same badge twice is harmless.
+export const SERVICE_BADGES = {};
 export const SERVICE_CATEGORIES = {
 	"general-pest": "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment
 	"ants-spiders-roaches": "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment

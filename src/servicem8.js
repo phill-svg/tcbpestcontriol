@@ -179,17 +179,40 @@ export async function createServiceM8Lead(env, lead, opts = {}) {
 		}
 	}
 
-	// 3. Create the Quote job + its job contact.
-	const jobUuid = await sm8Create(env, "job", {
-		status: "Quote",
-		company_uuid: companyUuid,
-		job_description: description || "",
-		job_address: address || "",
-		// Only sent when the caller knows which category this is (booking-config's
-		// SERVICE_CATEGORIES). A free-text enquiry has no reliable category, and
-		// an empty category_uuid is better than a wrong one.
-		...(lead.categoryUuid ? { category_uuid: lead.categoryUuid } : {}),
-	});
+	// 3. Create the Quote job + its job contact. Cloned from the service's job
+	//    template when there is one, so an enquiry lands with the same checklist
+	//    a job raised by hand would have; a template failure falls back to a
+	//    plain create rather than losing the lead.
+	let jobUuid = null;
+	if (opts.templateUuid) {
+		try {
+			jobUuid = await sm8CreateFromTemplate(env, opts.templateUuid, {
+				company_uuid: companyUuid,
+				job_description: description || "",
+				job_address: address || "",
+			});
+			const after = { status: "Quote" };
+			if (lead.categoryUuid) after.category_uuid = lead.categoryUuid;
+			await sm8Update(env, "job", jobUuid, after);
+		} catch (e) {
+			console.error(
+				`ServiceM8 template ${opts.templateUuid} failed, falling back to a plain job create:`,
+				e && (e.stack || e.message)
+			);
+			jobUuid = null;
+		}
+	}
+	if (!jobUuid)
+		jobUuid = await sm8Create(env, "job", {
+			status: "Quote",
+			company_uuid: companyUuid,
+			job_description: description || "",
+			job_address: address || "",
+			// Only sent when the caller knows which category this is
+			// (booking-config's SERVICE_CATEGORIES). A free-text enquiry has no
+			// reliable category, and an empty category_uuid beats a wrong one.
+			...(lead.categoryUuid ? { category_uuid: lead.categoryUuid } : {}),
+		});
 	await sm8Create(env, "jobcontact", {
 		job_uuid: jobUuid,
 		first: first || name || "Website",
@@ -571,6 +594,83 @@ export async function readStaffOccupancy(env, fromMs, toMs) {
 //                         the fixed online price -- everything else about the
 //                         flow (slot locked, jobactivity scheduled) is unchanged.
 // Returns { jobUuid, jobUrl }.
+// Updates fields on an existing record. ServiceM8 takes a POST to the record
+// URL for edits as well as creates, so this mirrors sm8Create but targets one
+// uuid and doesn't expect a new record id back.
+async function sm8Update(env, resource, uuid, body) {
+	const res = await fetch(`${BASE}/${resource}/${uuid}.json`, {
+		method: "POST",
+		headers: headers(env),
+		body: JSON.stringify(body),
+	});
+	if (!res.ok) {
+		const detail = await res.text().catch(() => "");
+		const error = new Error("ServiceM8 UPDATE " + resource + " -> " + res.status + " " + detail.slice(0, 200));
+		error.status = res.status;
+		error.detail = detail.slice(0, 300);
+		throw error;
+	}
+	return true;
+}
+
+// Creates a job by cloning a job template, which is the only way to get the
+// template's checklists/tasks/materials onto it. Only job_description,
+// job_address and company_uuid can be set in this call -- the API ignores
+// every other field -- so status, category and badges are applied by the
+// caller afterwards.
+//
+// Returns the new job uuid. The uuid normally comes back in x-record-uuid like
+// any other create, but this endpoint has a different shape to /{resource}.json
+// so the response body is read as a fallback rather than assuming the header.
+async function sm8CreateFromTemplate(env, templateUuid, body) {
+	const res = await fetch(`${BASE}/jobtemplate/${templateUuid}/job.json`, {
+		method: "POST",
+		headers: headers(env),
+		body: JSON.stringify(body),
+	});
+	if (!res.ok) {
+		const detail = await res.text().catch(() => "");
+		const error = new Error("ServiceM8 POST jobtemplate -> " + res.status + " " + detail.slice(0, 200));
+		error.status = res.status;
+		error.detail = detail.slice(0, 300);
+		throw error;
+	}
+	const headerUuid = res.headers.get("x-record-uuid");
+	if (headerUuid) return headerUuid;
+	const text = await res.text().catch(() => "");
+	try {
+		const parsed = JSON.parse(text);
+		const fromBody = parsed && (parsed.uuid || parsed.job_uuid);
+		if (fromBody) return fromBody;
+	} catch {}
+	throw new Error("ServiceM8 jobtemplate create returned no record UUID");
+}
+
+// The customer's currently-open Work Order, if they have one.
+//
+// Deliberately separate from findOpenQuoteJob: an enquiry creates a Quote and a
+// booking creates a Work Order, and the two dedup differently. A customer who
+// books again while a job is still open should land on that job rather than a
+// second one; once the previous job is Completed, the next booking is genuinely
+// new work and gets its own.
+export async function findOpenWorkOrderForCustomer(env, { email, phone }) {
+	if (!env.SERVICEM8_API_KEY) return null;
+	const companyUuid = await findExistingCompanyUuid(env, email, phone);
+	if (!companyUuid) return null;
+	const rows = await sm8Get(
+		env,
+		`/job.json?%24filter=${encodeURIComponent(`company_uuid eq '${companyUuid}' and status eq 'Work Order'`)}`
+	);
+	if (!Array.isArray(rows) || !rows.length) return null;
+	const open = rows.find((j) => String(j.active) !== "0");
+	if (!open) return null;
+	return {
+		jobUuid: open.uuid,
+		jobUrl: jobUrl(open.uuid),
+		generatedJobId: open.generated_job_id || null,
+		companyUuid,
+	};
+}
 export async function createWorkOrderJob(env, lead, opts = {}) {
 	if (!env.SERVICEM8_API_KEY) throw new Error("ServiceM8 is not configured (no API key set)");
 
@@ -616,17 +716,44 @@ export async function createWorkOrderJob(env, lead, opts = {}) {
 		});
 	}
 
-	// 2. Create the job (Work Order by default) + its job contact.
-	const jobUuid = await sm8Create(env, "job", {
-		status: opts.status || "Work Order",
-		company_uuid: companyUuid,
-		job_description: description || "",
-		job_address: address || "",
-		// Set from the booked service via booking-config's SERVICE_CATEGORIES, so
-		// an online booking lands in the same category the office would have
-		// picked by hand. Omitted entirely when the service has no mapping.
-		...(lead.categoryUuid ? { category_uuid: lead.categoryUuid } : {}),
-	});
+	// 2. Create the job. When the service maps to a job template, clone that
+	//    template so the job arrives with its checklists and tasks -- then set
+	//    the fields the template endpoint ignores. A template failure falls back
+	//    to a plain create: a booking must never be lost over a missing checklist.
+	const status = opts.status || "Work Order";
+	let jobUuid = null;
+	if (opts.templateUuid) {
+		try {
+			jobUuid = await sm8CreateFromTemplate(env, opts.templateUuid, {
+				company_uuid: companyUuid,
+				job_description: description || "",
+				job_address: address || "",
+			});
+			// Everything the template endpoint ignored, applied in a second call.
+			const after = { status };
+			if (lead.categoryUuid) after.category_uuid = lead.categoryUuid;
+			if (Array.isArray(opts.badges) && opts.badges.length) after.badges = opts.badges;
+			await sm8Update(env, "job", jobUuid, after);
+		} catch (e) {
+			console.error(
+				`ServiceM8 template ${opts.templateUuid} failed, falling back to a plain job create:`,
+				e && (e.stack || e.message)
+			);
+			jobUuid = null;
+		}
+	}
+	if (!jobUuid) {
+		jobUuid = await sm8Create(env, "job", {
+			status,
+			company_uuid: companyUuid,
+			job_description: description || "",
+			job_address: address || "",
+			// Set from the booked service via booking-config's SERVICE_CATEGORIES,
+			// so an online booking lands in the same category the office would have
+			// picked by hand. Omitted entirely when the service has no mapping.
+			...(lead.categoryUuid ? { category_uuid: lead.categoryUuid } : {}),
+		});
+	}
 	await sm8Create(env, "jobcontact", {
 		job_uuid: jobUuid,
 		first: first || name || "Website",

@@ -85,12 +85,19 @@ export const SERVICE_TEMPLATES = {
 	"termite-treatment": "ad68a5b4-ded4-479e-b240-235c3f04a14d", // Termite Treatment
 };
 
-// Badges to stamp on a job created from the website, by service. Left empty
-// deliberately: the templates above are expected to carry their own badges,
-// and the API reference lists only tasks/materials/checklists/quotes/custom
-// fields as cloned -- badges are not named either way. Fill a service in here
-// if a booking turns up without the badges its template should have applied;
-// setting the same badge twice is harmless.
+// Badges to stamp on a job created from the website, by service.
+//
+// Empty on purpose, and confirmed empty-able: cloning a template DOES carry
+// its badges across, even though the API reference lists only tasks,
+// materials, checklists, quotes and custom fields as the cloned entities.
+// Verified live 2026-08-26 -- a booking built from its template arrived with
+// the badges set, while nothing in this file sent any.
+//
+// So set badges on the TEMPLATE in ServiceM8, not here. This map is the
+// escape hatch for a badge that has to vary by service in a way the template
+// cannot express; anything in it is applied by the follow-up update in
+// createWorkOrderJob, and setting a badge the template already added is
+// harmless.
 export const SERVICE_BADGES = {};
 export const SERVICE_CATEGORIES = {
 	"general-pest": "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment

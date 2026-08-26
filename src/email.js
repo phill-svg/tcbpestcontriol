@@ -167,7 +167,8 @@ export async function sendBookingConfirmation(env, booking, label = "booking") {
 		`Hi ${first},\n\n` +
 		`${opening}\n\n` +
 		(priceBit ? `${priceBit}\n\n` : "") +
-		`Need us sooner? Call 02 6105 9771 (Mon-Sat 8am-5pm).\n\n` +
+		`please visit www.tcbpestcontrolcanberra.com.au/preparation for all preparation details
+		Need us sooner? Call 02 6105 9771 (Mon-Sat 8am-5pm).\n\n` +
 		`-- TCB Pest Control Canberra`;
 
 	const html =

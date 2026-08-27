@@ -3,20 +3,6 @@
 <html lang="en-AU">
 <head>
 <meta charset="utf-8"/><link as="font" crossorigin href="/assets/fonts/inter-var.woff2" rel="preload" type="font/woff2"/><link as="font" crossorigin href="/assets/fonts/space-grotesk.woff2" rel="preload" type="font/woff2"/><link as="font" crossorigin href="/assets/fonts/ibm-plex-mono-400.woff2" rel="preload" type="font/woff2"/>
-<!-- Google tag (gtag.js) -- loaded eagerly: Google's tag detection and Tag
-     Assistant scan the served HTML, so a script injected later from JS reads as
-     an untagged page. Eager loading also captures visitors who leave before the
-     deferred block below would have fired. Both scripts are async, so neither
-     blocks parsing or rendering. -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-P3FB9505V3"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  window.gtag = gtag;
-  gtag("js", new Date());
-  gtag("config", "G-P3FB9505V3");
-  gtag("config", "G-00992RETSJ");
-</script>
 <!-- Google Tag Manager -->
 <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -29,31 +15,41 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
      the main thread during initial render -->
 <script>
 (function () {
-  var ran = false;
+  var pixelLoaded = false, chatLoaded = false;
   var events = ["scroll", "keydown", "mousemove", "touchstart", "pointerdown"];
-  function run() {
-    if (ran) return;
-    ran = true;
-    events.forEach(function (ev) { window.removeEventListener(ev, run); });
-    clearTimeout(timer);
-  var argrowScript = document.createElement("script");
-  argrowScript.src = "https://app.argrow.ai/api/s/g_c5hQeg_B7haDW1fDhu3eAC8N3WzX3E.js";
-  argrowScript.async = true;
-  document.body.appendChild(argrowScript);
-
-  !function(f,b,e,v,n,t,s)
-  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version="2.0";
-  n.queue=[];t=b.createElement(e);t.async=!0;
-  t.src=v;s=b.getElementsByTagName(e)[0];
-  s.parentNode.insertBefore(t,s)}(window, document,"script",
-  "https://connect.facebook.net/en_US/fbevents.js");
-  fbq("init", "1363820809022895");
-  fbq("track", "PageView");
+  function loadPixel() {
+    if (pixelLoaded) return;
+    pixelLoaded = true;
+    !function(f,b,e,v,n,t,s)
+    {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+    if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version="2.0";
+    n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t,s)}(window, document,"script",
+    "https://connect.facebook.net/en_US/fbevents.js");
+    fbq("init", "1363820809022895");
+    fbq("track", "PageView");
   }
-  events.forEach(function (ev) { window.addEventListener(ev, run, { passive: true, once: true }); });
-  var timer = setTimeout(run, 5000);
+  function loadChat() {
+    if (chatLoaded) return;
+    chatLoaded = true;
+    var argrowScript = document.createElement("script");
+    argrowScript.src = "https://app.argrow.ai/api/s/g_c5hQeg_B7haDW1fDhu3eAC8N3WzX3E.js";
+    argrowScript.async = true;
+    document.body.appendChild(argrowScript);
+  }
+  function onInteract() {
+    events.forEach(function (ev) { window.removeEventListener(ev, onInteract); });
+    clearTimeout(timer);
+    loadPixel();
+    loadChat();
+  }
+  events.forEach(function (ev) { window.addEventListener(ev, onInteract, { passive: true, once: true }); });
+  // Chat widget loads only after genuine interaction so its text (e.g. "Chat with us")
+  // is never rendered into the DOM that Googlebot indexes and pulls into search snippets.
+  // The Meta Pixel still fires on the timeout fallback, so ad-tracking coverage is unchanged.
+  var timer = setTimeout(loadPixel, 5000);
 })();
 </script>
 <noscript><img alt="" height="1" width="1" style="display:none"

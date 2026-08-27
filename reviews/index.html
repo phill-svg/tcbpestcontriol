@@ -3,20 +3,6 @@
 <html lang="en-AU">
 <head>
 <meta charset="utf-8"/><link as="font" crossorigin href="/assets/fonts/inter-var.woff2" rel="preload" type="font/woff2"/><link as="font" crossorigin href="/assets/fonts/space-grotesk.woff2" rel="preload" type="font/woff2"/><link as="font" crossorigin href="/assets/fonts/ibm-plex-mono-400.woff2" rel="preload" type="font/woff2"/>
-<!-- Google tag (gtag.js) -- loaded eagerly: Google's tag detection and Tag
-     Assistant scan the served HTML, so a script injected later from JS reads as
-     an untagged page. Eager loading also captures visitors who leave before the
-     deferred block below would have fired. Both scripts are async, so neither
-     blocks parsing or rendering. -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-P3FB9505V3"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  window.gtag = gtag;
-  gtag("js", new Date());
-  gtag("config", "G-P3FB9505V3");
-  gtag("config", "G-00992RETSJ");
-</script>
 <!-- Google Tag Manager -->
 <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -35,15 +21,14 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
     if (ran) return;
     ran = true;
     events.forEach(function (ev) { window.removeEventListener(ev, run); });
-    clearTimeout(timer);
   var argrowScript = document.createElement("script");
   argrowScript.src = "https://app.argrow.ai/api/s/g_c5hQeg_B7haDW1fDhu3eAC8N3WzX3E.js";
   argrowScript.async = true;
   document.body.appendChild(argrowScript);
-
   }
+  // Chat widget loads only after genuine interaction so its text (e.g. "Chat with us")
+  // is never rendered into the DOM that Googlebot indexes and pulls into search snippets.
   events.forEach(function (ev) { window.addEventListener(ev, run, { passive: true, once: true }); });
-  var timer = setTimeout(run, 5000);
 })();
 </script>
 

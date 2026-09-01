@@ -1,0 +1,277 @@
+/* Suburb page redesign — components shared by the alternate location-page
+   layouts (Heritage Story, Symptom Spotter, New Build Radius, Local FAQ Hub).
+   Reuses the existing tokens/section system; adds only the pieces those
+   layouts need that .grid-cards / .tile-grid don't already cover. */
+
+.hero.diagnostic {
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Pull-quote — Heritage Story */
+.story-quote {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  border-top: 1px solid var(--line);
+  padding-top: 2.5rem;
+}
+.story-quote .rule {
+  width: 3px;
+  align-self: stretch;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+.story-quote p {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1.375rem;
+  line-height: 1.45;
+  max-width: 44rem;
+}
+.story-quote .mark {
+  color: var(--accent);
+}
+
+/* Numbered list — Heritage Story local-pests */
+.numbered-list {
+  display: flex;
+  flex-direction: column;
+}
+.numbered-row {
+  display: grid;
+  grid-template-columns: 3rem 1fr;
+  gap: 1.25rem;
+  padding-block: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+.numbered-row:last-child {
+  border-bottom: 1px solid var(--line);
+}
+.numbered-row .num {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--accent);
+}
+.numbered-row h3 {
+  font-weight: 700;
+  font-size: 1.0625rem;
+}
+.numbered-row p {
+  margin-top: 0.375rem;
+  color: var(--ink-dim);
+  max-width: 40rem;
+}
+
+/* Checklist — Symptom Spotter */
+.checklist-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+@media (min-width: 640px) {
+  .checklist-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.checklist-card {
+  display: flex;
+  gap: 0.875rem;
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  padding: 1.375rem;
+  background: var(--bg-elevated);
+}
+.checklist-card .box {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 0.25rem;
+  border: 1.6px solid var(--line);
+}
+.checklist-card h3 {
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+.checklist-card p {
+  margin-top: 0.375rem;
+  font-size: 0.8125rem;
+  color: var(--ink-dim);
+}
+
+/* Process steps — Symptom Spotter */
+.process-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  position: relative;
+}
+.process-steps::before {
+  content: "";
+  position: absolute;
+  top: 1.125rem;
+  left: 16.6%;
+  right: 16.6%;
+  height: 1px;
+  background: var(--line);
+}
+.process-step {
+  text-align: center;
+  position: relative;
+  padding-inline: 1rem;
+}
+.process-step .badge {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 99px;
+  background: var(--accent);
+  color: var(--ink-on-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  margin-inline: auto;
+  position: relative;
+}
+.process-step h3 {
+  font-weight: 700;
+  font-size: 0.875rem;
+  margin-top: 0.875rem;
+}
+.process-step p {
+  font-size: 0.8125rem;
+  color: var(--ink-dim);
+  margin-top: 0.375rem;
+}
+
+/* Spec strip — New Build Radius */
+.spec-strip {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+@media (min-width: 640px) {
+  .spec-strip {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+.spec-item {
+  padding: 1.375rem 1.25rem;
+  border-right: 1px solid var(--line);
+}
+.spec-item:last-child {
+  border-right: none;
+}
+.spec-item .label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.spec-item .value {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.0625rem;
+  margin-top: 0.375rem;
+}
+
+/* Radius diagram — New Build Radius */
+.radius-diagram {
+  position: relative;
+  aspect-ratio: 1;
+  max-width: 22rem;
+  margin-inline: auto;
+}
+.radius-diagram .pin-label {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-dim);
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+/* Pests-as-table — New Build Radius local-pests */
+.pests-table {
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  overflow: hidden;
+}
+.pests-table .row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.25rem;
+  padding: 1.125rem 1.25rem;
+  border-top: 1px solid var(--line);
+}
+.pests-table .row:first-child {
+  border-top: none;
+}
+@media (min-width: 640px) {
+  .pests-table .row {
+    grid-template-columns: 11rem 1fr;
+    gap: 1.25rem;
+    align-items: baseline;
+  }
+}
+.pests-table .row.head {
+  background: var(--bg-soft);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.pests-table .row .pest-name {
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+.pests-table .row .why {
+  font-size: 0.8125rem;
+  color: var(--ink-dim);
+}
+
+/* Segmented tabs (cosmetic) — Local FAQ Hub */
+.segmented-tabs {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: 4px;
+  flex-wrap: wrap;
+}
+.segmented-tabs .tab {
+  padding: 0.55rem 1.125rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 99px;
+  color: var(--ink-muted);
+}
+.segmented-tabs .tab.is-active {
+  background: var(--accent);
+  color: var(--ink-on-accent);
+}
+
+/* Compact row-list — Local FAQ Hub local-pests */
+.pests-rowlist .row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.pests-rowlist .row:last-child {
+  border-bottom: 1px solid var(--line);
+}
+.pests-rowlist .row .name {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+.pests-rowlist .row .why {
+  font-size: 0.8125rem;
+  color: var(--ink-dim);
+}

@@ -33,6 +33,7 @@ const files = [
 	"08-chat-widget.css", // customer-facing live chat bubble/panel
 	"09-staff-dashboard.css", // /staff-chat admin dashboard
 	"10-pricing.css", // /pricing page
+	"11-suburb-redesign.css", // location-page redesign: quote/numbered-list/checklist/process/spec/radius/table/tabs/rowlist
 ];
 
 const missing = files.filter((f) => !readdirSync(srcDir).includes(f));

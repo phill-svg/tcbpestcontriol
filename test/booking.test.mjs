@@ -8,7 +8,15 @@ import assert from "node:assert/strict";
 
 import { formatConfirmedTime } from "../src/booking.js";
 import { badgeField } from "../src/servicem8.js";
-import { SERVICE_BADGES } from "../src/booking-config.js";
+import {
+	SERVICES,
+	SERVICE_BADGES,
+	SERVICE_CATEGORIES,
+	SERVICE_DURATIONS,
+	SERVICE_LABELS,
+	SERVICE_TEMPLATES,
+	isBookableService,
+} from "../src/booking-config.js";
 import { msToSydneyParts, sydneyLocalToMs } from "../src/availability.js";
 
 test("anchor sanity: 2026-08-11 09:00 really is a Sydney Tuesday", () => {
@@ -78,5 +86,60 @@ test("every uuid in SERVICE_BADGES is a real badge uuid, not a name", () => {
 	for (const [service, badges] of Object.entries(SERVICE_BADGES)) {
 		assert.ok(Array.isArray(badges), `${service} must map to an array of uuids`);
 		for (const uuid of badges) assert.match(uuid, UUID, `${service} has a non-uuid badge: ${uuid}`);
+	}
+});
+
+// --- service definitions ----------------------------------------------------
+//
+// These guard completeness, not values. `termite-treatment` had a template but
+// no category for a week because the maps were separate objects and nothing
+// checked they lined up; SERVICES is one row per service so that a gap shows,
+// and this fails if one is left half-filled.
+
+test("every bookable service is fully defined", () => {
+	const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+	const keys = Object.keys(SERVICES);
+	assert.ok(keys.length, "SERVICES must not be empty");
+
+	for (const [key, svc] of Object.entries(SERVICES)) {
+		assert.ok(svc.label && typeof svc.label === "string", `${key} needs a label`);
+		assert.ok(Number.isFinite(svc.durationMin) && svc.durationMin > 0, `${key} needs a positive durationMin`);
+		assert.ok(Array.isArray(svc.badges), `${key} badges must be an array (use [] for none)`);
+		// null is allowed and means "no such record in ServiceM8" -- but a
+		// present value must be a real uuid, never a name.
+		for (const field of ["category", "template"]) {
+			if (svc[field] == null) continue;
+			assert.match(svc[field], UUID, `${key}.${field} must be a uuid, got: ${svc[field]}`);
+		}
+	}
+});
+
+test("a service that files under a category also has one to file under", () => {
+	// The specific gap that shipped: a template with no category meant the job
+	// arrived uncategorised while every other service matched the office's own
+	// filing. Treated as required now -- drop the service from SERVICES rather
+	// than leaving it half-mapped.
+	for (const [key, svc] of Object.entries(SERVICES)) {
+		assert.ok(svc.category, `${key} has no ServiceM8 category -- an online booking would land uncategorised`);
+	}
+});
+
+test("the derived lookups agree with the table they come from", () => {
+	// The rest of the code reads the projections, not SERVICES, so a broken
+	// projection would silently un-map every service.
+	for (const [key, svc] of Object.entries(SERVICES)) {
+		assert.equal(SERVICE_DURATIONS[key], svc.durationMin);
+		assert.equal(SERVICE_LABELS[key], svc.label);
+		assert.equal(SERVICE_CATEGORIES[key], svc.category);
+		assert.equal(SERVICE_TEMPLATES[key], svc.template);
+		assert.deepEqual(SERVICE_BADGES[key], svc.badges);
+	}
+	assert.deepEqual(Object.keys(SERVICE_DURATIONS), Object.keys(SERVICES));
+});
+
+test("isBookableService accepts every defined service and nothing else", () => {
+	for (const key of Object.keys(SERVICES)) assert.ok(isBookableService(key), `${key} should be bookable`);
+	for (const key of ["", "possums", "general pest", "__proto__"]) {
+		assert.equal(isBookableService(key), false, `${key} must not be bookable`);
 	}
 });

@@ -38,84 +38,127 @@ export const ONLINE_HOURS = {
 	6: [["08:00", "12:00"]], // Sat
 };
 
-// Duration (minutes) of each bookable service. ONLY these five keys are
-// bookable online; anything else is rejected before it reaches the slot maths.
-export const SERVICE_DURATIONS = {
-	"general-pest": 60,
-	"termite-inspection": 60,
-	"ants-spiders-roaches": 60,
-	"rodents": 60,
-	"wasps-bees": 45,
-	"termite-treatment": 60,
-};
-
-// Human labels for each service key -- used later when creating the ServiceM8
-// job and in the customer/staff emails, kept here so the label can never
-// disagree with the duration it's paired with.
-export const SERVICE_LABELS = {
-	"general-pest": "General pest treatment",
-	"termite-inspection": "Termite inspection",
-	"ants-spiders-roaches": "Ants / Spiders / Cockroaches",
-	"rodents": "Rodents (mice & rats)",
-	"wasps-bees": "Wasps / Bees",
-	"termite-treatment": "Termite Treatment"
-};
-
-// ServiceM8 job category for each bookable service, so a job created from the
-// website lands in the same category the office would have picked by hand.
-// UUIDs are read straight off the ServiceM8 account (Settings > Job
-// Categories) -- a name isn't enough, the API wants the uuid. A service with
-// no entry here simply gets no category rather than a guessed one.
-// ServiceM8 job template for each bookable service. Creating a job FROM a
-// template (POST /jobtemplate/{uuid}/job.json) clones its checklists, tasks,
-// materials and custom fields, which is what an online booking was missing:
-// a job created by hand off a template arrived with a service-report
-// checklist, one created by the website arrived bare.
+// The six services a customer may book online, defined ONCE each. Everything
+// the website needs to make the booking look like the job the office would
+// have raised by hand lives on the one row: how long it takes, what it is
+// called, and the three ServiceM8 records that give the job its identity.
 //
-// Note these are TEMPLATES, not the categories above -- ServiceM8 keeps the
-// two separate and the names differ (the 'Premium Pest Treatment' category
-// pairs with the 'Premium Control Treatment' template). A service with no
-// entry here falls back to a plain job create, exactly as before.
-export const SERVICE_TEMPLATES = {
-	"general-pest": "4122de2a-6289-46e5-9b26-2319a3e5c2ed", // Premium Control Treatment
-	"ants-spiders-roaches": "4122de2a-6289-46e5-9b26-2319a3e5c2ed", // Premium Control Treatment
-	"wasps-bees": "4122de2a-6289-46e5-9b26-2319a3e5c2ed", // Premium Control Treatment
-	"rodents": "1e590dc3-57d5-468b-a752-232d13aebcfd", // Rodent Pest Treatment
-	"termite-inspection": "d44e1074-edc9-4e55-82aa-2319a559b6cd", // Termite Inspection
-	"termite-treatment": "ad68a5b4-ded4-479e-b240-235c3f04a14d", // Termite Treatment
+// One row per service on purpose. These used to be five separate objects all
+// keyed by the same six strings with nothing holding them level, and they
+// drifted: `termite-treatment` had a template but no category, so a termite
+// treatment booked online landed uncategorised while every other service
+// matched. The categories comment had also come adrift from its own map and
+// sat above the templates, which is how that went unnoticed. A missing field
+// is now a visible hole in a row rather than an absence you have to notice.
+//
+// All three uuids are read straight off the ServiceM8 account -- a NAME is
+// silently ignored by the API, which looks exactly like nothing happening.
+//   category : Settings > Job Categories. Where the job files.
+//   template : Settings > Job Templates. Cloned via
+//              POST /jobtemplate/{uuid}/job.json, which brings the checklists,
+//              tasks, materials and custom fields across. Note the names do
+//              not line up with the categories -- the 'Premium Pest Treatment'
+//              category pairs with the 'Premium Control Treatment' template.
+//   badges   : Settings > Badges. A list, since a job can carry several.
+//
+// Any of the three may be null/[]: the job is still created, just without that
+// piece. Nothing here is guessed -- a service with no obvious counterpart in
+// ServiceM8 gets null rather than the nearest-looking record.
+export const SERVICES = {
+	"general-pest": {
+		label: "General pest treatment",
+		durationMin: 60,
+		category: "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment
+		template: "4122de2a-6289-46e5-9b26-2319a3e5c2ed", // Premium Control Treatment
+		badges: [],
+	},
+	"ants-spiders-roaches": {
+		label: "Ants / Spiders / Cockroaches",
+		durationMin: 60,
+		category: "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment
+		template: "4122de2a-6289-46e5-9b26-2319a3e5c2ed", // Premium Control Treatment
+		badges: [],
+	},
+	"wasps-bees": {
+		label: "Wasps / Bees",
+		durationMin: 45,
+		category: "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment
+		template: "4122de2a-6289-46e5-9b26-2319a3e5c2ed", // Premium Control Treatment
+		badges: [],
+	},
+	"rodents": {
+		label: "Rodents (mice & rats)",
+		durationMin: 60,
+		category: "65374f33-5111-4411-976d-232fc24a43ab", // Rodent Treatment
+		template: "1e590dc3-57d5-468b-a752-232d13aebcfd", // Rodent Pest Treatment
+		badges: [],
+	},
+	"termite-inspection": {
+		label: "Termite inspection",
+		durationMin: 60,
+		category: "41bd4556-8fed-4626-b853-241e0b8b876b", // Termite Inspection
+		template: "d44e1074-edc9-4e55-82aa-2319a559b6cd", // Termite Inspection
+		badges: [],
+	},
+	"termite-treatment": {
+		label: "Termite Treatment",
+		durationMin: 60,
+		// Was missing entirely, so these booked in with no category at all while
+		// the other five matched. 'Termite Management Treatment' is the account's
+		// only termite TREATMENT category -- 'Termite Inspection' is the
+		// inspection above, and pairs with a different template.
+		category: "4b0df417-bd76-44a5-b9b9-231843331c3b", // Termite Management Treatment
+		template: "ad68a5b4-ded4-479e-b240-235c3f04a14d", // Termite Treatment
+		badges: [],
+	},
 };
 
-// Badges to stamp on a job created from the website, by service, as a list of
-// badge uuids (Settings > Badges in ServiceM8; a name is not enough).
+// The five lookups the rest of the code already reads, projected off SERVICES
+// so there is still exactly one place to edit a service. Derived rather than
+// hand-written: that is the whole point of the table above.
+const project = (pick) => Object.fromEntries(Object.entries(SERVICES).map(([key, svc]) => [key, pick(svc)]));
+
+// Duration (minutes) of each bookable service. ONLY these keys are bookable
+// online; anything else is rejected before it reaches the slot maths.
+export const SERVICE_DURATIONS = project((s) => s.durationMin);
+
+// Human labels -- used when creating the ServiceM8 job and in the
+// customer/staff emails.
+export const SERVICE_LABELS = project((s) => s.label);
+
+// ServiceM8 job category, so a job created from the website lands in the same
+// category the office would have picked by hand.
+export const SERVICE_CATEGORIES = project((s) => s.category);
+
+// ServiceM8 job template. A service with no template falls back to a plain job
+// create, which still works -- it just arrives without the checklists.
+export const SERVICE_TEMPLATES = project((s) => s.template);
+
+// Badges to stamp on the job.
 //
-// Templates do NOT carry badges. The 2026-08-26 note here said they did, on
-// the strength of one booking that arrived badged -- but ServiceM8 applies a
+// Templates do NOT carry badges, despite a note here that said they did. That
+// was drawn from one booking that arrived badged -- but ServiceM8 applies a
 // CLIENT's badges to every new job for that client, and that booking was for
-// an existing client whose card already had them. A booking from a new
-// customer creates a blank client card, so the job arrives bare: job #966
-// (2026-09-04) cloned its template's "service report" checklist and still had
-// no badges. Job Templates pre-fill requirements, checklists, documentation
-// and materials -- badges are not on that list.
+// an existing client whose card already had them. A new customer gets a blank
+// client card, so the job arrives bare: job #966 (2026-09-04) cloned its
+// template's "service report" checklist and still had no badges. Job Templates
+// pre-fill requirements, checklists, documentation and materials -- badges are
+// not on that list.
 //
-// So a badge that belongs to a SERVICE belongs here. A badge that belongs to a
-// CUSTOMER still belongs on their client card in ServiceM8, where it will be
+// So a badge belonging to a SERVICE goes in the table above. A badge belonging
+// to a CUSTOMER still belongs on their client card in ServiceM8, where it is
 // applied to every future job of theirs automatically.
-//
-// A service with no entry gets no badges. Setting a badge the job already has
-// is harmless.
-export const SERVICE_BADGES = {};
-export const SERVICE_CATEGORIES = {
-	"general-pest": "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment
-	"ants-spiders-roaches": "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment
-	"wasps-bees": "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment
-	"rodents": "65374f33-5111-4411-976d-232fc24a43ab", // Rodent Treatment
-	"termite-inspection": "41bd4556-8fed-4626-b853-241e0b8b876b", // Termite Inspection
-};
+export const SERVICE_BADGES = project((s) => s.badges);
 
 // True only for a service the widget is allowed to book. Callers validate up
 // front; availability.js also guards defensively.
+//
+// hasOwn, not `in`: `in` walks the prototype chain, so "__proto__",
+// "constructor" and "toString" all passed this check. The request then got as
+// far as the slot maths with SERVICE_DURATIONS[key] being an inherited
+// function or Object.prototype instead of a number.
 export function isBookableService(key) {
-	return key in SERVICE_DURATIONS;
+	return Object.hasOwn(SERVICES, key);
 }
 
 // Fixed online prices, keyed the same as SERVICE_DURATIONS/SERVICE_LABELS.

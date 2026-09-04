@@ -184,6 +184,14 @@ export async function sendBookingConfirmation(env, booking, label = "booking") {
 	return env.EMAIL.send({
 		from: FROM_ADDRESS,
 		to: booking.email,
+		// Blind copy to the office so there is a record of exactly what the
+		// customer was sent. Cloudflare Email Sending keeps no sent folder, so
+		// without this the customer's copy lives only in their inbox and there is
+		// no way to check the wording, price or time they actually got. Blind
+		// rather than cc so the customer never sees an internal address on their
+		// own confirmation. Costs the office one extra email per booking,
+		// alongside the "New online booking" notification.
+		bcc: OFFICE_EMAIL,
 		reply_to: OFFICE_EMAIL,
 		subject,
 		text,

@@ -85,19 +85,24 @@ export const SERVICE_TEMPLATES = {
 	"termite-treatment": "ad68a5b4-ded4-479e-b240-235c3f04a14d", // Termite Treatment
 };
 
-// Badges to stamp on a job created from the website, by service.
+// Badges to stamp on a job created from the website, by service, as a list of
+// badge uuids (Settings > Badges in ServiceM8; a name is not enough).
 //
-// Empty on purpose, and confirmed empty-able: cloning a template DOES carry
-// its badges across, even though the API reference lists only tasks,
-// materials, checklists, quotes and custom fields as the cloned entities.
-// Verified live 2026-08-26 -- a booking built from its template arrived with
-// the badges set, while nothing in this file sent any.
+// Templates do NOT carry badges. The 2026-08-26 note here said they did, on
+// the strength of one booking that arrived badged -- but ServiceM8 applies a
+// CLIENT's badges to every new job for that client, and that booking was for
+// an existing client whose card already had them. A booking from a new
+// customer creates a blank client card, so the job arrives bare: job #966
+// (2026-09-04) cloned its template's "service report" checklist and still had
+// no badges. Job Templates pre-fill requirements, checklists, documentation
+// and materials -- badges are not on that list.
 //
-// So set badges on the TEMPLATE in ServiceM8, not here. This map is the
-// escape hatch for a badge that has to vary by service in a way the template
-// cannot express; anything in it is applied by the follow-up update in
-// createWorkOrderJob, and setting a badge the template already added is
-// harmless.
+// So a badge that belongs to a SERVICE belongs here. A badge that belongs to a
+// CUSTOMER still belongs on their client card in ServiceM8, where it will be
+// applied to every future job of theirs automatically.
+//
+// A service with no entry gets no badges. Setting a badge the job already has
+// is harmless.
 export const SERVICE_BADGES = {};
 export const SERVICE_CATEGORIES = {
 	"general-pest": "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment

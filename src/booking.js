@@ -14,7 +14,7 @@ import {
 	findOpenWorkOrderForCustomer,
 } from "./servicem8.js";
 import { sendBookingNotification, sendBookingConfirmation } from "./email.js";
-import { STAFF_UUID, SERVICE_CATEGORIES, SERVICE_TEMPLATES } from "./booking-config.js";
+import { STAFF_UUID, SERVICE_BADGES, SERVICE_CATEGORIES, SERVICE_TEMPLATES } from "./booking-config.js";
 import { sydneyLocalToMs } from "./availability.js";
 
 // Deliberately not a single regex like /^[^\s@]+@[^\s@]+\.[^\s@]+$/ -- since
@@ -370,6 +370,11 @@ async function bookScheduledSlot(env, ctx, f, sourceLabel, opts) {
 					// the template endpoint ignores `status`, so using one for a quote
 					// leaves the job as a Work Order unless a follow-up update lands.
 					templateUuid: pricing.quote ? undefined : SERVICE_TEMPLATES[slot.serviceKey],
+					// SERVICE_BADGES was added and documented as "wired in", but nothing
+					// ever read it -- this is the line that was missing, so filling the
+					// map in had no effect. Unlike templates, badges apply on the quote
+					// path too: a quote for a termite treatment is still a termite job.
+					badges: SERVICE_BADGES[slot.serviceKey],
 				}
 			);
 			jobUuid = res && res.jobUuid;

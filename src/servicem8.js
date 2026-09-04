@@ -598,6 +598,21 @@ async function sm8Update(env, resource, uuid, body) {
 	return true;
 }
 
+// `{ badges }` for a job create/update, or `{}` when there are none to set.
+//
+// ServiceM8 stores a job's badges as a JSON-encoded array of badge uuids
+// rather than a bare array, so the encoding happens here -- that keeps
+// SERVICE_BADGES in booking-config a plain readable list of uuids, and keeps
+// the two call sites below from disagreeing about the shape.
+//
+// Returning an object rather than a value means "no badges" spreads to nothing
+// and the field is left off the request entirely, instead of being sent as an
+// empty "[]" that would clear badges a job already has.
+export function badgeField(badges) {
+	if (!Array.isArray(badges) || !badges.length) return {};
+	return { badges: JSON.stringify(badges) };
+}
+
 // Creates a job by cloning a job template, which is the only way to get the
 // template's checklists/tasks/materials onto it. Only job_description,
 // job_address and company_uuid can be set in this call -- the API ignores
@@ -730,7 +745,7 @@ export async function createWorkOrderJob(env, lead, opts = {}) {
 				// Everything the template endpoint ignored, applied in a second call.
 				const after = { status };
 				if (lead.categoryUuid) after.category_uuid = lead.categoryUuid;
-				if (Array.isArray(opts.badges) && opts.badges.length) after.badges = opts.badges;
+				Object.assign(after, badgeField(opts.badges));
 				await sm8Update(env, "job", jobUuid, after);
 			} catch (e) {
 				console.error(
@@ -750,6 +765,12 @@ export async function createWorkOrderJob(env, lead, opts = {}) {
 			// so an online booking lands in the same category the office would have
 			// picked by hand. Omitted entirely when the service has no mapping.
 			...(lead.categoryUuid ? { category_uuid: lead.categoryUuid } : {}),
+			// Badges belong here too, not only on the template path above: a
+			// service with no template, or a template create that fell back to
+			// this plain create, still needs them. Missing them here is why a
+			// quote-priced booking came out unbadged even once SERVICE_BADGES was
+			// filled in.
+			...badgeField(opts.badges),
 		});
 	}
 	await sm8Create(env, "jobcontact", {

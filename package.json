@@ -5,6 +5,7 @@
 	"scripts": {
 		"build:css": "node scripts/build-css.js",
 		"check:booking": "node scripts/check-booking-config.js",
+		"preview:email": "node scripts/preview-emails.js",
 		"test": "node --test test/*.test.mjs",
 		"build:images": "node scripts/build-image-manifest.js",
 		"build:avif": "node scripts/build-avif.js",

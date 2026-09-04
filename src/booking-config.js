@@ -64,41 +64,65 @@ export const ONLINE_HOURS = {
 // Any of the three may be null/[]: the job is still created, just without that
 // piece. Nothing here is guessed -- a service with no obvious counterpart in
 // ServiceM8 gets null rather than the nearest-looking record.
+// Every website booking carries these four, whatever the service. They are
+// about the booking rather than the pest -- the follow-up cycle, the reminder,
+// the review ask, and marking it as service work -- so they are one shared
+// list rather than the same four uuids typed out six times.
+//
+// A badge that applies to only SOME services goes on that service's row
+// instead; this list is for the ones that genuinely apply to all of them.
+//
+// Frozen because every row below shares this one array: without it, anything
+// that mutated one service's badges would silently change all six.
+//
+// Names are as they read in ServiceM8 (Settings > Badges), including the
+// lowercase "booking reminder" -- the account also has a title-case "Booking
+// Reminder", uuid aa5d3f8f-92f3-4e73-a680-2305278ff81b, which is NOT the one
+// in use. The trailing space in "Review Request " is likewise real. Only the
+// uuid matters to the API, but the comments have to name the right badge or
+// the next person will "fix" them to the wrong one.
+export const WEBSITE_BOOKING_BADGES = Object.freeze([
+	"01a01433-401d-7e29-bef1-d632e9d54d5b", // 1 year auto
+	"1470177d-d5f4-4da5-938c-2305238a49db", // booking reminder
+	"02978e66-1f33-4360-aa73-230d6d85b6db", // Review Request
+	"767ffc6c-099c-4f3d-9efb-2308e993ea5b", // Service
+]);
+
 export const SERVICES = {
 	"general-pest": {
 		label: "General pest treatment",
 		durationMin: 60,
 		category: "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment
 		template: "4122de2a-6289-46e5-9b26-2319a3e5c2ed", // Premium Control Treatment
-		badges: [],
+		badges: WEBSITE_BOOKING_BADGES,
 	},
 	"ants-spiders-roaches": {
 		label: "Ants / Spiders / Cockroaches",
 		durationMin: 60,
 		category: "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment
 		template: "4122de2a-6289-46e5-9b26-2319a3e5c2ed", // Premium Control Treatment
-		badges: [],
+		badges: WEBSITE_BOOKING_BADGES,
 	},
 	"wasps-bees": {
 		label: "Wasps / Bees",
 		durationMin: 45,
 		category: "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment
 		template: "4122de2a-6289-46e5-9b26-2319a3e5c2ed", // Premium Control Treatment
-		badges: [],
+		badges: WEBSITE_BOOKING_BADGES,
 	},
 	"rodents": {
 		label: "Rodents (mice & rats)",
 		durationMin: 60,
 		category: "65374f33-5111-4411-976d-232fc24a43ab", // Rodent Treatment
 		template: "1e590dc3-57d5-468b-a752-232d13aebcfd", // Rodent Pest Treatment
-		badges: [],
+		badges: WEBSITE_BOOKING_BADGES,
 	},
 	"termite-inspection": {
 		label: "Termite inspection",
 		durationMin: 60,
 		category: "41bd4556-8fed-4626-b853-241e0b8b876b", // Termite Inspection
 		template: "d44e1074-edc9-4e55-82aa-2319a559b6cd", // Termite Inspection
-		badges: [],
+		badges: WEBSITE_BOOKING_BADGES,
 	},
 	"termite-treatment": {
 		label: "Termite Treatment",
@@ -109,7 +133,7 @@ export const SERVICES = {
 		// inspection above, and pairs with a different template.
 		category: "4b0df417-bd76-44a5-b9b9-231843331c3b", // Termite Management Treatment
 		template: "ad68a5b4-ded4-479e-b240-235c3f04a14d", // Termite Treatment
-		badges: [],
+		badges: WEBSITE_BOOKING_BADGES,
 	},
 };
 

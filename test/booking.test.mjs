@@ -15,6 +15,7 @@ import {
 	SERVICE_DURATIONS,
 	SERVICE_LABELS,
 	SERVICE_TEMPLATES,
+	WEBSITE_BOOKING_BADGES,
 	isBookableService,
 } from "../src/booking-config.js";
 import { msToSydneyParts, sydneyLocalToMs } from "../src/availability.js";
@@ -142,4 +143,29 @@ test("isBookableService accepts every defined service and nothing else", () => {
 	for (const key of ["", "possums", "general pest", "__proto__"]) {
 		assert.equal(isBookableService(key), false, `${key} must not be bookable`);
 	}
+});
+
+test("every service carries the shared website booking badges", () => {
+	// The four are about the booking rather than the pest, so all six get them.
+	// Asserted against the shared list rather than a copy, so adding a fifth
+	// badge does not need this test edited.
+	for (const key of Object.keys(SERVICES)) {
+		assert.deepEqual(SERVICE_BADGES[key], WEBSITE_BOOKING_BADGES, `${key} should carry the shared badges`);
+	}
+	assert.equal(WEBSITE_BOOKING_BADGES.length, 4);
+});
+
+test("the shared badge list is frozen, so one service cannot mutate the rest", () => {
+	// All six rows share the one array. Without the freeze, a push here would
+	// silently badge every other service too.
+	assert.ok(Object.isFrozen(WEBSITE_BOOKING_BADGES));
+	assert.throws(() => WEBSITE_BOOKING_BADGES.push("nope"), TypeError);
+});
+
+test("a booked service produces the JSON payload ServiceM8 expects", () => {
+	// End to end through the projection: the table's uuids come out as the
+	// encoded string that actually goes on the job.
+	const { badges } = badgeField(SERVICE_BADGES["general-pest"]);
+	assert.equal(typeof badges, "string");
+	assert.deepEqual(JSON.parse(badges), [...WEBSITE_BOOKING_BADGES]);
 });

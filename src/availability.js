@@ -131,7 +131,10 @@ function hhmmToMinutes(hhmm) {
 // before the overlap test. Every in-range OPEN day is returned, even with an
 // empty slots array; closed days (empty ONLINE_HOURS) are omitted entirely.
 export function computeSlots({ occupancy, service, nowMs }) {
-	if (!(service in SERVICE_DURATIONS)) {
+	// hasOwn, not `in`, for the same reason as isBookableService: `in` walks the
+	// prototype chain, so "__proto__" and friends slipped past this guard and
+	// made `duration` an inherited value rather than a number.
+	if (!Object.hasOwn(SERVICE_DURATIONS, service)) {
 		throw new Error(`Unknown service: ${service}`);
 	}
 	const duration = SERVICE_DURATIONS[service];

@@ -379,6 +379,27 @@ document.addEventListener("DOMContentLoaded", function () {
           err.status = r.status;
           throw err;
         }
+        // Tell GA4 a lead actually landed, before touching the DOM so a render
+        // error can't cost us the measurement. This is the only honest place to
+        // count one: GA4's automatic form_submit fires on the submit event,
+        // which is before the Worker has said whether the job was created, so
+        // it counts attempts -- including the ones that hit a taken slot or a
+        // failed Turnstile. Here we know a job exists.
+        //
+        // Guarded because gtag is simply absent whenever an ad blocker eats the
+        // tag, and a missing analytics call must never break a booking that has
+        // already been taken.
+        try {
+          if (typeof window.gtag === "function") {
+            window.gtag("event", "generate_lead", {
+              lead_type: isQuoteMode() ? "quote_request" : "booking",
+              service: payload.service || "(unspecified)",
+            });
+          }
+        } catch (analyticsError) {
+          /* never let reporting break the confirmation */
+        }
+
         // Success: swap the form for the confirmation. A quote request gets an
         // enquiry acknowledgement (no time); a booking gets the confirmed time.
         if (isQuoteMode()) {

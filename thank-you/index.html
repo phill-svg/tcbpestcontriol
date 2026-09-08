@@ -16,6 +16,13 @@
   gtag("js", new Date());
   gtag("config", "G-P3FB9505V3");
   gtag("config", "G-00992RETSJ");
+  // A visitor only reaches this page because handleContactEnquiry accepted the
+  // enquiry and answered 303 -- the redirect is the server confirming the lead
+  // exists. Reporting it as generate_lead puts contact enquiries under the same
+  // key event as bookings and quote requests (see assets/js/booking.js), so one
+  // conversion in GA4 covers every way a lead can arrive and lead_type tells
+  // them apart.
+  gtag("event", "generate_lead", { lead_type: "enquiry" });
 </script>
 <!-- Google Tag Manager -->
 <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':

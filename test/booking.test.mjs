@@ -7,7 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { formatConfirmedTime } from "../src/booking.js";
-import { badgeField } from "../src/servicem8.js";
+import { badgeField, createWorkOrderJob } from "../src/servicem8.js";
 import {
 	SERVICES,
 	SERVICE_BADGES,
@@ -18,7 +18,7 @@ import {
 	WEBSITE_BOOKING_BADGES,
 	isBookableService,
 } from "../src/booking-config.js";
-import { msToSydneyParts, sydneyLocalToMs } from "../src/availability.js";
+import { formatSydneyTimestamp, msToSydneyParts, sydneyLocalToMs } from "../src/availability.js";
 
 test("anchor sanity: 2026-08-11 09:00 really is a Sydney Tuesday", () => {
 	assert.equal(msToSydneyParts(sydneyLocalToMs(2026, 8, 11, 9, 0)).weekday, 2);
@@ -168,4 +168,151 @@ test("a booked service produces the JSON payload ServiceM8 expects", () => {
 	const { badges } = badgeField(SERVICE_BADGES["general-pest"]);
 	assert.equal(typeof badges, "string");
 	assert.deepEqual(JSON.parse(badges), [...WEBSITE_BOOKING_BADGES]);
+});
+
+// --- one booking, one job ---------------------------------------------------
+//
+// POST /jobtemplate/{uuid}/job.json creates the job but doesn't reliably hand
+// back its uuid. createWorkOrderJob used to read that as "the create failed"
+// and make a second, plain job -- which is how one booking put two jobs on the
+// account (ServiceM8 #968 and #969, both 2026-09-07 08:08, one carrying the
+// template's checklist and the other the customer's note and calendar entry).
+//
+// Stubbed at fetch() so the whole create path runs for real. Any request the
+// stub doesn't recognise throws, so a new call has to be added here
+// deliberately rather than silently hitting the network.
+function stubServiceM8({ templateBody = "{}", templateHeaderUuid = null, jobs = [] }) {
+	const calls = [];
+	const reply = (body, headerUuid) => ({
+		ok: true,
+		status: 200,
+		headers: { get: (h) => (h.toLowerCase() === "x-record-uuid" ? headerUuid : null) },
+		json: async () => body,
+		text: async () => (typeof body === "string" ? body : JSON.stringify(body)),
+	});
+
+	globalThis.fetch = async (url, init = {}) => {
+		const method = init.method || "GET";
+		calls.push(`${method} ${String(url).split("/api_1.0")[1]}`);
+		const path = String(url);
+
+		if (method === "GET" && path.includes("/companycontact.json")) return reply([{ email: "pat@example.com", company_uuid: "co-1" }]);
+		if (method === "GET" && path.includes("/job.json")) return reply(jobs);
+		if (method === "POST" && path.includes("/jobtemplate/")) return reply(templateBody, templateHeaderUuid);
+		if (method === "POST" && /\/job\/[^/]+\.json$/.test(path)) return reply({}, null); // update
+		if (method === "POST" && path.endsWith("/jobcontact.json")) return reply({}, "contact-1");
+		if (method === "POST" && path.endsWith("/job.json")) return reply({}, "plain-job-1"); // the duplicate we must not make
+		throw new Error(`unstubbed ServiceM8 call: ${method} ${path}`);
+	};
+	return calls;
+}
+
+const JOB_DESCRIPTION = "General pest treatment (1–3 bedrooms)\nFixed online price: $249 inc GST";
+const LEAD = {
+	name: "Pat Example",
+	email: "pat@example.com",
+	phone: "0412345678",
+	address: "1 Test St, Canberra",
+	description: JOB_DESCRIPTION,
+	categoryUuid: SERVICE_CATEGORIES["general-pest"],
+};
+
+test("a template create with no uuid in the response adopts that job instead of making a second one", async (t) => {
+	const realFetch = globalThis.fetch;
+	t.after(() => {
+		globalThis.fetch = realFetch;
+	});
+
+	const calls = stubServiceM8({
+		// The job the template endpoint made, as the recovery lookup sees it.
+		jobs: [
+			{
+				uuid: "template-job-1",
+				company_uuid: "co-1",
+				job_description: JOB_DESCRIPTION,
+				edit_date: formatSydneyTimestamp(Date.now()),
+				active: 1,
+			},
+		],
+	});
+
+	const res = await createWorkOrderJob({ SERVICEM8_API_KEY: "test" }, LEAD, {
+		templateUuid: SERVICE_TEMPLATES["general-pest"],
+		badges: SERVICE_BADGES["general-pest"],
+	});
+
+	assert.equal(res.jobUuid, "template-job-1");
+	assert.equal(res.warning, "");
+	assert.equal(
+		calls.filter((c) => c === "POST /job.json").length,
+		0,
+		"must not create a second job on top of the one the template already made"
+	);
+});
+
+test("an old job with the same description is not adopted -- that would attach the booking to the wrong job", async (t) => {
+	const realFetch = globalThis.fetch;
+	t.after(() => {
+		globalThis.fetch = realFetch;
+	});
+
+	const calls = stubServiceM8({
+		// Same customer, same service, booked last year: outside the window, so
+		// it is not the job this call just created.
+		jobs: [
+			{
+				uuid: "last-years-job",
+				company_uuid: "co-1",
+				job_description: JOB_DESCRIPTION,
+				edit_date: formatSydneyTimestamp(Date.now() - 365 * 24 * 60 * 60 * 1000),
+				active: 1,
+			},
+		],
+	});
+
+	const res = await createWorkOrderJob({ SERVICEM8_API_KEY: "test" }, LEAD, {
+		templateUuid: SERVICE_TEMPLATES["general-pest"],
+		badges: SERVICE_BADGES["general-pest"],
+	});
+
+	assert.equal(res.jobUuid, "plain-job-1");
+	assert.match(res.warning, /second, empty job/);
+	assert.equal(calls.filter((c) => c === "POST /job.json").length, 1);
+});
+
+test("a uuid in the template response is used as-is, with no recovery lookup", async (t) => {
+	const realFetch = globalThis.fetch;
+	t.after(() => {
+		globalThis.fetch = realFetch;
+	});
+
+	const calls = stubServiceM8({ templateHeaderUuid: "template-job-2" });
+
+	const res = await createWorkOrderJob({ SERVICEM8_API_KEY: "test" }, LEAD, {
+		templateUuid: SERVICE_TEMPLATES["general-pest"],
+		badges: SERVICE_BADGES["general-pest"],
+	});
+
+	assert.equal(res.jobUuid, "template-job-2");
+	assert.equal(res.warning, "");
+	assert.equal(calls.filter((c) => c === "GET /job.json?%24filter=company_uuid%20eq%20'co-1'").length, 0);
+	assert.equal(calls.filter((c) => c === "POST /job.json").length, 0);
+});
+
+test("the template response's own body shapes are read too, so no lookup is needed", async (t) => {
+	const realFetch = globalThis.fetch;
+	t.after(() => {
+		globalThis.fetch = realFetch;
+	});
+
+	for (const [shape, body] of [
+		["bare uuid", { uuid: "body-job" }],
+		["job_uuid", { job_uuid: "body-job" }],
+		["nested job", { job: { uuid: "body-job" } }],
+		["one-element array", [{ uuid: "body-job" }]],
+	]) {
+		stubServiceM8({ templateBody: body });
+		const res = await createWorkOrderJob({ SERVICEM8_API_KEY: "test" }, LEAD, { templateUuid: SERVICE_TEMPLATES["general-pest"] });
+		assert.equal(res.jobUuid, "body-job", `${shape} should give the job uuid`);
+	}
 });

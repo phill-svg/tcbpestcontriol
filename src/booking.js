@@ -331,6 +331,7 @@ async function bookScheduledSlot(env, ctx, f, sourceLabel, opts) {
 	//    whether that is one charge or two is a call for the office, not for us.
 	let jobUuid = null;
 	let jobUrl = null;
+	let jobWarning = "";
 	let reusedOpenJob = null;
 	try {
 		reusedOpenJob = await findOpenWorkOrderForCustomer(env, { email: f.email, phone: f.phone });
@@ -379,6 +380,7 @@ async function bookScheduledSlot(env, ctx, f, sourceLabel, opts) {
 			);
 			jobUuid = res && res.jobUuid;
 			jobUrl = res && res.jobUrl;
+			jobWarning = (res && res.warning) || "";
 		} catch (e) {
 			console.error("Booking -> ServiceM8 Work Order failed:", e && (e.stack || e.message));
 			await releaseSlotLock(env, id);
@@ -454,6 +456,7 @@ async function bookScheduledSlot(env, ctx, f, sourceLabel, opts) {
 		reusedOpenJob
 			? `⚠ Customer already had an open job (${reusedOpenJob.generatedJobId || reusedOpenJob.jobUuid}) -- this visit was added to it, and the ${pricing.quote || pricing.amount == null ? "price" : `$${pricing.amount}`} has NOT been put on its invoice.`
 			: "",
+		jobWarning,
 		schedulingFailed ? "⚠ Booking created but auto-scheduling failed — set the time in ServiceM8 manually." : "",
 		lineItemFailed ? `⚠ Couldn't add the $${pricing.amount} price to the ServiceM8 invoice — add it manually.` : "",
 		noteWarning,

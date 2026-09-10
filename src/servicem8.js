@@ -797,7 +797,7 @@ export async function createWorkOrderJob(env, lead, opts = {}) {
 				// is told, because that is the one case where a stray second job can
 				// still appear and somebody has to delete it.
 				duplicateWarning =
-					"⚠ ServiceM8 may hold a second, empty job for this booking (created from the job template) — check for a duplicate and delete it.";
+					"⚠ ServiceM8 may hold a second, empty job for this booking (created from the job template) — worth a look. What to do with it is the office's call.";
 				console.error("ServiceM8 template job exists but could not be found; a plain create will follow and may duplicate it");
 			}
 		}

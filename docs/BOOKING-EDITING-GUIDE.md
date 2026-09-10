@@ -146,7 +146,8 @@ have picked by hand:
 |---|---|
 | Rodents | Rodent Treatment |
 | Termite inspection | Termite Inspection |
-| General pest, Ants / Spiders / Cockroaches, Wasps / Bees | Premium Pest Treatment |
+| General pest, Ants / Spiders / Cockroaches, Wasps / Bees, End of lease flea treatment | Premium Pest Treatment |
+| Termite Treatment | Termite Management Treatment |
 
 The API wants the UUID, not the name -- read a category's UUID off the
 ServiceM8 account. A service with no entry here gets no category rather than a

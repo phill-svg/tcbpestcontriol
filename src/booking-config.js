@@ -38,13 +38,13 @@ export const ONLINE_HOURS = {
 	6: [["08:00", "12:00"]], // Sat
 };
 
-// The six services a customer may book online, defined ONCE each. Everything
+// The seven services a customer may book online, defined ONCE each. Everything
 // the website needs to make the booking look like the job the office would
 // have raised by hand lives on the one row: how long it takes, what it is
 // called, and the three ServiceM8 records that give the job its identity.
 //
 // One row per service on purpose. These used to be five separate objects all
-// keyed by the same six strings with nothing holding them level, and they
+// keyed by the same strings with nothing holding them level, and they
 // drifted: `termite-treatment` had a template but no category, so a termite
 // treatment booked online landed uncategorised while every other service
 // matched. The categories comment had also come adrift from its own map and
@@ -67,7 +67,7 @@ export const ONLINE_HOURS = {
 // Every website booking carries these four, whatever the service. They are
 // about the booking rather than the pest -- the follow-up cycle, the reminder,
 // the review ask, and marking it as service work -- so they are one shared
-// list rather than the same four uuids typed out six times.
+// list rather than the same four uuids typed out on every row.
 //
 // A badge that applies to only SOME services goes on that service's row
 // instead; this list is for the ones that genuinely apply to all of them.
@@ -135,6 +135,13 @@ export const SERVICES = {
 		template: "ad68a5b4-ded4-479e-b240-235c3f04a14d", // Termite Treatment
 		badges: WEBSITE_BOOKING_BADGES,
 	},
+	"end-of-lease-flea": {
+		label: "End of lease flea treatment",
+		durationMin: 60,
+		category: "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment
+		template: "c72b57d3-d6c8-4deb-9c0e-235f61a0980d", // End of lease flea treatment
+		badges: WEBSITE_BOOKING_BADGES,
+	},
 };
 
 // The five lookups the rest of the code already reads, projected off SERVICES
@@ -200,6 +207,7 @@ export const PRICING = {
 	"rodents": { modifier: "none", price: 289 },
 	"wasps-bees": { modifier: "none", price: 289 },
 	"termite-treatment": { modifier: "none", price: 0 },
+	"end-of-lease-flea": { modifier: "none", price: 169 },
 };
 
 // Question label shown above the modifier <select>, keyed by modifier type.

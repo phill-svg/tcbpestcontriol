@@ -640,10 +640,53 @@ async function sm8CreateFromTemplate(env, templateUuid, body) {
 	const text = await res.text().catch(() => "");
 	try {
 		const parsed = JSON.parse(text);
-		const fromBody = parsed && (parsed.uuid || parsed.job_uuid);
+		// Three shapes seen/plausible for this endpoint: the uuid on the object,
+		// the job nested under `job`, or a one-element array of job records.
+		const record = Array.isArray(parsed) ? parsed[0] : parsed && parsed.job ? parsed.job : parsed;
+		const fromBody = record && (record.uuid || record.job_uuid);
 		if (fromBody) return fromBody;
 	} catch {}
-	throw new Error("ServiceM8 jobtemplate create returned no record UUID");
+	// The POST succeeded, so the job EXISTS -- we just can't name it. Say so on
+	// the error: a caller that treats this like a failed create and makes
+	// another job leaves the account with two jobs for one booking.
+	const error = new Error("ServiceM8 jobtemplate create returned no record UUID");
+	error.jobCreated = true;
+	throw error;
+}
+
+// How far back findJustCreatedJob will look. Generous on purpose -- it is the
+// outer bound on "the job this same call just made", not a guess at how long
+// the create took, and the description + customer match is what actually
+// identifies the job.
+const TEMPLATE_RECOVERY_WINDOW_MS = 10 * 60 * 1000;
+
+// The job the template endpoint just created, found by looking it up.
+//
+// POST /jobtemplate/{uuid}/job.json can create a job and still leave us without
+// its uuid -- the response has a different shape to /{resource}.json, so the
+// x-record-uuid header isn't guaranteed. Falling back to a plain create in that
+// case is what put TWO jobs on the account for one booking: the template job
+// nobody could attach anything to (job #968, 2026-09-07), and the plain one
+// that got the customer note, the calendar entry and the invoice line (#969).
+//
+// Matched on the customer AND the exact description we just sent AND a recency
+// window, so the only job it can adopt is the one this call created. Returns
+// null when there is nothing to adopt -- the signal to go ahead and create.
+async function findJustCreatedJob(env, companyUuid, description) {
+	if (!companyUuid) return null;
+	const rows = await sm8Get(env, `/job.json?%24filter=${encodeURIComponent(`company_uuid eq '${companyUuid}'`)}`);
+	if (!Array.isArray(rows) || !rows.length) return null;
+
+	// ServiceM8 timestamps are "YYYY-MM-DD HH:MM:SS" in the account's local
+	// (Sydney) time, so comparing them as strings is chronological -- the same
+	// property the D1 overlap guard in booking.js relies on.
+	const cutoff = formatSydneyTimestamp(Date.now() - TEMPLATE_RECOVERY_WINDOW_MS);
+	const stamp = (j) => String((j && (j.edit_date || j.date)) || "");
+	const mine = rows.filter(
+		(j) => j && j.uuid && String(j.active) !== "0" && String(j.job_description || "") === String(description || "") && stamp(j) >= cutoff
+	);
+	if (!mine.length) return null;
+	return mine.sort((a, b) => stamp(b).localeCompare(stamp(a)))[0].uuid;
 }
 
 // The customer's currently-open Work Order, if they have one.
@@ -722,6 +765,9 @@ export async function createWorkOrderJob(env, lead, opts = {}) {
 	//    to a plain create: a booking must never be lost over a missing checklist.
 	const status = opts.status || "Work Order";
 	let jobUuid = null;
+	// Set only when a second job may exist in ServiceM8 for this one booking, so
+	// the office email and the staff message can say so.
+	let duplicateWarning = "";
 	if (opts.templateUuid) {
 		try {
 			jobUuid = await sm8CreateFromTemplate(env, opts.templateUuid, {
@@ -730,12 +776,30 @@ export async function createWorkOrderJob(env, lead, opts = {}) {
 				job_address: address || "",
 			});
 		} catch (e) {
-			// Create failed -- nothing exists yet, so the plain create below is safe.
-			console.error(
-				`ServiceM8 template ${opts.templateUuid} create failed, falling back to a plain job create:`,
-				e && (e.stack || e.message)
-			);
+			console.error(`ServiceM8 template ${opts.templateUuid} create failed:`, e && (e.stack || e.message));
 			jobUuid = null;
+
+			// "Failed" does NOT mean "nothing was created": the commonest failure
+			// here is a create that worked whose uuid we couldn't read back
+			// (e.jobCreated), and an error response can hide one too. Look for that
+			// job before making another -- a plain create on top of it is how one
+			// booking became two jobs in ServiceM8.
+			try {
+				jobUuid = await findJustCreatedJob(env, companyUuid, description);
+			} catch (lookupError) {
+				console.error("ServiceM8 template-job recovery lookup failed:", lookupError && (lookupError.stack || lookupError.message));
+			}
+			if (jobUuid) {
+				console.error(`ServiceM8 adopted the job the template already created (${jobUuid}) rather than creating a duplicate`);
+			} else if (e && e.jobCreated) {
+				// It exists, and we couldn't find it either. The plain create below
+				// still runs -- a booking is never dropped over this -- but the office
+				// is told, because that is the one case where a stray second job can
+				// still appear and somebody has to delete it.
+				duplicateWarning =
+					"⚠ ServiceM8 may hold a second, empty job for this booking (created from the job template) — check for a duplicate and delete it.";
+				console.error("ServiceM8 template job exists but could not be found; a plain create will follow and may duplicate it");
+			}
 		}
 		// The job exists from here. See the note in createServiceM8Lead: a failure
 		// past this point is logged, never retried by falling back, or the customer
@@ -782,7 +846,7 @@ export async function createWorkOrderJob(env, lead, opts = {}) {
 		type: "JOB",
 	});
 
-	return { jobUuid, jobUrl: jobUrl(jobUuid) };
+	return { jobUuid, jobUrl: jobUrl(jobUuid), warning: duplicateWarning };
 }
 
 // Adds a note to the job -- the Notes section on the job in ServiceM8, which

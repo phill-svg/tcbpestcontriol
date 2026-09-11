@@ -46,6 +46,46 @@ document.addEventListener("DOMContentLoaded", function () {
     window.addEventListener("load", applyShadow, { once: true });
   }
 
+  // Click-to-call, reported to GA4 the same way the booking and enquiry forms
+  // report themselves.
+  //
+  // This was the gap that kept the conversion count near zero: the site has
+  // ~800 tel: links and not one of them told GA4 anything, so the only leads
+  // it could ever see were the minority who fill a form in. For a business
+  // most people ring, that is the wrong end of the funnel to be measuring.
+  //
+  // Sent as generate_lead so ONE key event in GA4 Admin covers every way the
+  // website produces work. lead_type is what keeps them honest apart: a click
+  // is intent, not a completed call -- nothing on the page can know whether
+  // they went through with it -- so any report that needs confirmed work
+  // filters to lead_type = booking.
+  //
+  // Delegated from the document, so it covers every tel: link on the page
+  // (header, hero, footer, the sticky mobile bar) and any added later. In the
+  // capture phase so it still runs if something else stops the event first,
+  // and wrapped in try/catch because an ad blocker eating gtag must never
+  // interfere with a customer placing a call.
+  document.addEventListener(
+    "click",
+    function (event) {
+      var target = event.target;
+      var link = target && target.closest ? target.closest('a[href^="tel:"]') : null;
+      if (!link) return;
+      try {
+        if (typeof window.gtag === "function") {
+          window.gtag("event", "generate_lead", {
+            lead_type: "phone_call",
+            // Which page earned the call -- the useful half of the report.
+            page_path: window.location.pathname,
+          });
+        }
+      } catch (analyticsError) {
+        /* never let reporting get between a customer and the phone */
+      }
+    },
+    true
+  );
+
   if (navigator.modelContext && typeof navigator.modelContext.provideContext === "function") {
     navigator.modelContext.provideContext({
       tools: [

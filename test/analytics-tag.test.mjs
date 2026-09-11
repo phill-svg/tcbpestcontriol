@@ -96,3 +96,59 @@ test("the page templates carry the tag, so generated pages inherit it", () => {
 		}
 	}
 });
+
+// --- what actually counts as a lead ------------------------------------------
+//
+// A tag that fires and reports nothing worth counting is the state this site
+// was in: GA4 collected page views but its conversion count sat at zero,
+// because the only lead signals came from the two forms and the site's ~800
+// tel: links said nothing at all. These pin the three reporting paths so a
+// refactor can't quietly drop one and leave the number at zero again.
+
+const scriptJs = readFileSync(path.join(repoRoot, "assets", "js", "script.js"), "utf8");
+const bookingJs = readFileSync(path.join(repoRoot, "assets", "js", "booking.js"), "utf8");
+
+test("every lead path reports the same GA4 event", () => {
+	// One event name means one key event to mark in GA4 Admin. Three names
+	// would mean three, and whichever was forgotten would silently not count.
+	assert.match(scriptJs, /gtag\("event", "generate_lead"/, "click-to-call should report a lead");
+	assert.match(bookingJs, /gtag\("event", "generate_lead"/, "the booking form should report a lead");
+
+	const thankYou = readFileSync(path.join(repoRoot, "thank-you", "index.html"), "utf8");
+	assert.match(thankYou, /generate_lead/, "/thank-you is where a contact enquiry is confirmed");
+});
+
+test("each lead path says which kind it is", () => {
+	// A phone click is intent; a booking is confirmed work. Counting them under
+	// one event is only honest while lead_type can still tell them apart.
+	assert.match(scriptJs, /lead_type: "phone_call"/);
+	assert.match(bookingJs, /lead_type: isQuoteMode\(\) \? "quote_request" : "booking"/);
+});
+
+test("reporting can never break the thing it is reporting on", () => {
+	// gtag is simply absent whenever an ad blocker eats the tag. A visitor
+	// tapping the phone number must not care.
+	const handler = scriptJs.slice(scriptJs.indexOf('a[href^="tel:"]'));
+	assert.match(handler, /typeof window\.gtag === "function"/, "the call must be guarded");
+	assert.match(handler, /catch \(analyticsError\)/, "and wrapped, in case gtag itself throws");
+});
+
+test("script.js is requested with a version past the one frozen in browsers", () => {
+	// /assets/js/* is immutable for a year, so a visitor who has already loaded
+	// the site keeps the old script until the URL changes. Without a bump the
+	// tel: reporting above would never reach a single returning visitor.
+	const versions = new Set();
+	for (const page of pages) {
+		const html = readFileSync(path.join(repoRoot, page), "utf8");
+		for (const match of html.matchAll(/assets\/js\/script\.js\?v=(\d+)/g)) versions.add(Number(match[1]));
+	}
+	assert.ok(versions.size === 1, `every page should ask for the same script.js version, found ${[...versions].join(", ")}`);
+	assert.ok([...versions][0] >= 2, "v=1 is the version that was already frozen in browsers");
+});
+
+test("every phone number on the site is a link the reporting can see", () => {
+	// A stray space after "tel:" is a link some dialers refuse and the
+	// delegated handler above never matches. One page had one.
+	const malformed = pages.filter((page) => /href="tel:\s/.test(readFileSync(path.join(repoRoot, page), "utf8")));
+	assert.deepEqual(malformed, [], `tel: links with a space after the scheme:\n${malformed.join("\n")}`);
+});

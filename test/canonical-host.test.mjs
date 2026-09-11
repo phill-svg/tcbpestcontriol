@@ -23,7 +23,23 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const CANONICAL = "https://www.tcbpestcontrolcanberra.com.au";
+const CANONICAL_HOST = "www.tcbpestcontrolcanberra.com.au";
+const CANONICAL = `https://${CANONICAL_HOST}`;
+
+// Compare the parsed hostname, never a string prefix. "https://www.tcbpest...
+// .com.au" is also the start of "https://www.tcbpest....com.au.example.com",
+// so a startsWith() check here would wave through a canonical tag pointing at
+// somebody else's domain -- which is the one thing this file exists to catch.
+// (CodeQL flags the prefix form as incomplete URL substring sanitization.)
+function isCanonicalUrl(value) {
+	let url;
+	try {
+		url = new URL(value);
+	} catch {
+		return false;
+	}
+	return url.protocol === "https:" && url.hostname === CANONICAL_HOST;
+}
 const SKIP_DIRS = new Set(["node_modules", ".git", ".wrangler", "test"]);
 
 function htmlPages(dir = repoRoot, found = []) {
@@ -72,7 +88,7 @@ test("every page's canonical URL points at the www host", () => {
 	for (const page of pages) {
 		const html = readFileSync(path.join(repoRoot, page), "utf8");
 		for (const match of html.matchAll(/<link[^>]*rel="canonical"[^>]*href="([^"]+)"/g)) {
-			if (!match[1].startsWith(CANONICAL)) wrong.push(`${page}: ${match[1]}`);
+			if (!isCanonicalUrl(match[1])) wrong.push(`${page}: ${match[1]}`);
 		}
 	}
 	assert.deepEqual(wrong, [], `canonical tags pointing somewhere other than ${CANONICAL}:\n${wrong.join("\n")}`);
@@ -85,7 +101,7 @@ test("og:url agrees with the canonical tag", () => {
 	for (const page of pages) {
 		const html = readFileSync(path.join(repoRoot, page), "utf8");
 		for (const match of html.matchAll(/<meta[^>]*property="og:url"[^>]*content="([^"]+)"/g)) {
-			if (!match[1].startsWith(CANONICAL)) wrong.push(`${page}: ${match[1]}`);
+			if (!isCanonicalUrl(match[1])) wrong.push(`${page}: ${match[1]}`);
 		}
 	}
 	assert.deepEqual(wrong, [], `og:url values pointing somewhere other than ${CANONICAL}:\n${wrong.join("\n")}`);
@@ -97,7 +113,7 @@ test("the sitemap lists www URLs and nothing else", () => {
 
 	assert.ok(locs.length > 100, `expected the full sitemap, found ${locs.length} URLs`);
 	assert.deepEqual(
-		locs.filter((loc) => !loc.startsWith(CANONICAL)),
+		locs.filter((loc) => !isCanonicalUrl(loc)),
 		[],
 		"a sitemap that lists the other hostname asks Google to index the copy"
 	);
@@ -118,7 +134,7 @@ test("the RSS feed uses the canonical host too", () => {
 
 	assert.ok(links.length > 0, "the feed should have links");
 	assert.deepEqual(
-		links.filter((link) => !link.startsWith(CANONICAL)),
+		links.filter((link) => !isCanonicalUrl(link)),
 		[],
 		"feed links must use the canonical host"
 	);

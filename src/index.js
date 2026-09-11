@@ -43,7 +43,14 @@ import {
 	setupSteps as searchConsoleSetupSteps,
 } from "./search-console.js";
 
-export default {
+// The one hostname this site is served from. Everything else -- the bare apex,
+// the workers.dev subdomain, a build's preview URL -- is a different address
+// for the same pages, which is the duplicate-site problem search engines
+// resolve by picking a winner themselves. Named once here so the redirect
+// below and the guard at the bottom can't drift apart.
+export const CANONICAL_HOST = "www.tcbpestcontrolcanberra.com.au";
+
+const site = {
 	async fetch(request, env, ctx) {
 		const url = new URL(request.url);
 
@@ -59,7 +66,7 @@ export default {
 		// Page Rules never get a chance to run for them -- this has to
 		// happen here, before assets are served.
 		if (url.hostname === "tcbpestcontrolcanberra.com.au") {
-			url.hostname = "www.tcbpestcontrolcanberra.com.au";
+			url.hostname = CANONICAL_HOST;
 			return Response.redirect(url.toString(), 301);
 		}
 
@@ -541,6 +548,39 @@ export default {
 		}
 
 		return response;
+	},
+};
+
+// Keeps every hostname that isn't the canonical one out of the index.
+//
+// The apex is handled above, by the redirect that belongs on it. The other
+// copies can't be: a Worker also answers on its workers.dev subdomain and on a
+// fresh preview URL for every build, and redirecting a preview URL to
+// production would defeat the only thing it exists for. So they stay
+// reachable and stop being indexable -- a crawler that finds one is told
+// plainly not to keep it, and the sitemap, the canonical tags and the apex
+// redirect all keep pointing at the single address that should rank.
+//
+// Not applied to a WebSocket upgrade: a 101 carries a live socket on the
+// response object, and rebuilding the response to add a header drops it.
+function guardNonCanonicalHost(request, response) {
+	let host = "";
+	try {
+		host = new URL(request.url).hostname;
+	} catch {
+		return response;
+	}
+	if (host === CANONICAL_HOST) return response;
+	if (response.status === 101 || response.webSocket) return response;
+
+	const guarded = new Response(response.body, response);
+	guarded.headers.set("X-Robots-Tag", "noindex, nofollow");
+	return guarded;
+}
+
+export default {
+	async fetch(request, env, ctx) {
+		return guardNonCanonicalHost(request, await site.fetch(request, env, ctx));
 	},
 };
 

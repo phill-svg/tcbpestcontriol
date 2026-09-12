@@ -125,7 +125,18 @@ export function readFile(env, path, branch) {
 	return call(env.GITHUB_TOKEN, `/repos/${owner}/${repo}/contents/${encodeURI(path)}?ref=${encodeURIComponent(branch)}`);
 }
 
-// Writes a set of {path, content} files as a single commit on `branch`.
+// Writes a set of files as a single commit on `branch`. A file is either
+// {path, content} for text, or {path, base64} for bytes that are already
+// base64 and must stay that way.
+//
+// The second form exists because encodeBase64Utf8 runs its input through
+// TextEncoder, which is a *text* encoder: hand it an image and every byte
+// above 0x7F comes back as the UTF-8 encoding of the replacement character.
+// The upload route already holds the browser's base64 of the file, and the
+// blob POST below has always declared `encoding: "base64"`, so the honest fix
+// is to let that string through untouched rather than to write a second
+// encoder that decodes and re-encodes the same bytes for no reason.
+//
 // Returns the new commit's sha and short url.
 export async function commitFiles(env, branch, files, message) {
 	const [owner, repo] = String(env.GITHUB_REPO).split("/");
@@ -143,7 +154,10 @@ export async function commitFiles(env, branch, files, message) {
 	for (const file of files) {
 		const blob = await call(token, `${base}/git/blobs`, {
 			method: "POST",
-			body: JSON.stringify({ content: encodeBase64Utf8(file.content), encoding: "base64" }),
+			body: JSON.stringify({
+				content: file.base64 !== undefined ? file.base64 : encodeBase64Utf8(file.content),
+				encoding: "base64",
+			}),
 		});
 		tree.push({ path: file.path, mode: "100644", type: "blob", sha: blob.sha });
 	}

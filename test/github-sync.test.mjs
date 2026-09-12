@@ -137,6 +137,32 @@ test("the token is sent as a bearer credential and never in the URL", async () =
 	}
 });
 
+test("a file given as base64 is sent to GitHub byte for byte", async () => {
+	// The image upload route holds the browser's base64 of a WebP and must be
+	// able to commit it. encodeBase64Utf8 is a *text* encoder -- it runs its
+	// input through TextEncoder -- so pushing binary through it replaces every
+	// byte above 0x7F with the UTF-8 encoding of U+FFFD, and what lands in the
+	// repository is a corrupt file of roughly the right size. The fixture below
+	// is deliberately not valid UTF-8 (0xFF 0xFE cannot appear in it) so that
+	// this test fails if the passthrough is ever removed; a plain-ASCII payload
+	// would survive the text path and prove nothing.
+	const bytes = Buffer.concat([Buffer.from("RIFF"), Buffer.from([0x1a, 0, 0, 0]), Buffer.from("WEBP"), Buffer.from([0xff, 0xfe, 0x80, 0x00])]);
+	const base64 = bytes.toString("base64");
+
+	const github = stubGitHub();
+	try {
+		await commitFiles(ENV, "main", [{ path: "assets/images/x.webp", base64 }], "Add a picture");
+
+		const blobs = github.calls.filter((c) => c.method === "POST" && c.path.endsWith("/git/blobs"));
+		assert.equal(blobs.length, 1);
+		assert.equal(blobs[0].body.encoding, "base64", "the blob POST has always declared base64; that is what makes this safe");
+		assert.equal(blobs[0].body.content, base64, "the encoded string must be forwarded untouched");
+		assert.deepEqual([...Buffer.from(blobs[0].body.content, "base64")], [...bytes], "and must still decode to the original bytes");
+	} finally {
+		github.restore();
+	}
+});
+
 test("file contents round-trip through base64 without mangling non-ASCII", async () => {
 	// The site's copy is full of en dashes and curly quotes; reading a blob as
 	// a binary string instead of decoding UTF-8 would corrupt every one.

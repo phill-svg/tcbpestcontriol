@@ -35,7 +35,7 @@ import {
 } from "./seo-suggest.js";
 import { TITLE_MIN, TITLE_MAX, DESCRIPTION_MIN, DESCRIPTION_MAX } from "../assets/js/seo-check.js";
 import { findGaps, describeGap, fixForGap } from "./seo-gaps.js";
-import { fetchAsset, fetchNegotiatedImage, fetchMinifiedAsset, wantsBareNotFound, bareNotFound } from "./assets.js";
+import { fetchAsset, fetchNegotiatedImage, fetchMinifiedAsset, htmlAliasPath, wantsBareNotFound, bareNotFound } from "./assets.js";
 import {
 	insights as searchInsights,
 	isConfigured as isSearchConsoleConfigured,
@@ -77,6 +77,16 @@ const site = {
 		// the slash to. Handling this in the Worker lets us exempt "/".
 		if (url.pathname.length > 1 && url.pathname.endsWith("/")) {
 			url.pathname = url.pathname.slice(0, -1);
+			return Response.redirect(url.toString(), 301);
+		}
+
+		// Same idea for the old .html addresses -- see htmlAliasPath. This
+		// replaced 111 hand-written lines in _redirects that all said "drop
+		// the extension", and it covers every page added since without
+		// anybody remembering to add a line.
+		const htmlAlias = htmlAliasPath(url.pathname);
+		if (htmlAlias) {
+			url.pathname = htmlAlias;
 			return Response.redirect(url.toString(), 301);
 		}
 

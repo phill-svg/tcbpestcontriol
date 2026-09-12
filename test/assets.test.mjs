@@ -15,7 +15,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { fetchAsset, fetchNegotiatedImage, fetchMinifiedAsset, wantsBareNotFound, bareNotFound } from "../src/assets.js";
+import { fetchAsset, fetchNegotiatedImage, fetchMinifiedAsset, htmlAliasPath, wantsBareNotFound, bareNotFound } from "../src/assets.js";
 
 // Records every URL the binding is asked for. `present` is the set of paths
 // that exist; anything else 404s, the way not_found_handling does.
@@ -287,4 +287,22 @@ test("the bare 404 is small, plain and uncached", () => {
 	assert.equal(response.status, 404);
 	assert.match(response.headers.get("content-type"), /text\/plain/);
 	assert.match(response.headers.get("Cache-Control"), /no-store/);
+});
+
+// The 111 .html lines deleted from _redirects now all come from this one
+// function, so a wrong answer here is 111 broken old addresses at once.
+test("htmlAliasPath drops the extension, and never loops", () => {
+	assert.equal(htmlAliasPath("/about.html"), "/about");
+	assert.equal(htmlAliasPath("/blog-guide-to-canberra-spiders.html"), "/blog-guide-to-canberra-spiders");
+	// A directory index is the directory, not a page called "index".
+	assert.equal(htmlAliasPath("/index.html"), "/");
+	assert.equal(htmlAliasPath("/blog/index.html"), "/blog");
+	// Anything already extension-less is left alone -- otherwise the redirect
+	// this feeds would answer its own target and loop forever.
+	assert.equal(htmlAliasPath("/about"), null);
+	assert.equal(htmlAliasPath("/"), null);
+	assert.equal(htmlAliasPath("/assets/js/script.js"), null);
+	for (const path of ["/about.html", "/index.html", "/blog/index.html"]) {
+		assert.equal(htmlAliasPath(htmlAliasPath(path)), null);
+	}
 });

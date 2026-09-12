@@ -148,3 +148,21 @@ function withVaryOnAccept(response) {
 	headers.set("Vary", "Accept");
 	return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
+
+// The extension-less address for a .html URL, or null if there isn't one.
+//
+// Every page on this site lives at /about, not /about.html. The .html forms
+// are old addresses that still get linked to, and each one used to be its own
+// line in _redirects -- 111 of them, one per page, all saying the same thing.
+//
+// The four that redirect somewhere else entirely (/bed-bug-control.html ->
+// /bed-bug-treatment-canberra) are not special-cased here: each still has its
+// extension-less twin in _redirects, so stripping first just means the
+// request arrives there on a second hop.
+export function htmlAliasPath(pathname) {
+	if (!pathname.endsWith(".html")) return null;
+	const stripped = pathname.slice(0, -".html".length);
+	// /index.html is the directory itself, not a page called "index".
+	if (!stripped.endsWith("/index")) return stripped;
+	return stripped.slice(0, -"/index".length) || "/";
+}

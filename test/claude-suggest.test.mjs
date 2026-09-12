@@ -54,23 +54,20 @@ const BODY = {
 // request-shaping bug that the response would never reveal.
 function recorder(reply = {}) {
 	const calls = [];
-	return {
-		calls,
-		beta: {
-			messages: {
-				create: async (params) => {
-					calls.push(params);
-					return {
-						stop_reason: "end_turn",
-						model: CLAUDE_MODEL,
-						content: [{ type: "text", text: "A title\nAnother title" }],
-						usage: { input_tokens: 1000, output_tokens: 200 },
-						...reply,
-					};
-				},
-			},
-		},
+	const fetchImpl = async (url, init) => {
+		calls.push({ url, headers: init.headers, body: JSON.parse(init.body) });
+		return new Response(
+			JSON.stringify({
+				stop_reason: "end_turn",
+				model: CLAUDE_MODEL,
+				content: [{ type: "text", text: "A title\nAnother title" }],
+				usage: { input_tokens: 1000, output_tokens: 200 },
+				...reply,
+			}),
+			{ status: 200, headers: { "content-type": "application/json" } }
+		);
 	};
+	return { calls, fetchImpl };
 }
 
 test("the system prompt moves out of the message list", () => {
@@ -85,10 +82,10 @@ test("temperature never reaches the request", async () => {
 	// The one that 400s the whole call. It is in the shared body because
 	// Workers AI wants it, so it has to be dropped here rather than at the
 	// call site -- and this asserts on what was sent, not what came back.
-	const client = recorder();
-	await runClaude({ ANTHROPIC_API_KEY: "test" }, BODY, { client });
+	const { calls, fetchImpl } = recorder();
+	await runClaude({ ANTHROPIC_API_KEY: "test" }, BODY, { fetchImpl });
 
-	const sent = client.calls[0];
+	const sent = calls[0].body;
 	assert.ok(!("temperature" in sent), "temperature would be rejected outright");
 	assert.ok(!("top_p" in sent));
 	assert.ok(!("top_k" in sent));
@@ -98,19 +95,19 @@ test("max_tokens leaves room for thinking, rather than passing 700 through", asy
 	// max_tokens caps thinking and reply together. Handing this model the
 	// figure Workers AI is given would spend the budget before the first line
 	// of the answer and come back empty.
-	const client = recorder();
-	await runClaude({ ANTHROPIC_API_KEY: "test" }, BODY, { client });
-	assert.ok(client.calls[0].max_tokens > 700);
+	const { calls, fetchImpl } = recorder();
+	await runClaude({ ANTHROPIC_API_KEY: "test" }, BODY, { fetchImpl });
+	assert.ok(calls[0].body.max_tokens > 700);
 });
 
 test("a refusal is raised, not read as an empty answer", async () => {
-	const client = recorder({
+	const { fetchImpl } = recorder({
 		stop_reason: "refusal",
 		stop_details: { category: "other", explanation: "declined" },
 		content: [],
 	});
 	await assert.rejects(
-		() => runClaude({ ANTHROPIC_API_KEY: "test" }, BODY, { client }),
+		() => runClaude({ ANTHROPIC_API_KEY: "test" }, BODY, { fetchImpl }),
 		/declined/,
 		"an empty content array must not be reported as 'nothing came back'"
 	);
@@ -218,3 +215,34 @@ test("the setup message says it costs money, before anything is spent", () => {
 	assert.match(setupMessage(), /costs money/i);
 	assert.match(setupMessage(), /ANTHROPIC_API_KEY/);
 });
+
+test("the request carries the three headers the API refuses to work without", async () => {
+	// The SDK used to set these. A wrong or missing one is a 401 or a plain
+	// "unknown parameter" from the server -- neither of which shows up until
+	// somebody clicks the button in production, because nothing local sends a
+	// real request.
+	const { calls, fetchImpl } = recorder();
+	await runClaude({ ANTHROPIC_API_KEY: "sk-test" }, BODY, { fetchImpl });
+
+	const { url, headers, body } = calls[0];
+	assert.equal(url, "https://api.anthropic.com/v1/messages");
+	assert.equal(headers["x-api-key"], "sk-test");
+	assert.equal(headers["anthropic-version"], "2023-06-01");
+	// fallbacks: "default" is only accepted alongside this exact beta -- the
+	// older -06-01 flag is for the array form and 400s when paired with this.
+	assert.equal(headers["anthropic-beta"], "server-side-fallback-2026-07-01");
+	assert.equal(body.fallbacks, "default");
+});
+
+test("a 400 is raised straight away, not retried", async () => {
+	// Retrying a rejected request just spends the time again. Only 429 and 5xx
+	// are worth a second attempt, and this pins that the split exists at all.
+	let attempts = 0;
+	const fetchImpl = async () => {
+		attempts += 1;
+		return new Response('{"error":{"message":"bad request"}}', { status: 400 });
+	};
+	await assert.rejects(() => runClaude({ ANTHROPIC_API_KEY: "test" }, BODY, { fetchImpl }), /400/);
+	assert.equal(attempts, 1);
+});
+

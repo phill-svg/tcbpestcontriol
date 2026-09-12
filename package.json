@@ -16,7 +16,6 @@
 		"test:seo-parity": "TCB_PARITY=1 node --test test/seo-parity.test.mjs"
 	},
 	"dependencies": {
-		"@anthropic-ai/sdk": "^0.117.1",
 		"@pushforge/builder": "^2.0.5"
 	},
 	"devDependencies": {

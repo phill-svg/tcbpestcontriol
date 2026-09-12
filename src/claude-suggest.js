@@ -12,9 +12,18 @@
 // what the call actually cost, because "a cent or two" is a very different
 // thing to be told after the fact than before.
 
-import Anthropic from "@anthropic-ai/sdk";
+// Called over plain fetch rather than through @anthropic-ai/sdk. The SDK is
+// 9MB for the one request below, and its credential loader imports node:fs
+// and node:path statically -- which is the only reason the Worker needs the
+// nodejs_compat flag at all. A POST is a POST.
+const API_URL = "https://api.anthropic.com/v1/messages";
+const API_VERSION = "2023-06-01";
 
 export const CLAUDE_MODEL = "claude-opus-5";
+
+// Server-side fallback, in its "default" form: the API picks the stand-in by
+// refusal category, so there is no model list here to go stale.
+const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 
 // Anything on this provider rather than Workers AI. The two are told apart by
 // the model id alone, so a single `model` string still identifies a run all
@@ -110,15 +119,14 @@ export function estimateCost(usage = {}) {
 	return (input * INPUT_PER_MILLION + output * OUTPUT_PER_MILLION) / 1000000;
 }
 
-// `client` is injectable so the request shape can be tested without a key and
-// without a network -- which is the only way to pin the two things most likely
-// to break silently here: that `temperature` never reaches this API, and that
-// a refusal is noticed before anybody reads the content.
-export async function runClaude(env, body, { client } = {}) {
-	const anthropic = client || new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 2 });
+// `fetchImpl` is injectable so the request shape can be tested without a key
+// and without a network -- which is the only way to pin the two things most
+// likely to break silently here: that `temperature` never reaches this API,
+// and that a refusal is noticed before anybody reads the content.
+export async function runClaude(env, body, { fetchImpl = fetch } = {}) {
 	const { system, messages } = toRequest(body);
 
-	const message = await anthropic.beta.messages.create({
+	const message = await postMessage(env, fetchImpl, {
 		model: CLAUDE_MODEL,
 		max_tokens: MAX_TOKENS,
 		output_config: { effort: EFFORT },
@@ -127,7 +135,6 @@ export async function runClaude(env, body, { client } = {}) {
 		// Workers AI fallback is: a button that does nothing is the worst
 		// outcome available, and copy about killing pests is exactly the sort
 		// of thing a safety classifier looks at twice.
-		betas: ["server-side-fallback-2026-07-01"],
 		fallbacks: "default",
 		system,
 		messages,
@@ -149,4 +156,36 @@ export async function runClaude(env, body, { client } = {}) {
 		// should say so rather than crediting the model that was asked.
 		servedBy: message.model,
 	};
+}
+
+// The SDK retried twice on its own; this keeps that. Only for the failures a
+// retry can actually fix -- a 400 means the request is wrong and sending it
+// again just spends another second before the same error.
+const RETRIES = 2;
+
+async function postMessage(env, fetchImpl, payload) {
+	let lastError;
+	for (let attempt = 0; attempt <= RETRIES; attempt++) {
+		if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+
+		const response = await fetchImpl(API_URL, {
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+				"x-api-key": env.ANTHROPIC_API_KEY,
+				"anthropic-version": API_VERSION,
+				// The betas the SDK sent as its `betas` array. Over HTTP they are
+				// a header, comma-separated.
+				"anthropic-beta": FALLBACK_BETA,
+			},
+			body: JSON.stringify(payload),
+		});
+
+		if (response.ok) return response.json();
+
+		const detail = (await response.text()).slice(0, 300);
+		lastError = new Error(`Claude answered ${response.status}: ${detail}`);
+		if (response.status !== 429 && response.status < 500) throw lastError;
+	}
+	throw lastError;
 }

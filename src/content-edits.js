@@ -34,6 +34,7 @@ import { decodeEntities, escapeHtmlText, escapeStyleAttribute } from "./html-ent
 import { MINIMUM_ENDING } from "../assets/js/seo-site.js";
 import { bakeEdits, pathToFile } from "./bake-edits.js";
 import { missingConfig, setupMessage, readFile, commitFiles, decodeBase64Utf8 } from "./github-sync.js";
+import { applyStructure } from "./page-structure.js";
 
 const TABLE_DDL = `CREATE TABLE IF NOT EXISTS content_edits (
   path         TEXT NOT NULL,
@@ -656,6 +657,109 @@ export async function handleContentApi(request, url, env, session) {
 		return json({ ok: true, files: files.length, edits: synced.length, commit, problems });
 	}
 
+	// Moving, adding and removing whole blocks on one page.
+	//
+	// Unlike every other route here, this does not write to content_edits at
+	// all -- it writes the HTML file in the repository. Structure is position,
+	// and an override is addressed by hashing words, so there is nothing an
+	// overlay could store that would describe "this paragraph now comes
+	// third". The file is the only place that fact can live.
+	//
+	// The cost is the deploy: the commit lands at once but visitors see it a
+	// minute or two later, when Cloudflare finishes rebuilding. That is why
+	// the editor batches a whole rearrangement into one call rather than
+	// sending each drag.
+	if (route === "structure" && request.method === "POST") {
+		const missing = missingConfig(env);
+		if (missing.length) return json({ error: setupMessage(missing), missing }, 501);
+
+		const body = await readJsonBody(request);
+		const path = typeof body?.path === "string" && body.path.startsWith("/") ? normalisePath(body.path) : null;
+		const ops = Array.isArray(body?.ops) ? body.ops : null;
+		if (!path || !ops || !ops.length) return json({ error: "Expected a path and something to do." }, 400);
+
+		await ensureTable(env);
+
+		// Unpublished wording changes on this page are a draft of a document
+		// this is about to rewrite. Which of the two wins would depend on the
+		// order somebody happened to press the buttons in, so neither does:
+		// finish the wording first.
+		const pendingDraft = await env.DB.prepare("SELECT 1 AS found FROM content_edits WHERE path = ? AND draft IS NOT NULL LIMIT 1")
+			.bind(path)
+			.first();
+		if (pendingDraft) {
+			return json({ error: "There are unpublished wording changes on this page. Publish or revert them first." }, 409);
+		}
+
+		const branch = env.GITHUB_BRANCH || "main";
+		const filePath = pathToFile(path);
+		let file;
+		try {
+			file = await readFile(env, filePath, branch);
+		} catch (error) {
+			return json({ error: `Could not read ${filePath}: ${error.message}` }, 502);
+		}
+		const source = decodeBase64Utf8(file.content);
+
+		// Published overrides are baked in first, before a single block moves.
+		//
+		// The order is the whole point. An override is addressed by the hash of
+		// its words plus how many identical copies of those words come before
+		// it on the page -- so moving blocks around can change which copy an
+		// override lands on, and the addressing has no way to notice. Baking
+		// first resolves every override against the document it was written
+		// for; after that they are text in the file and structure cannot
+		// retarget them.
+		const pending = await env.DB.prepare(
+			"SELECT address, original, published FROM content_edits WHERE path = ? AND published IS NOT NULL AND synced_at IS NULL AND kind != 'style' ORDER BY address"
+		)
+			.bind(path)
+			.all();
+		const rows = pending.results || [];
+
+		let html = source;
+		const synced = [];
+		if (rows.length) {
+			const baked = bakeEdits(html, new Map(rows.map((row) => [row.address, row.published])));
+			// An override that cannot be found is one that would still be
+			// applying as an overlay after this commit -- against a page whose
+			// blocks have moved. That is exactly the case where it could land on
+			// the wrong copy of a repeated sentence, so nothing is written.
+			if (baked.missing.length) {
+				const first = rows.find((row) => row.address === baked.missing[0]);
+				return json(
+					{
+						error: `A published wording change on this page no longer matches the file (${JSON.stringify(
+							first ? first.original : baked.missing[0]
+						)}). Sync to code first, or revert it.`,
+					},
+					409
+				);
+			}
+			html = baked.html;
+			for (const address of baked.applied) synced.push({ path, address });
+		}
+
+		const result = applyStructure(html, ops);
+		if (result.error) return json({ error: result.error }, 400);
+		if (result.html === source) return json({ ok: true, changed: false, message: "That would not change anything." });
+
+		let commit;
+		try {
+			commit = await commitFiles(env, branch, [{ path: filePath, content: result.html }], structureMessage(path, ops));
+		} catch (error) {
+			console.error("Structure commit failed:", error && (error.stack || error.message));
+			return json({ error: `Could not push the commit: ${error.message}` }, 502);
+		}
+
+		// Same reasoning as the sync route: marked, never deleted, because the
+		// commit is not live until the deploy lands and the overrides have to
+		// keep serving until then.
+		if (synced.length) await markEditsSynced(env, synced);
+
+		return json({ ok: true, changed: true, commit, applied: result.applied, edits: synced.length });
+	}
+
 	// Called by scripts/sync-content-edits.js once it has written the edits
 	// into the HTML files and the change is committed. Dropping the rows is
 	// tidiness rather than correctness -- a baked-in edit no longer matches
@@ -842,6 +946,22 @@ export async function handleSeoTitleEndings(request, env, session, { paths, fetc
 // lookup. Only addresses that were actually written are marked -- anything
 // the bake could not match stays unsynced, so the site keeps showing it and
 // the mismatch stays visible.
+
+// A commit message that says what happened, so the repository history reads
+// as a record of edits rather than a wall of "update page".
+function structureMessage(path, ops) {
+	const counts = { move: 0, insert: 0, delete: 0 };
+	for (const op of ops) if (counts[op && op.op] !== undefined) counts[op.op]++;
+	const parts = [];
+	if (counts.move) parts.push(`moved ${counts.move} ${counts.move === 1 ? "block" : "blocks"}`);
+	if (counts.insert) parts.push(`added ${counts.insert}`);
+	if (counts.delete) parts.push(`removed ${counts.delete}`);
+	const summary = parts.join(", ") || "changed the layout";
+	return `Rearrange ${path}
+
+${summary.charAt(0).toUpperCase()}${summary.slice(1)}, from the visual editor.`;
+}
+
 export async function markEditsSynced(env, entries) {
 	if (!Array.isArray(entries) || !entries.length) return 0;
 	await ensureTable(env);

@@ -159,6 +159,24 @@ test("a stale expectation is refused rather than applied to the wrong block", ()
 	assert.equal(applyStructure(PAGE, [{ op: "delete", block: 1, expect: { tag: "p", text: "First." } }]).error, undefined);
 });
 
+test("an inline tag inside a block does not make the check reject a page that is in sync", () => {
+	// The editor sends textContent, where an inline tag was never there. The
+	// scanner reads bytes and has to turn that tag into something -- a space,
+	// or two words weld together. So <p>"<span>Ainslie reads as `" Ainslie`
+	// here and `"Ainslie` in the browser, and a naive comparison tells the
+	// person to reload a page that is perfectly fine. One real block on this
+	// site hits it: /locations-pest-control-ainslie, block 1.
+	const inline = '<body><main>\n\t<p>\u201c<span class="lead">Ainslie is one of the older suburbs.</span></p>\n\t<p>Second.</p>\n</main></body>';
+	const fromBrowser = "\u201cAinslie is one of the older suburbs.";
+
+	const { error } = applyStructure(inline, [{ op: "delete", block: 0, expect: { tag: "p", text: fromBrowser } }]);
+	assert.equal(error, undefined, "an inline tag must not be read as a difference");
+
+	// Still refuses a block that genuinely says something else.
+	const wrong = applyStructure(inline, [{ op: "delete", block: 0, expect: { tag: "p", text: "Something else entirely" } }]);
+	assert.match(wrong.error, /does not say what the editor expected/);
+});
+
 test("markup the scanner cannot read is refused, not guessed at", () => {
 	// Splicing a file this does not understand is how a page gets truncated.
 	const unbalanced = "<body><main><p>One</p><div><p>Two</p></main></body>";

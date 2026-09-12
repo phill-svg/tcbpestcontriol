@@ -351,8 +351,17 @@ function checkExpect(source, block, expect) {
 		return { error: `Block ${block.ordinal} is a <${block.tag}>, not a <${expect.tag}>. Reload the page and try again.` };
 	}
 	if (expect.text === undefined) return null;
-	const actual = normaliseText(decodeEntities(source.slice(block.start, block.end).replace(/<[^>]*>/g, " ")));
-	const wanted = normaliseText(expect.text);
+	// Whitespace is dropped from both sides before comparing, and that is not
+	// tidiness. The file is read as bytes, so an inline tag has to become
+	// something -- a space, or two words weld together. The browser reads
+	// textContent, where the tag was never there at all. So `<p>"<span>Ainslie`
+	// gives `" Ainslie` here and `"Ainslie` in the editor, the check fails, and
+	// the person is told to reload a page that is perfectly in sync. One block
+	// in 5,646 on this site hits it. Comparing the letters alone is immune to
+	// where the tags fall and still catches a genuinely different block.
+	const letters = (value) => normaliseText(decodeEntities(String(value || ""))).replace(/\s+/g, "");
+	const actual = letters(source.slice(block.start, block.end).replace(/<[^>]*>/g, " "));
+	const wanted = letters(expect.text);
 	if (!actual.startsWith(wanted.slice(0, 40))) {
 		return { error: `Block ${block.ordinal} does not say what the editor expected. Reload the page and try again.` };
 	}

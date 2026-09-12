@@ -182,6 +182,45 @@ async function api(path, options = {}) {
 // Turns a stored declaration string into something readable for the change
 // list. "font-size:2rem;color:#e5251a" is accurate but nobody wants to read
 // CSS to find out what they changed.
+// A picture file, as WebP, base64, ready to post.
+//
+// The longest edge is capped because a phone photo is 4000px wide and no
+// image on this site is displayed above about 1600 -- sending the original
+// would spend a megabyte to show the same picture. Quality 0.82 is where WebP
+// stops being visibly lossy for photographs.
+const MAX_IMAGE_EDGE = 1600;
+
+async function toWebpBase64(file) {
+	if (!file.type.startsWith("image/")) throw new Error("That is not a picture.");
+
+	let bitmap;
+	try {
+		bitmap = await createImageBitmap(file);
+	} catch {
+		throw new Error("That picture could not be read. A JPEG or PNG works best.");
+	}
+
+	const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height));
+	const canvas = document.createElement("canvas");
+	canvas.width = Math.round(bitmap.width * scale);
+	canvas.height = Math.round(bitmap.height * scale);
+	canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+	const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/webp", 0.82));
+	// A browser that cannot write WebP hands back a PNG under the same call,
+	// silently. The server would refuse it on its magic bytes, which is the
+	// right answer but an obscure one to receive -- so say it here instead.
+	if (!blob || blob.type !== "image/webp") throw new Error("This browser cannot make WebP images. Try Chrome, Edge or Safari.");
+
+	const reader = new FileReader();
+	const dataUrl = await new Promise((resolve, reject) => {
+		reader.onload = () => resolve(reader.result);
+		reader.onerror = () => reject(new Error("That picture could not be read."));
+		reader.readAsDataURL(blob);
+	});
+	return String(dataUrl).slice(String(dataUrl).indexOf(",") + 1);
+}
+
 function describeStyle(css) {
 	const parts = parseStyleParts(css);
 	if (!Object.keys(parts).length) return "(styling cleared)";
@@ -362,6 +401,7 @@ class Editor {
 		this.rows = new Map(); // address -> stored row from the API
 		this.active = null; // the field currently being typed into
 		this.busy = false;
+		this.undoStack = []; // this visit only -- see pushUndo
 	}
 
 	async mount() {
@@ -378,6 +418,8 @@ class Editor {
 			this.toast(error.message, "error");
 		}
 		this.bindPageInteractions();
+		this.bindDragTargets();
+		this.bindUndo();
 		this.refreshStatus();
 		this.checkDraftPost();
 	}
@@ -588,6 +630,19 @@ class Editor {
 	}
 
 	// -- page interaction -----------------------------------------------------
+
+	bindUndo() {
+		document.addEventListener("keydown", (event) => {
+			const chord = (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey;
+			if (!chord || event.key.toLowerCase() !== "z") return;
+			// Inside a field, the browser's own undo is the right one.
+			if (this.active) return;
+			const inForm = event.target && event.target.closest && event.target.closest("input,textarea,select,[contenteditable]");
+			if (inForm) return;
+			event.preventDefault();
+			this.undoLast();
+		});
+	}
 
 	bindPageInteractions() {
 		// Capture phase, so links and buttons never get a chance to act on the
@@ -944,10 +999,25 @@ class Editor {
 				method: "POST",
 				body: JSON.stringify({ path: PATH, address: entry.address, original: entry.original, value }),
 			});
+			const hadRow = this.rows.has(entry.address);
 			const row = this.rows.get(entry.address) || { address: entry.address, kind: entry.kind, original: entry.original, published: null };
 			row.draft = value;
 			this.rows.set(entry.address, row);
 			this.refreshStatus();
+			// Undoing to the file's own words is a revert, not another save --
+			// saving them back would store an override that says "leave this
+			// exactly as the file already has it", which then has to be
+			// published and synced to achieve nothing.
+			this.pushUndo({
+				label: "change",
+				undo: async () => {
+					if (!hadRow) return this.revertEdit(entry.address);
+					this.renderValue(entry, previous);
+					await this.save(entry, previous, value);
+					// save() pushed its own entry for the undo we just performed.
+					this.undoStack.pop();
+				},
+			});
 			this.toast(value === "" ? "Text deleted. Publish when you're ready." : "Saved as a draft. Publish when you're ready.");
 		} catch (error) {
 			// Roll the page back to what it showed before, so the screen never
@@ -1056,13 +1126,77 @@ class Editor {
 			if (altEntry && altInput) await this.saveDirect(altEntry, altInput.value.trim());
 		});
 
-		if (isImage) this.fillImagePicker(dialog.querySelector(".tcb-picker"), valueInput, showPreview);
+		if (isImage) {
+			const picker = dialog.querySelector(".tcb-picker");
+			this.fillImagePicker(picker, valueInput, showPreview);
+			picker.before(
+				this.buildUploader((path) => {
+					valueInput.value = path;
+					showPreview(path);
+				})
+			);
+		}
 	}
 
 	// The Worker can't list the assets directory at runtime, so the picker is
 	// driven by a manifest generated at author time by
 	// scripts/build-image-manifest.js. If it isn't there, the path box still
 	// works on its own.
+	// -- uploading a picture ---------------------------------------------------
+
+	// Converted to WebP here, in the browser, before it is sent.
+	//
+	// Nothing in a Worker can run sharp, and src/assets.js only negotiates
+	// AVIF for `/assets/images/*.webp` -- so a JPEG uploaded as a JPEG would
+	// be the one picture on the site outside that arrangement, permanently.
+	// canvas.toBlob does the conversion for free and the server checks the
+	// result really is a WebP before it commits anything.
+	//
+	// `onDone(path)` gets the site path once the commit lands.
+	buildUploader(onDone) {
+		const input = el("input", { type: "file", accept: "image/*", class: "tcb-input" });
+		const status = el("p", { class: "tcb-hint" });
+		const button = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Upload a picture" });
+		button.addEventListener("click", () => input.click());
+
+		input.addEventListener("change", async () => {
+			const file = input.files && input.files[0];
+			input.value = "";
+			if (!file) return;
+
+			status.className = "tcb-hint";
+			status.textContent = "Preparing the picture…";
+			let base64;
+			try {
+				base64 = await toWebpBase64(file);
+			} catch (error) {
+				status.className = "tcb-hint tcb-hint-warn";
+				status.textContent = error.message;
+				return;
+			}
+
+			status.textContent = "Uploading…";
+			try {
+				const result = await api("upload-image", {
+					method: "POST",
+					body: JSON.stringify({ name: file.name, base64 }),
+				});
+				// The idempotent path -- same name, same bytes already on the
+				// site -- answers without a commit, because there was nothing to
+				// commit. Reading result.commit.url straight off would throw.
+				status.textContent = result.existing
+					? "That picture is already on the site. Using the copy that is there."
+					: "Uploaded. It appears on the site once the rebuild finishes, a minute or two.";
+				onDone(result.path);
+			} catch (error) {
+				status.className = "tcb-hint tcb-hint-warn";
+				status.textContent = error.message;
+			}
+		});
+
+		return el("div", { class: "tcb-uploader" }, [button, input, status]);
+	}
+
 	async fillImagePicker(container, input, showPreview) {
 		if (!container) return;
 		try {
@@ -1185,6 +1319,10 @@ class Editor {
 		this.layoutMode = false;
 		this.hoveredBlock = -1;
 		this.hoveredNode = null;
+		// One operation per moved block, so dragging the same one twice is a
+		// correction rather than a second instruction.
+		this.movedBlocks = new Map();
+		this.dragging = null;
 	}
 
 	// What the server should find at that number. If a deploy landed since this
@@ -1260,6 +1398,10 @@ class Editor {
 		this.hoveredNode = target;
 		target.classList.add("tcb-block-hover");
 
+		// Only whatever is under the pointer, so a drag anywhere else still
+		// selects text the way it always did.
+		this.makeDraggable(target);
+
 		const toolbar = this.layoutToolbar();
 		this.toolbarTag.textContent = target.tagName.toLowerCase();
 		this.toolbarRemove.disabled = target.classList.contains("tcb-block-removed");
@@ -1281,9 +1423,18 @@ class Editor {
 		const ordinal = this.hoveredBlock;
 		const node = this.blocks[ordinal];
 		if (!node || node.classList.contains("tcb-block-removed")) return;
-		this.layoutOps.push({ op: "delete", block: ordinal, expect: this.expectFor(ordinal) });
+		const op = { op: "delete", block: ordinal, expect: this.expectFor(ordinal) };
+		this.layoutOps.push(op);
 		node.classList.add("tcb-block-removed");
 		this.toolbarRemove.disabled = true;
+		this.pushUndo({
+			label: "removal",
+			undo: () => {
+				node.classList.remove("tcb-block-removed");
+				this.layoutOps.splice(this.layoutOps.indexOf(op), 1);
+				if (this.hoveredBlock === ordinal) this.toolbarRemove.disabled = false;
+			},
+		});
 		this.refreshLayoutStatus();
 	}
 
@@ -1297,6 +1448,170 @@ class Editor {
 		this.hoveredNode = null;
 		this.hoveredBlock = -1;
 		if (this.toolbar) this.toolbar.hidden = true;
+	}
+
+	// -- dragging a block to a new place --------------------------------------
+
+	// Native drag and drop, not a pointer-event reimplementation. The browser
+	// already does the hard parts -- the drag image, the cursor, the escape
+	// key, autoscroll near the edges -- and does them the way the rest of the
+	// operating system does.
+	//
+	// Only the block under the toolbar is draggable at any moment, so a stray
+	// drag on ordinary text still selects text the way it always did.
+	makeDraggable(node) {
+		if (node.dataset.tcbDraggable) return;
+		node.dataset.tcbDraggable = "1";
+		node.draggable = true;
+
+		node.addEventListener("dragstart", (event) => {
+			if (!this.layoutMode) return event.preventDefault();
+			const ordinal = this.blocks.indexOf(node);
+			if (ordinal === -1 || node.classList.contains("tcb-block-removed")) return event.preventDefault();
+			this.dragging = { ordinal, node };
+			node.classList.add("tcb-block-dragging");
+			this.hideToolbar();
+			// Required for the drop to fire at all in Firefox.
+			event.dataTransfer.setData("text/plain", String(ordinal));
+			event.dataTransfer.effectAllowed = "move";
+		});
+
+		node.addEventListener("dragend", () => {
+			node.classList.remove("tcb-block-dragging");
+			this.clearDropMarker();
+			this.dragging = null;
+		});
+	}
+
+	// Where a drop would land: the block under the pointer, and which side of
+	// it. Anything above the block's midpoint goes before it.
+	dropTargetAt(event) {
+		if (!this.dragging) return null;
+		const target = event.target && event.target.closest ? event.target.closest(BLOCK_SELECTOR) : null;
+		if (!target || target === this.dragging.node) return null;
+		const ordinal = this.blocks.indexOf(target);
+		if (ordinal === -1) return null;
+
+		const box = target.getBoundingClientRect();
+		const where = event.clientY < box.top + box.height / 2 ? "before" : "after";
+		return { ordinal, node: target, where };
+	}
+
+	// A block that has already been moved or removed cannot be a landmark.
+	//
+	// Every operation in a batch is resolved against the document as it was
+	// loaded, so an anchor names where that block *used to be*. Anchoring one
+	// move to another would describe a position that never existed in the file
+	// the server is about to read, and it is the kind of wrong that produces a
+	// plausible-looking page rather than an error.
+	isStableAnchor(ordinal) {
+		if (this.movedBlocks.has(ordinal)) return false;
+		const node = this.blocks[ordinal];
+		return !!node && !node.classList.contains("tcb-block-removed");
+	}
+
+	showDropMarker(target) {
+		if (!this.dropMarker) {
+			this.dropMarker = chrome("div", { class: "tcb-drop-marker" });
+			document.body.appendChild(this.dropMarker);
+		}
+		const box = target.node.getBoundingClientRect();
+		const y = (target.where === "before" ? box.top - 2 : box.bottom) + window.scrollY;
+		this.dropMarker.style.top = `${y}px`;
+		this.dropMarker.style.left = `${box.left + window.scrollX}px`;
+		this.dropMarker.style.width = `${box.width}px`;
+		this.dropMarker.hidden = false;
+	}
+
+	clearDropMarker() {
+		if (this.dropMarker) this.dropMarker.hidden = true;
+	}
+
+	bindDragTargets() {
+		document.addEventListener("dragover", (event) => {
+			if (!this.dragging) return;
+			const target = this.dropTargetAt(event);
+			if (!target) return this.clearDropMarker();
+			// Without preventDefault the browser refuses the drop entirely.
+			event.preventDefault();
+			event.dataTransfer.dropEffect = "move";
+			this.showDropMarker(target);
+		});
+
+		document.addEventListener("drop", (event) => {
+			if (!this.dragging) return;
+			event.preventDefault();
+			const target = this.dropTargetAt(event);
+			this.clearDropMarker();
+			if (target) this.dropBlock(target);
+		});
+	}
+
+	dropBlock(target) {
+		const { ordinal, node } = this.dragging;
+
+		if (!this.isStableAnchor(target.ordinal)) {
+			this.toast("Drop it next to a block you have not already moved or removed.", "error");
+			return;
+		}
+
+		const from = { parent: node.parentElement, next: node.nextSibling };
+		if (target.where === "before") target.node.before(node);
+		else target.node.after(node);
+		node.classList.add("tcb-block-moved");
+
+		// One operation per block, replaced rather than appended. Dragging the
+		// same paragraph three times is one instruction about where it ends up,
+		// and three cuts of the same bytes is a conflict the server would
+		// rightly refuse.
+		const op = { op: "move", block: ordinal, to: { [target.where]: target.ordinal }, expect: this.expectFor(ordinal) };
+		const existing = this.movedBlocks.get(ordinal);
+		if (existing) this.layoutOps[this.layoutOps.indexOf(existing)] = op;
+		else this.layoutOps.push(op);
+		this.movedBlocks.set(ordinal, op);
+
+		this.pushUndo({
+			label: "move",
+			undo: () => {
+				if (from.next) from.parent.insertBefore(node, from.next);
+				else from.parent.appendChild(node);
+				node.classList.remove("tcb-block-moved");
+				this.layoutOps.splice(this.layoutOps.indexOf(op), 1);
+				this.movedBlocks.delete(ordinal);
+			},
+		});
+		this.refreshLayoutStatus();
+	}
+
+	// -- undo -----------------------------------------------------------------
+
+	// One stack, this visit only, cleared by a reload.
+	//
+	// Deliberately not a history stored anywhere: a layout change becomes a
+	// commit the moment it is saved, and an undo entry that outlived the save
+	// would describe a file that has already moved on. Everything on this
+	// stack is either still pending, or a text edit that can be re-saved.
+	pushUndo(entry) {
+		this.undoStack.push(entry);
+		if (this.undoStack.length > 50) this.undoStack.shift();
+	}
+
+	async undoLast() {
+		// While a field is open the browser's own undo owns it, and taking that
+		// over would be worse than leaving it alone.
+		if (this.active || this.busy) return;
+		const entry = this.undoStack.pop();
+		if (!entry) {
+			this.toast("Nothing to undo.");
+			return;
+		}
+		try {
+			await entry.undo();
+			this.toast(`Undid the last ${entry.label}.`);
+		} catch (error) {
+			this.toast(error.message, "error");
+		}
+		this.refreshStatus();
 	}
 
 	// Adding a block. The payload is a shape, never markup -- page-structure.js
@@ -1343,6 +1658,10 @@ class Editor {
 		kindSelect.addEventListener("change", showRows);
 		showRows();
 		this.fillImagePicker(picker, srcInput, () => {});
+		const uploader = this.buildUploader((path) => {
+			srcInput.value = path;
+		});
+		picker.before(uploader);
 
 		this.openDialog(
 			where === "before" ? "Add a block above" : "Add a block below",
@@ -1367,9 +1686,17 @@ class Editor {
 				const preview = this.previewBlock(payload);
 				if (!preview) throw new Error(kind === "image" ? "Choose an image first." : "Type some words first.");
 
-				this.layoutOps.push({ op: "insert", to: { [where]: ordinal }, block: payload });
+				const op = { op: "insert", to: { [where]: ordinal }, block: payload };
+				this.layoutOps.push(op);
 				if (where === "before") node.before(preview);
 				else node.after(preview);
+				this.pushUndo({
+					label: "addition",
+					undo: () => {
+						preview.remove();
+						this.layoutOps.splice(this.layoutOps.indexOf(op), 1);
+					},
+				});
 				this.refreshLayoutStatus();
 			},
 			{ confirmLabel: "Add it", successMessage: null }
@@ -1455,6 +1782,11 @@ class Editor {
 
 	lockLayout(commit) {
 		this.hideToolbar();
+		// The commit has landed, so every pending inverse on the stack now
+		// describes a file that has moved on. Dropped rather than left to be
+		// replayed against the wrong document.
+		this.undoStack = [];
+		this.movedBlocks.clear();
 		this.saveLayoutButton.disabled = true;
 		this.layoutButton.disabled = true;
 		this.status.textContent = "Saved. It goes live when the site finishes rebuilding, in a minute or two -- reload then.";
@@ -1549,6 +1881,12 @@ class Editor {
 		showHero(heroInput.value);
 		const picker = el("div", { class: "tcb-picker" });
 		this.fillImagePicker(picker, heroInput, showHero);
+		picker.before(
+			this.buildUploader((path) => {
+				heroInput.value = path;
+				showHero(path);
+			})
+		);
 
 		const introInput = el("textarea", { class: "tcb-input tcb-textarea", rows: "3" });
 		const pestInput = el("input", { type: "text", class: "tcb-input", placeholder: "ant control" });

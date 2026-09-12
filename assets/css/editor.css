@@ -882,3 +882,30 @@ body.tcb-editing-mode {
 	outline: 2px solid #2f9e44;
 	outline-offset: 3px;
 }
+
+/* The line showing where a dragged block would land. Positioned over the
+ * page rather than inserted into it, like the toolbar and for the same
+ * reason: a placeholder element in the flow moves the very blocks you are
+ * aiming between. */
+.tcb-drop-marker {
+	position: absolute;
+	z-index: 2147482999;
+	height: 3px;
+	border-radius: 2px;
+	background: #4c6ef5;
+	pointer-events: none;
+}
+
+.tcb-block-dragging {
+	opacity: 0.4;
+}
+
+/* Moved, but not written anywhere yet. */
+.tcb-block-moved {
+	outline: 2px dashed #4c6ef5;
+	outline-offset: 3px;
+}
+
+.tcb-layout-mode main [data-tcb-draggable] {
+	cursor: grab;
+}

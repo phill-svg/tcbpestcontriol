@@ -267,6 +267,16 @@ function mountPreviewBar() {
 
 const SKIP_SELECTOR = [...SKIPPED_ELEMENTS].concat(`[${IGNORED_SUBTREE_ATTR}]`).join(",");
 
+// The blocks layout mode can move, add and remove. Deliberately the same list
+// as BLOCK_TAGS in src/page-structure.js: the browser numbers them here and
+// the server resolves those numbers against the file, so a disagreement about
+// what counts as a block would silently act on the wrong one.
+//
+// A <section> or a <div> is scaffolding rather than content -- moving one
+// would take everything inside it along, which is a different feature.
+const BLOCK_SELECTOR = "p,h2,h3,h4,h5,h6,li,img";
+
+
 // The walk has to visit exactly the text nodes the Worker's parser visits, in
 // the same order, or the ordinals drift apart and edits stop matching. That
 // is why skipped subtrees are defined once, in content-address.js, and shared.
@@ -350,6 +360,9 @@ class Editor {
 	}
 
 	async mount() {
+		// Before anything is injected and before any stored value is painted on,
+		// so the numbering matches the file rather than the screen.
+		this.indexBlocks();
 		this.buildChrome();
 		document.body.classList.add("tcb-editing-mode");
 		try {
@@ -449,6 +462,24 @@ class Editor {
 			text: "Publish",
 			onclick: () => this.publish(),
 		});
+		// Layout mode is a mode rather than another hover control: it changes what
+		// a click on the page means, and the two would fight if both were live at
+		// once. Its changes go into the file, not the overlay, so it keeps its own
+		// Save rather than sharing Publish.
+		this.layoutButton = el("button", {
+			type: "button",
+			class: "tcb-btn",
+			text: "Layout",
+			onclick: () => this.toggleLayoutMode(),
+		});
+		this.saveLayoutButton = el("button", {
+			type: "button",
+			class: "tcb-btn tcb-btn-primary",
+			text: "Save layout",
+			onclick: () => this.saveLayout(),
+		});
+		this.saveLayoutButton.disabled = true;
+
 		this.previewButton = el("button", {
 			type: "button",
 			class: "tcb-btn",
@@ -471,6 +502,8 @@ class Editor {
 				el("button", { type: "button", class: "tcb-btn", text: "SEO check", onclick: () => this.openSeoCheck() }),
 				el("button", { type: "button", class: "tcb-btn", text: "New post", onclick: () => this.openNewPost() }),
 				el("button", { type: "button", class: "tcb-btn", text: "Changes", onclick: () => this.openChanges() }),
+				this.layoutButton,
+				this.saveLayoutButton,
 				this.previewButton,
 				this.publishButton,
 				el("button", {
@@ -529,6 +562,9 @@ class Editor {
 	}
 
 	refreshStatus() {
+		// Layout mode writes its own count into the same line and must not be
+		// overwritten by a save that happens while it is on.
+		if (this.layoutMode) return this.refreshLayoutStatus();
 		let drafts = 0;
 		let published = 0;
 		for (const row of this.rows.values()) {
@@ -576,6 +612,10 @@ class Editor {
 	}
 
 	handlePageClick(event) {
+		// Layout mode owns clicks on the page while it is on -- its own
+		// controls sit under each block, and opening a text field on top of
+		// them would leave two different edits half-started at once.
+		if (this.layoutMode) return;
 		if (this.active) this.commitActive();
 
 		const image = event.target.closest && event.target.closest("img");
@@ -651,6 +691,12 @@ class Editor {
 	}
 
 	updateHover(event) {
+		// The hover outline means "click to change these words", which is not
+		// what a click does in layout mode.
+		if (this.layoutMode) {
+			this.hover.style.display = "none";
+			return;
+		}
 		// While editing, the chip is pinned beside the field and must stay put.
 		// Only the hover outline is cleared.
 		if (this.active) {
@@ -1105,6 +1151,275 @@ class Editor {
 			el("div", { class: "tcb-bar-actions" }, [publish]),
 		]);
 		document.body.appendChild(banner);
+	}
+
+	// -- layout: adding and removing whole blocks -----------------------------
+
+	// Numbers every block on the page, once, in document order.
+	//
+	// The number is the whole contract with the server, which resolves the same
+	// number against the raw file. Two things keep them in step: the same tag
+	// list on both sides, and the fact that nothing the Worker injects lands
+	// inside <main> -- it sets an id there and nothing else, while the skip
+	// link, search overlay and chat widget all go on <body>. The editor's own
+	// additions do land inside, and they carry data-tcb-injected, which
+	// SKIP_SELECTOR excludes.
+	//
+	// Frozen here and never recomputed. Every pending operation refers to the
+	// page as it was loaded, whatever the screen has been rearranged into
+	// since, which is what lets the server resolve a whole batch against one
+	// document.
+	indexBlocks() {
+		const main = document.querySelector("main");
+		this.blocks = main ? [...main.querySelectorAll(BLOCK_SELECTOR)].filter((node) => !node.closest(SKIP_SELECTOR)) : [];
+		this.layoutOps = [];
+		this.layoutMode = false;
+	}
+
+	// What the server should find at that number. If a deploy landed since this
+	// page was loaded, the numbering describes a document that no longer
+	// exists, and the first sign of it is the text not being what we named.
+	expectFor(ordinal) {
+		const node = this.blocks[ordinal];
+		if (!node) return null;
+		return { tag: node.tagName.toLowerCase(), text: normaliseText(node.textContent || "").slice(0, 40) };
+	}
+
+	toggleLayoutMode() {
+		if (this.layoutMode) {
+			// Anything pending is a real change to the page, so leaving is not a
+			// silent discard: reload and it is gone, save and it is committed.
+			if (this.layoutOps.length && !window.confirm("Leave layout mode? The changes you have not saved will be dropped.")) return;
+			location.reload();
+			return;
+		}
+		if (!this.blocks.length) {
+			this.toast("There is nothing on this page that can be moved around.", "error");
+			return;
+		}
+		this.layoutMode = true;
+		document.body.classList.add("tcb-layout-mode");
+		this.layoutButton.textContent = "Done";
+		for (const [ordinal, node] of this.blocks.entries()) node.after(this.blockControls(ordinal, node));
+		this.refreshLayoutStatus();
+	}
+
+	// The controls that sit under a block while layout mode is on. Injected
+	// chrome, so the text walk and the block index both skip it.
+	blockControls(ordinal, node) {
+		const remove = el("button", {
+			type: "button",
+			class: "tcb-btn tcb-btn-small tcb-btn-quiet",
+			text: "Remove",
+			onclick: () => {
+				this.layoutOps.push({ op: "delete", block: ordinal, expect: this.expectFor(ordinal) });
+				node.classList.add("tcb-block-removed");
+				remove.disabled = true;
+				this.refreshLayoutStatus();
+			},
+		});
+
+		return chrome("div", { class: "tcb-block-controls" }, [
+			el("span", { class: "tcb-block-tag", text: node.tagName.toLowerCase() }),
+			el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add above", onclick: () => this.openAddBlock(ordinal, "before", node) }),
+			el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add below", onclick: () => this.openAddBlock(ordinal, "after", node) }),
+			remove,
+		]);
+	}
+
+	// Adding a block. The payload is a shape, never markup -- page-structure.js
+	// renders the tag on the server, so nothing typed here can become an
+	// element in the file.
+	openAddBlock(ordinal, where, node) {
+		const inList = node.parentElement && ["UL", "OL"].includes(node.parentElement.tagName);
+		const kindSelect = el("select", { class: "tcb-input" });
+		// Inside a list the only legal block is another item, so it is the only
+		// thing offered rather than something to be refused after typing.
+		const kinds = inList
+			? [["list-item", "List item"]]
+			: [
+					["paragraph", "Paragraph"],
+					["heading", "Heading"],
+					["image", "Image"],
+				];
+		for (const [value, label] of kinds) kindSelect.appendChild(el("option", { value, text: label }));
+
+		const textInput = el("textarea", { class: "tcb-input tcb-textarea", rows: "3" });
+		const levelSelect = el("select", { class: "tcb-input" });
+		for (const level of [2, 3]) levelSelect.appendChild(el("option", { value: String(level), text: `Heading ${level}` }));
+		const srcInput = el("input", { type: "text", class: "tcb-input", placeholder: "/assets/images/pest-ant-macro.webp" });
+		const altInput = el("input", { type: "text", class: "tcb-input" });
+		const picker = el("div", { class: "tcb-picker" });
+
+		const textRow = el("label", { class: "tcb-label" }, [el("span", { text: "Words" }), textInput]);
+		const levelRow = el("label", { class: "tcb-label" }, [el("span", { text: "Size" }), levelSelect]);
+		const srcRow = el("label", { class: "tcb-label" }, [el("span", { text: "Image" }), srcInput]);
+		const altRow = el("label", { class: "tcb-label" }, [
+			el("span", { text: "Image description" }),
+			altInput,
+			el("span", { class: "tcb-hint", text: "What the picture shows, for screen readers and Google. Leave it empty only if the image is decorative." }),
+		]);
+
+		const showRows = () => {
+			const kind = kindSelect.value;
+			levelRow.hidden = kind !== "heading";
+			textRow.hidden = kind === "image";
+			srcRow.hidden = kind !== "image";
+			altRow.hidden = kind !== "image";
+			picker.hidden = kind !== "image";
+		};
+		kindSelect.addEventListener("change", showRows);
+		showRows();
+		this.fillImagePicker(picker, srcInput, () => {});
+
+		this.openDialog(
+			where === "before" ? "Add a block above" : "Add a block below",
+			[
+				el("p", { class: "tcb-hint", text: "Nothing is written yet. It goes into the page when you press Save layout." }),
+				el("label", { class: "tcb-label" }, [el("span", { text: "What kind" }), kindSelect]),
+				levelRow,
+				textRow,
+				srcRow,
+				picker,
+				altRow,
+			],
+			async () => {
+				const kind = kindSelect.value;
+				const payload =
+					kind === "image"
+						? { type: "image", src: srcInput.value.trim(), alt: altInput.value }
+						: kind === "heading"
+							? { type: "heading", level: Number(levelSelect.value), text: textInput.value }
+							: { type: kind, text: textInput.value };
+
+				const preview = this.previewBlock(payload);
+				if (!preview) throw new Error(kind === "image" ? "Choose an image first." : "Type some words first.");
+
+				this.layoutOps.push({ op: "insert", to: { [where]: ordinal }, block: payload });
+				if (where === "before") node.before(preview);
+				else node.after(preview);
+				this.refreshLayoutStatus();
+			},
+			{ confirmLabel: "Add it", successMessage: null }
+		);
+	}
+
+	// A stand-in for what the server will write, so the page shows the shape of
+	// the result before anything is committed. Built with textContent and
+	// setAttribute rather than any markup, for the same reason the server
+	// renders from a shape: nothing typed here should be able to become an
+	// element, not even in a preview only one person sees.
+	previewBlock(payload) {
+		const text = String(payload.text || "").trim();
+		let node;
+		if (payload.type === "image") {
+			const safe = previewableImagePath(String(payload.src || "").trim());
+			if (!safe) return null;
+			node = el("img", { src: safe, alt: String(payload.alt || "") });
+		} else {
+			if (!text) return null;
+			const tag = payload.type === "heading" ? `h${payload.level}` : payload.type === "list-item" ? "li" : "p";
+			node = el(tag, { text });
+		}
+		node.classList.add("tcb-block-added");
+		node.setAttribute(IGNORED_SUBTREE_ATTR, "");
+		return node;
+	}
+
+	refreshLayoutStatus() {
+		const count = this.layoutOps.length;
+		this.saveLayoutButton.disabled = count === 0;
+		this.status.textContent = count
+			? `${count} layout ${count === 1 ? "change" : "changes"}, not saved yet.`
+			: "Add or remove blocks, then press Save layout.";
+	}
+
+	// Writes the pending operations into the page's HTML file, as one commit.
+	//
+	// Unlike Publish this does not take effect immediately: the file is
+	// committed at once, but visitors see it when Cloudflare finishes
+	// redeploying a minute or two later. Until then every number on this screen
+	// describes a file that has already moved on, so layout mode locks itself
+	// rather than let a second save be resolved against the wrong document.
+	async saveLayout() {
+		if (!this.layoutOps.length || this.busy) return;
+
+		// The location pages are 84 near-copies of one another. Changing the
+		// shape of one is a legitimate thing to do, and also the moment it stops
+		// matching its 83 siblings -- worth being told once, now, rather than
+		// discovering months later.
+		if (PATH.startsWith("/locations-pest-control-")) {
+			const goAhead = await this.confirmDialog(
+				"This is one of the location pages",
+				"There are 84 of these and they are built to match each other. Changing the layout of this one changes only this one; the other 83 keep the shape they have now.",
+				"Change this page only"
+			);
+			if (!goAhead) return;
+		}
+
+		this.busy = true;
+		this.saveLayoutButton.disabled = true;
+		this.saveLayoutButton.textContent = "Saving…";
+		try {
+			const result = await api("structure", { method: "POST", body: JSON.stringify({ path: PATH, ops: this.layoutOps }) });
+			if (!result.changed) {
+				this.toast("That would not have changed anything.");
+				this.layoutOps = [];
+				this.refreshLayoutStatus();
+				return;
+			}
+			this.layoutOps = [];
+			// Locked rather than reset: the file has changed, and every number on
+			// this screen was worked out from the old one.
+			this.lockLayout(result.commit);
+		} catch (error) {
+			this.toast(error.message, "error");
+			this.saveLayoutButton.disabled = false;
+		} finally {
+			this.busy = false;
+			this.saveLayoutButton.textContent = "Save layout";
+		}
+	}
+
+	lockLayout(commit) {
+		for (const controls of document.querySelectorAll(".tcb-block-controls")) controls.remove();
+		this.saveLayoutButton.disabled = true;
+		this.layoutButton.disabled = true;
+		this.status.textContent = "Saved. It goes live when the site finishes rebuilding, in a minute or two -- reload then.";
+		this.openDialog(
+			"Layout saved",
+			[
+				el("p", { class: "tcb-hint", text: "The page's file has been changed and committed. It reaches visitors once the site finishes rebuilding, usually a minute or two." }),
+				el("p", { class: "tcb-hint", text: "There is no undo for this one: the change is a commit. To put it back, revert that commit on GitHub." }),
+				...(commit && commit.url ? [el("p", {}, [el("a", { href: commit.url, target: "_blank", rel: "noopener", text: "See the commit" })])] : []),
+			],
+			null,
+			{ confirmLabel: null, cancelLabel: "Close" }
+		);
+	}
+
+	// A yes/no built on the dialog, so a warning looks like the rest of the
+	// editor rather than like a browser alert.
+	confirmDialog(title, message, confirmLabel) {
+		return new Promise((resolve) => {
+			let answered = false;
+			this.openDialog(
+				title,
+				[el("p", { class: "tcb-hint", text: message })],
+				async () => {
+					answered = true;
+					resolve(true);
+				},
+				{
+					confirmLabel,
+					cancelLabel: "Leave it alone",
+					successMessage: null,
+					onCancel: () => {
+						if (!answered) resolve(false);
+					},
+				}
+			);
+		});
 	}
 
 	// -- writing a new blog post ----------------------------------------------
@@ -2909,7 +3224,7 @@ class Editor {
 		title,
 		content,
 		onConfirm,
-		{ confirmLabel = "Save", cancelLabel = "Cancel", onCancel = null, extraActions = [] } = {}
+		{ confirmLabel = "Save", cancelLabel = "Cancel", onCancel = null, extraActions = [], successMessage = "Saved as a draft. Publish when you're ready." } = {}
 	) {
 		const body = el("div", { class: "tcb-dialog-body" }, content);
 		const error = el("p", { class: "tcb-dialog-error" });
@@ -2934,7 +3249,7 @@ class Editor {
 				try {
 					await onConfirm();
 					close();
-					this.toast("Saved as a draft. Publish when you're ready.");
+					if (successMessage) this.toast(successMessage);
 				} catch (problem) {
 					error.textContent = problem.message;
 					error.hidden = false;

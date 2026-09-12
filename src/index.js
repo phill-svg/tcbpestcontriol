@@ -946,8 +946,8 @@ function editorLauncherHtml({ editing, previewing }) {
 		// browsers by the old immutable rule -- a year-long cache entry cannot be
 		// revalidated away, only stepped around with a different URL. The
 		// no-cache rule in _headers is what stops it happening again.
-		`<link rel="stylesheet" href="/assets/css/editor.css?v=14">` +
-		`<script src="/assets/js/editor.js?v=2" type="module"></script>` +
+		`<link rel="stylesheet" href="/assets/css/editor.css?v=15">` +
+		`<script src="/assets/js/editor.js?v=3" type="module"></script>` +
 		`</div>`
 	);
 }

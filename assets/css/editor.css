@@ -821,3 +821,53 @@ body.tcb-editing-mode {
 	letter-spacing: 0.12em;
 	color: #8a8a92;
 }
+
+/* --- layout mode ---------------------------------------------------------
+ *
+ * Adding and removing whole blocks, which is a different job from changing
+ * words: it writes the page's HTML file rather than the overlay, and nothing
+ * takes effect until Save layout. So it looks different on purpose -- every
+ * block is outlined, and the page stops advertising click-to-edit.
+ */
+
+.tcb-layout-mode main :is(p, h2, h3, h4, h5, h6, li, img):not([data-tcb-injected]) {
+	outline: 1px dashed #c9c9d1;
+	outline-offset: 3px;
+}
+
+/* Sits under the block it belongs to. Injected chrome, so the text walk and
+ * the block numbering both skip it. */
+.tcb-block-controls {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.3rem;
+	margin: 0.2rem 0 0.6rem;
+	padding: 0.2rem 0;
+	font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.tcb-block-tag {
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: #8a8a92;
+	min-width: 2.2rem;
+}
+
+/* Struck through rather than hidden: what is about to be removed should stay
+ * readable until it actually goes, so the page still makes sense while the
+ * change is being decided. */
+.tcb-block-removed {
+	opacity: 0.45;
+	text-decoration: line-through;
+	text-decoration-color: #c0392b;
+	text-decoration-thickness: 2px;
+}
+
+/* Marked as new until it is committed, so nothing on screen claims to be part
+ * of the page when it is not in the file yet. */
+.tcb-block-added {
+	outline: 2px solid #2f9e44;
+	outline-offset: 3px;
+}

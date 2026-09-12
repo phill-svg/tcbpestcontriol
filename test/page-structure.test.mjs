@@ -13,7 +13,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { findBlocks, renderBlock, applyStructure } from "../src/page-structure.js";
+import { findBlocks, renderBlock, applyStructure, BLOCK_TAGS } from "../src/page-structure.js";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -277,4 +277,19 @@ test("every page in the repository can be read by the scanner", () => {
 		else if (!blocks.length) withoutBlocks.push(`${relative}: no blocks`);
 	}
 	assert.deepEqual(withoutBlocks, ["staff-chat/index.html: No blocks found inside <main>."]);
+});
+
+test("the editor and the scanner agree on what a block is", () => {
+	// The block number is the entire contract between the two: the browser
+	// counts blocks in the DOM and sends a number, and the scanner counts
+	// blocks in the file and resolves it. If the two lists ever drift, every
+	// number past the first difference points at a different element on each
+	// side -- and the failure is silent, because both sides are internally
+	// consistent. An edit would simply land on the wrong paragraph.
+	const editor = readFileSync(path.join(repoRoot, "assets", "js", "editor.js"), "utf8");
+	const match = editor.match(/const BLOCK_SELECTOR = "([^"]+)";/);
+	assert.ok(match, "editor.js should declare BLOCK_SELECTOR");
+
+	const fromEditor = match[1].split(",").map((tag) => tag.trim());
+	assert.deepEqual(fromEditor.slice().sort(), [...BLOCK_TAGS].sort());
 });

@@ -24,7 +24,7 @@ import { escapeHtmlText, escapeStyleAttribute, decodeEntities } from "./html-ent
 // <section> or a <div> is scaffolding -- dragging one would move its children
 // with it and the ordinals of everything inside would go with them, which is
 // a different feature with a different set of hazards.
-const BLOCK_TAGS = new Set(["p", "h2", "h3", "h4", "h5", "h6", "li", "img"]);
+export const BLOCK_TAGS = new Set(["p", "h2", "h3", "h4", "h5", "h6", "li", "img"]);
 
 // Elements that never close, so an opening tag written without a slash must
 // not be counted as opening a depth. `<img src="x">` is the common case here

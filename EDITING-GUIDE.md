@@ -25,6 +25,7 @@ That's it. The change is live for everyone straight away.
 | An image | Hover the image, click **Change image**, pick a new one |
 | Image alt text | Same panel as the image |
 | The Google result title and blurb | **Page title & description** in the toolbar |
+| Adding or removing a whole paragraph, heading, list item or image | **Layout** — see below, it works differently |
 
 ## The buttons along the bottom
 
@@ -32,6 +33,11 @@ That's it. The change is live for everyone straight away.
   Google search results.
 - **Changes** — everything you've changed on this page, with a **Revert**
   button on each. Revert puts the original wording back.
+- **Layout** — add or remove whole paragraphs, headings, list items and
+  images. Read **Changing what is on a page** below before using it; it is the
+  one button here that does not work like the others.
+- **Save layout** — greyed out until you have made a layout change. Writes it
+  into the page.
 - **Preview** — the page exactly as visitors will see it once you publish.
   Nobody else can see this.
 - **Publish** — makes your changes live.
@@ -267,6 +273,99 @@ to the blog page, the sitemap, the RSS feed and the site search, and removes the
 The web address, publish date, reading time, social-share tags and the two
 "continue reading" cards are all worked out for you.
 
+## Changing what is on a page
+
+Everything above changes the words that are already there. **Layout** is for
+adding something that isn't, or taking something out.
+
+Press **Layout** and the page switches into layout mode. Hover any paragraph,
+heading, list item or image and three buttons appear on it: **Add above**,
+**Add below** and **Remove**. Adding asks what you want — a paragraph, a
+heading, a list item or an image — and what it should say. Removing greys the
+block out on screen so you can see what the page will look like without it.
+
+Nothing has actually happened yet. You can queue up several changes, and
+nothing touches the real page until you press **Save layout**. While you are
+in layout mode the **Layout** button reads **Done** instead; pressing it asks
+whether you meant to drop what you have not saved, and then reloads the page
+with none of it applied.
+
+Only those four kinds of thing are blocks. The boxes and sections they sit in
+are not, so you can add a paragraph inside a section but you cannot move the
+section. That is still a code change.
+
+### It does not work like Publish
+
+This is the important part.
+
+Wording changes are kept separately and painted over the page as it is served,
+which is why **Publish** is live everywhere within about half a minute. A
+layout change cannot be painted over anything — it is a change to what the
+page *is*. So **Save layout** rewrites the page's own file in the code and
+records it as a single commit, and the site then rebuilds itself with the new
+file in place.
+
+Your change reaches visitors when that rebuild finishes, **a minute or two
+later** — not straight away. The editor tells you so after saving and locks
+layout mode, because every block on your screen was numbered from the old
+version of the file. Reload the page in a couple of minutes and it will be
+there.
+
+### There is no undo
+
+Everywhere else in this guide, nothing you do is destructive and **Revert**
+puts it back. Layout is the exception, and it is worth reading twice.
+
+There is no Revert for a layout change. There is nothing sitting in the
+**Changes** list waiting to be taken back out, because the change is not an
+override — the page's file now says something different, and that is a commit
+in the code.
+
+Putting it back means reverting that commit on GitHub. The box that appears
+after saving links straight to the commit it just made — that link is the
+thing you need, so keep it, or find it later in the repository's history. If
+reverting a commit is not something you want to do yourself, hand that link to
+Claude.
+
+So read the page over before you press **Save layout**, the way you would
+before sending an email you can't unsend.
+
+### Publish your wording changes first
+
+If the page has wording changes you haven't published yet, saving the layout
+is refused: *"There are unpublished wording changes on this page. Publish or
+revert them first."*
+
+That is deliberate rather than fussy. An unpublished change is held against
+the words as the file writes them today. Saving the layout rewrites that file
+underneath it, and then the two are describing different versions of the same
+page and fighting over it — the wording change looking for a sentence that has
+shifted, and no good way to tell which of them is right. Publish it, or revert
+it under **Changes**, and one thing is changing the page at a time.
+
+### The location pages warn you
+
+There are 84 location pages — Kambah, Gungahlin, Belconnen and the rest — and
+they are deliberately built to match each other. Saving a layout change on one
+of them asks you to confirm first.
+
+It is a reminder, not a refusal. Changing this one changes only this one; the
+other 83 keep the shape they have now. If what you actually want is a change
+to all of the location pages, that is a job for Claude rather than 84 trips
+through this button.
+
+### Breadcrumbs and navigation stay put
+
+The trail across the top of the page — Home / Locations / Kambah — and the
+menus have no layout buttons on them and cannot be added to, removed or
+reordered. They are links to other pages rather than words on this one, and
+they are worked out from where the page sits in the site, so there is nothing
+useful to change here.
+
+The header and footer have no layout buttons either. Blocks only exist inside
+the main part of the page, which is everything between the breadcrumb and the
+footer. Their wording is still editable by clicking it, like anything else.
+
 ## Sync to code
 
 Open **Changes** and there's a **Sync to code** button at the bottom.
@@ -308,13 +407,17 @@ wording on five pages, publish on each of them.
 edit the website. If you click Edit page and get told your sign-in expired,
 sign in again at /staff-chat.
 
-**Some things can't be edited here.** Layout, adding a whole new section,
-adding a new page, prices in the booking system — those still need a code
-change. Click something uneditable and the editor will tell you so rather
-than pretending. Ask Claude for those.
+**Some things can't be edited here.** Adding a whole new section, moving the
+sections around, adding a new page, prices in the booking system — those still
+need a code change. Click something uneditable and the editor will tell you so
+rather than pretending. Ask Claude for those. Adding and removing individual
+paragraphs, headings, list items and images is no longer one of them: see
+**Changing what is on a page**.
 
-**Reverting is always available.** Nothing you do here is destructive. The
-original wording is kept, and Revert restores it.
+**Reverting is always available — except for layout.** Nothing you do to the
+wording is destructive: the original is kept, and Revert restores it. A layout
+change is the one exception, because it is a commit rather than an override,
+and undoing it means reverting that commit on GitHub.
 
 ---
 
@@ -339,6 +442,16 @@ editor, the Worker, and the sync script. They share the addressing module, and
 `test/address-parity.test.mjs` runs all three against real pages in this repo
 and compares them address for address. If that test fails, edits will land on
 the wrong text; fix it before shipping anything.
+
+Layout changes work the other way round. There is no overlay: they rewrite the
+page's HTML file in the repository as a single commit (`src/page-structure.js`
+does the splice, `src/github-sync.js` the commit), which is why they need a
+rebuild to appear and cannot be reverted from the editor. Their equivalent of
+the address is the block number — the browser numbers the blocks and the
+server resolves those numbers against the raw file — so the same parity test
+also compares the two block lists, element for element, on the same pages. A
+disagreement there is silent: both sides stay self-consistent and the edit
+simply lands on a different element.
 
 ## Keeping the repo as the source of truth
 

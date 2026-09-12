@@ -772,7 +772,184 @@ export async function handleContentApi(request, url, env, session) {
 		return json({ ok: true, cleared });
 	}
 
+	// Putting a new picture into assets/images/ from the editor.
+	//
+	// Until now the image picker could only offer pictures somebody had already
+	// committed by hand, which meant a copy change anybody could make and an
+	// image change only a developer could. There is nowhere else for the file
+	// to go: there is no R2 bucket and no KV namespace on this Worker, and the
+	// ASSETS binding is read-only by design. The repository is the only
+	// writable file store this thing has, so an upload is a commit.
+	//
+	// It is two files in one commit, not one. assets/images/manifest.json is a
+	// committed build artefact -- scripts/build-image-manifest.js writes it,
+	// and the picker fetches it as a plain static file, because Cloudflare's
+	// static assets have no "list the directory" API. An image committed
+	// without its manifest entry is invisible to the very picker the upload
+	// exists to feed. Re-emitted in exactly the build script's format (tab
+	// indent, trailing newline, sorted by path) so that the next local
+	// `npm run build:images` produces no diff -- otherwise every upload leaves
+	// a landmine for whoever next runs the build.
+	//
+	// Same deploy lag as the sync and structure routes above: the commit lands
+	// immediately, but Cloudflare has to rebuild before the file is actually
+	// served, which takes a minute or two. Until then the picker will list the
+	// new path and the image itself will 404. That is why the response says so
+	// in words rather than leaving the editor to look broken.
+	if (route === "upload-image" && request.method === "POST") {
+		// JSON only, and the header is checked rather than trusted to have been
+		// what the browser sent. A cross-site application/json POST is
+		// preflighted, so the browser asks permission before it ever reaches
+		// here; multipart/form-data and text/plain are "simple" requests that
+		// are not, and request.json() will happily parse a text/plain body that
+		// was shaped to look like JSON. Refusing anything but application/json
+		// is what makes the CSRF argument actually true.
+		if (!/^application\/json\b/i.test(request.headers.get("content-type") || "")) {
+			return json({ error: "Send this as application/json." }, 415);
+		}
+
+		const missing = missingConfig(env);
+		if (missing.length) return json({ error: setupMessage(missing), missing }, 501);
+
+		const body = await readJsonBody(request);
+		if (!body || typeof body.name !== "string" || typeof body.base64 !== "string") {
+			return json({ error: "Expected a name and a base64 image." }, 400);
+		}
+
+		const slug = slugifyImageName(body.name);
+		if (!IMAGE_SLUG.test(slug)) {
+			return json({ error: "Name the picture with letters, numbers and dashes -- 61 characters at most." }, 400);
+		}
+
+		// Four base64 characters carry three bytes, so the encoded length is an
+		// upper bound on the decoded one. Checking it first means a 40 MB paste
+		// is refused without first being expanded into a binary string in an
+		// isolate with a hard memory limit.
+		const encoded = body.base64.replace(/\s+/g, "");
+		if (encoded.length > Math.ceil(MAX_IMAGE_BYTES / 3) * 4 + 4) {
+			return json({ error: "That picture is too big. Keep it under 2 MB." }, 413);
+		}
+
+		let binary;
+		try {
+			binary = atob(encoded);
+		} catch {
+			// atob throws on anything that is not base64. Left uncaught this
+			// would be a 500, which reads as "the server is broken" when the
+			// truth is "that was not a file".
+			return json({ error: "That file could not be read." }, 400);
+		}
+		if (binary.length > MAX_IMAGE_BYTES) {
+			return json({ error: "That picture is too big. Keep it under 2 MB." }, 413);
+		}
+
+		// The trust boundary. The name came from the client and the bytes came
+		// from the client, so nothing said so far establishes what this file
+		// is; only the file's own header does. A RIFF/WEBP container is what
+		// src/assets.js can serve and negotiate, and anything else committed
+		// under a .webp name would be served with the wrong content type to
+		// every visitor until somebody noticed.
+		if (binary.slice(0, 4) !== "RIFF" || binary.slice(8, 12) !== "WEBP") {
+			return json({ error: "Only WebP images can be uploaded. Convert the picture to .webp first." }, 400);
+		}
+
+		const branch = env.GITHUB_BRANCH || "main";
+		let manifest;
+		try {
+			manifest = JSON.parse(decodeBase64Utf8((await readFile(env, IMAGE_MANIFEST_FILE, branch)).content));
+		} catch (error) {
+			// Deliberately not falling back to an empty list. Writing a fresh
+			// manifest containing only the new picture would delete every
+			// existing image from the picker in the same commit, which is a far
+			// worse outcome than a failed upload.
+			return json({ error: `Could not read the image list: ${error.message}` }, 502);
+		}
+		if (!manifest || !Array.isArray(manifest.images)) {
+			return json({ error: "The image list in the repository is not in the expected format." }, 502);
+		}
+
+		const taken = new Set(manifest.images.map((image) => image && image.path));
+		let sitePath = `/assets/images/${slug}.webp`;
+		if (taken.has(sitePath)) {
+			// Never overwrite. Two people uploading "logo" a month apart are not
+			// asking to replace each other's picture, and the older one is
+			// probably already referenced from a page. The suffix is derived
+			// from the bytes rather than random, following the existing
+			// tcb-pest-control-logo-03284.webp naming, so re-uploading the very
+			// same file twice converges on one name instead of littering.
+			sitePath = `/assets/images/${slug}-${contentSuffix(encoded)}.webp`;
+			// Same name and same bytes: this file is already committed. Report
+			// where it lives rather than spending a deploy on a no-op commit.
+			if (taken.has(sitePath)) {
+				return json({ ok: true, path: sitePath, existing: true, message: "That picture is already on the site." });
+			}
+		}
+
+		manifest.images.push({ path: sitePath, bytes: binary.length });
+		// Byte-for-byte the build script's output: it sorts filenames under a
+		// constant directory prefix, which is the same order as sorting the
+		// paths, and writes tab-indented JSON with a trailing newline.
+		manifest.images.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+
+		let commit;
+		try {
+			commit = await commitFiles(
+				env,
+				branch,
+				[
+					// base64, not content: the bytes are already encoded and
+					// encodeBase64Utf8 would run them through TextEncoder and
+					// destroy them. See the note on commitFiles.
+					{ path: sitePath.slice(1), base64: encoded },
+					{ path: IMAGE_MANIFEST_FILE, content: `${JSON.stringify(manifest, null, "\t")}\n` },
+				],
+				`Add ${sitePath} from the visual editor`
+			);
+		} catch (error) {
+			console.error("Image upload commit failed:", error && (error.stack || error.message));
+			return json({ error: `Could not push the commit: ${error.message}` }, 502);
+		}
+
+		return json({
+			ok: true,
+			path: sitePath,
+			commit,
+			message: "Uploaded. The picture goes live once Cloudflare finishes deploying, usually a minute or two.",
+		});
+	}
+
 	return json({ error: "Not found." }, 404);
+}
+
+// The picker's list, and the only thing that makes an uploaded image findable.
+const IMAGE_MANIFEST_FILE = "assets/images/manifest.json";
+
+// 2 MB decoded. Generous for a WebP -- the largest picture on the site today
+// is under 90 KB -- and small enough that the whole thing comfortably fits in
+// a Worker isolate alongside its base64, which is a third larger again.
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+
+// Long enough for a descriptive name, short enough that the URL stays
+// readable. Must start alphanumeric so no path can begin with a dash.
+const IMAGE_SLUG = /^[a-z0-9][a-z0-9-]{0,60}$/;
+
+function slugifyImageName(name) {
+	// The trailing extension goes first. A file input hands over "My Photo.webp"
+	// and slugging that whole string gives "my-photo-webp", which would then be
+	// committed as my-photo-webp.webp and sit in the picker under that name for
+	// good. Callers that send a bare name lose nothing: a name genuinely ending
+	// in something like ".2" is not a name worth protecting.
+	return name
+		.replace(/\.[a-z0-9]{1,5}$/i, "")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+}
+
+// Five digits, matching the names already in assets/images/. Derived from the
+// content so it is stable: the same file always lands on the same name.
+function contentSuffix(encoded) {
+	return String(parseInt(hashValue(encoded).slice(0, 7), 36) % 100000).padStart(5, "0");
 }
 
 // Fixing a stale social tag with one click, by publishing the page's own

@@ -45,6 +45,16 @@ const VOID_ELEMENTS = new Set([
 // here would put every later block one ordinal out of step with the browser.
 const SKIP_TAGS = new Set([...SKIPPED_ELEMENTS].filter((tag) => tag !== "title"));
 
+// Navigation inside <main>. Every page opens with a breadcrumb <ol> in a
+// <nav>, and its <li>s are links to other pages rather than words on this one
+// -- moving or deleting one is never what somebody dragging a block meant, and
+// on most pages they would be the first blocks on the page.
+//
+// Kept apart from SKIP_TAGS on purpose. That set is shared with the text walk,
+// which *does* address breadcrumb text; adding nav to it would change the
+// addressing of every page and orphan the stored edits.
+const BLOCK_SKIP_TAGS = new Set(["nav"]);
+
 // Control characters, minus tab/newline/carriage return -- normaliseText
 // collapses those to a space anyway. Same rule content-edits.js applies to
 // stored text, so what gets inserted is held to what gets saved.
@@ -73,6 +83,7 @@ export function findBlocks(html, { root = "main" } = {}) {
 	const stack = [];
 	let rootDepth = -1;
 	let skipDepth = 0;
+	let navDepth = 0;
 	let cursor = 0;
 
 	NODE_PATTERN.lastIndex = 0;
@@ -92,6 +103,7 @@ export function findBlocks(html, { root = "main" } = {}) {
 				continue;
 			}
 			if (skipDepth > 0) continue;
+			if (BLOCK_SKIP_TAGS.has(name) && navDepth > 0) navDepth--;
 
 			// Pop back to the matching open tag. Unbalanced markup is reported
 			// rather than guessed at.
@@ -122,6 +134,10 @@ export function findBlocks(html, { root = "main" } = {}) {
 
 		const isVoid = selfClosing || VOID_ELEMENTS.has(name);
 
+		// Still pushed on the stack so the close tag balances -- only its
+		// contents stop being blocks.
+		if (BLOCK_SKIP_TAGS.has(name) && !isVoid) navDepth++;
+
 		if (name === root && rootDepth === -1) {
 			rootDepth = stack.length;
 			if (!isVoid) stack.push({ name });
@@ -132,7 +148,7 @@ export function findBlocks(html, { root = "main" } = {}) {
 		const inRoot = rootDepth !== -1 && stack.length > rootDepth;
 		const parentTag = stack.length ? stack[stack.length - 1].name : "";
 
-		if (inRoot && BLOCK_TAGS.has(name)) {
+		if (inRoot && navDepth === 0 && BLOCK_TAGS.has(name)) {
 			const block = {
 				ordinal: -1, // assigned in document order once the walk finishes
 				tag: name,

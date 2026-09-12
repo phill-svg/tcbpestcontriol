@@ -40,7 +40,7 @@ function isCanonicalUrl(value) {
 	}
 	return url.protocol === "https:" && url.hostname === CANONICAL_HOST;
 }
-const SKIP_DIRS = new Set(["node_modules", ".git", ".wrangler", "test"]);
+const SKIP_DIRS = new Set(["node_modules", ".git", ".wrangler", ".claude", "test"]);
 
 function htmlPages(dir = repoRoot, found = []) {
 	for (const entry of readdirSync(dir)) {

@@ -28,7 +28,7 @@ const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 // property the site has always reported into alongside it.
 const MEASUREMENT_IDS = ["G-P3FB9505V3", "G-00992RETSJ"];
 
-const SKIP_DIRS = new Set(["node_modules", ".git", ".wrangler", "test", "assets"]);
+const SKIP_DIRS = new Set(["node_modules", ".git", ".wrangler", ".claude", "test", "assets"]);
 
 // Staff-only pages that are deliberately untagged -- they are internal tools,
 // not part of the public site, and their traffic would skew the numbers.

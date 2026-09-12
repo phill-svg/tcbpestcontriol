@@ -252,7 +252,7 @@ test("a heading is level 2 or 3, and empty text is not a block", () => {
 test("every page in the repository can be read by the scanner", () => {
 	// Cheap, no browser, and it catches a file this cannot parse before
 	// somebody discovers it by dragging a block on it.
-	const skip = new Set(["node_modules", ".git", ".wrangler", "test"]);
+	const skip = new Set(["node_modules", ".git", ".wrangler", ".claude", "test"]);
 	const pages = [];
 	(function walk(dir) {
 		for (const entry of readdirSync(dir)) {

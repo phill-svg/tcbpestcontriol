@@ -276,6 +276,11 @@ const SKIP_SELECTOR = [...SKIPPED_ELEMENTS].concat(`[${IGNORED_SUBTREE_ATTR}]`).
 // would take everything inside it along, which is a different feature.
 const BLOCK_SELECTOR = "p,h2,h3,h4,h5,h6,li,img";
 
+// Navigation inside <main> -- the breadcrumb every page opens with. Its items
+// are links to other pages, not words on this one. Must match BLOCK_SKIP_TAGS
+// in src/page-structure.js, or the two sides number the blocks differently.
+const BLOCK_SKIP_SELECTOR = "nav";
+
 
 // The walk has to visit exactly the text nodes the Worker's parser visits, in
 // the same order, or the ordinals drift apart and edits stop matching. That
@@ -692,9 +697,11 @@ class Editor {
 
 	updateHover(event) {
 		// The hover outline means "click to change these words", which is not
-		// what a click does in layout mode.
+		// what a click does in layout mode -- there, the same pointer movement
+		// drives the block toolbar instead.
 		if (this.layoutMode) {
 			this.hover.style.display = "none";
+			this.trackLayoutHover(event);
 			return;
 		}
 		// While editing, the chip is pinned beside the field and must stay put.
@@ -1171,9 +1178,13 @@ class Editor {
 	// document.
 	indexBlocks() {
 		const main = document.querySelector("main");
-		this.blocks = main ? [...main.querySelectorAll(BLOCK_SELECTOR)].filter((node) => !node.closest(SKIP_SELECTOR)) : [];
+		this.blocks = main
+			? [...main.querySelectorAll(BLOCK_SELECTOR)].filter((node) => !node.closest(SKIP_SELECTOR) && !node.closest(BLOCK_SKIP_SELECTOR))
+			: [];
 		this.layoutOps = [];
 		this.layoutMode = false;
+		this.hoveredBlock = -1;
+		this.hoveredNode = null;
 	}
 
 	// What the server should find at that number. If a deploy landed since this
@@ -1200,31 +1211,92 @@ class Editor {
 		this.layoutMode = true;
 		document.body.classList.add("tcb-layout-mode");
 		this.layoutButton.textContent = "Done";
-		for (const [ordinal, node] of this.blocks.entries()) node.after(this.blockControls(ordinal, node));
 		this.refreshLayoutStatus();
 	}
 
-	// The controls that sit under a block while layout mode is on. Injected
-	// chrome, so the text walk and the block index both skip it.
-	blockControls(ordinal, node) {
-		const remove = el("button", {
+	// One toolbar, floating over whichever block the pointer is on.
+	//
+	// The first version put a row of buttons under every block instead. On a
+	// real page that is fifty rows of chrome at once, and inserting a <div>
+	// after an <li> or inside a flex row rearranges the page you are trying to
+	// look at -- the breadcrumb bar came apart. Nothing goes into the page's
+	// own layout now: the toolbar is positioned over the block and the page is
+	// left exactly as it renders.
+	layoutToolbar() {
+		if (this.toolbar) return this.toolbar;
+
+		this.toolbarTag = el("span", { class: "tcb-block-tag" });
+		this.toolbarRemove = el("button", {
 			type: "button",
 			class: "tcb-btn tcb-btn-small tcb-btn-quiet",
 			text: "Remove",
-			onclick: () => {
-				this.layoutOps.push({ op: "delete", block: ordinal, expect: this.expectFor(ordinal) });
-				node.classList.add("tcb-block-removed");
-				remove.disabled = true;
-				this.refreshLayoutStatus();
-			},
+			onclick: () => this.removeBlock(),
 		});
 
-		return chrome("div", { class: "tcb-block-controls" }, [
-			el("span", { class: "tcb-block-tag", text: node.tagName.toLowerCase() }),
-			el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add above", onclick: () => this.openAddBlock(ordinal, "before", node) }),
-			el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add below", onclick: () => this.openAddBlock(ordinal, "after", node) }),
-			remove,
+		this.toolbar = chrome("div", { class: "tcb-block-toolbar" }, [
+			this.toolbarTag,
+			el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add above", onclick: () => this.addBlockAt("before") }),
+			el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add below", onclick: () => this.addBlockAt("after") }),
+			this.toolbarRemove,
 		]);
+		this.toolbar.hidden = true;
+		// Kept over the block while the page scrolls under it.
+		window.addEventListener("scroll", () => this.positionToolbar(), { passive: true });
+		window.addEventListener("resize", () => this.positionToolbar(), { passive: true });
+		document.body.appendChild(this.toolbar);
+		return this.toolbar;
+	}
+
+	// Which block the pointer is over, if any. Called from the same mousemove
+	// the hover outline uses, so layout mode costs no extra listener.
+	trackLayoutHover(event) {
+		const target = event.target && event.target.closest ? event.target.closest(BLOCK_SELECTOR) : null;
+		const ordinal = target ? this.blocks.indexOf(target) : -1;
+		if (ordinal === -1) return;
+		if (this.hoveredBlock === ordinal) return;
+
+		if (this.hoveredNode) this.hoveredNode.classList.remove("tcb-block-hover");
+		this.hoveredBlock = ordinal;
+		this.hoveredNode = target;
+		target.classList.add("tcb-block-hover");
+
+		const toolbar = this.layoutToolbar();
+		this.toolbarTag.textContent = target.tagName.toLowerCase();
+		this.toolbarRemove.disabled = target.classList.contains("tcb-block-removed");
+		toolbar.hidden = false;
+		this.positionToolbar();
+	}
+
+	positionToolbar() {
+		if (!this.toolbar || this.toolbar.hidden || !this.hoveredNode) return;
+		const box = this.hoveredNode.getBoundingClientRect();
+		// Above the block where there is room, below it where there is not --
+		// a toolbar off the top of the window is a toolbar you cannot press.
+		const above = box.top > 44;
+		this.toolbar.style.top = `${(above ? box.top - 38 : box.bottom + 6) + window.scrollY}px`;
+		this.toolbar.style.left = `${Math.max(8, box.left) + window.scrollX}px`;
+	}
+
+	removeBlock() {
+		const ordinal = this.hoveredBlock;
+		const node = this.blocks[ordinal];
+		if (!node || node.classList.contains("tcb-block-removed")) return;
+		this.layoutOps.push({ op: "delete", block: ordinal, expect: this.expectFor(ordinal) });
+		node.classList.add("tcb-block-removed");
+		this.toolbarRemove.disabled = true;
+		this.refreshLayoutStatus();
+	}
+
+	addBlockAt(where) {
+		const node = this.blocks[this.hoveredBlock];
+		if (node) this.openAddBlock(this.hoveredBlock, where, node);
+	}
+
+	hideToolbar() {
+		if (this.hoveredNode) this.hoveredNode.classList.remove("tcb-block-hover");
+		this.hoveredNode = null;
+		this.hoveredBlock = -1;
+		if (this.toolbar) this.toolbar.hidden = true;
 	}
 
 	// Adding a block. The payload is a shape, never markup -- page-structure.js
@@ -1382,7 +1454,7 @@ class Editor {
 	}
 
 	lockLayout(commit) {
-		for (const controls of document.querySelectorAll(".tcb-block-controls")) controls.remove();
+		this.hideToolbar();
 		this.saveLayoutButton.disabled = true;
 		this.layoutButton.disabled = true;
 		this.status.textContent = "Saved. It goes live when the site finishes rebuilding, in a minute or two -- reload then.";

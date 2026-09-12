@@ -18,7 +18,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const headers = readFileSync(path.join(repoRoot, "_headers"), "utf8");
+// Normalised to LF before anything below reads it. The working copy is CRLF
+// on Windows, and each rule is read by slicing to the blank line after it --
+// which is a CRLF pair there, so the search for the LF pair found nothing,
+// sliced to the end of the file instead, and checked every rule against all
+// the rules that follow it. Three of these tests failed on that alone.
+const headers = readFileSync(path.join(repoRoot, "_headers"), "utf8").replace(/\r\n/g, "\n");
 
 test("editor.css is exempt from the immutable rule, and the exemption comes last", () => {
 	const glob = headers.indexOf("/assets/css/*");
@@ -99,7 +104,6 @@ test("every module the editor imports is exempt from the year-long freeze", () =
 	const imported = [...editor.matchAll(/from\s+"\.\/([\w.-]+\.js)"/g)].map(([, name]) => name);
 	assert.ok(imported.length >= 3, `expected the editor's imports, found ${imported.length}`);
 
-	const headers = readFileSync(path.join(repoRoot, "_headers"), "utf8");
 	const glob = headers.indexOf("/assets/js/*");
 	assert.ok(glob !== -1);
 

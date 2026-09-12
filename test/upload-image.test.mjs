@@ -11,6 +11,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { handleContentApi } from "../src/content-edits.js";
 
@@ -141,6 +142,7 @@ test("a valid upload commits the picture and the manifest together in one commit
 	assert.equal(body.path, "/assets/images/new-photo.webp", "the .webp on the supplied name must not become part of the slug");
 
 	assert.equal(github.commits.length, 1, "one commit, not two");
+	assert.equal(github.blobs.size, 2, "exactly two files -- the picture and the manifest, and nothing else");
 	const written = github.written();
 	assert.deepEqual([...written.keys()].sort(), ["assets/images/manifest.json", "assets/images/new-photo.webp"]);
 
@@ -154,6 +156,27 @@ test("a valid upload commits the picture and the manifest together in one commit
 		Buffer.from(written.get("assets/images/manifest.json"), "base64").toString("utf8"),
 		manifestText([EXISTING[0], { path: "/assets/images/new-photo.webp", bytes: 96 }, EXISTING[1]])
 	);
+});
+
+test("re-emitting the real manifest reproduces it byte for byte", async () => {
+	// The fixture above pins the format against two invented entries; this pins
+	// it against the file that is actually committed, which is the claim that
+	// matters. Every upload rewrites the whole manifest, so a difference in key
+	// order, indent or trailing newline would turn the next local
+	// `npm run build:images` into a five-hundred-line diff attached to whatever
+	// unrelated change happened to be in flight.
+	//
+	// The CRLF normalisation is not cosmetic. The blob stored in git is LF; the
+	// working copy on Windows is CRLF because of autocrlf on checkout. The
+	// Worker reads the blob, so LF is what it sees -- but a test comparing
+	// against the working copy without this would pass on Linux CI and fail on
+	// the machine this site is actually edited from.
+	const committed = readFileSync(new URL("../assets/images/manifest.json", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+	assert.equal(`${JSON.stringify(JSON.parse(committed), null, "\t")}\n`, committed);
+
+	// And the format the route re-derives is the same one.
+	const parsed = JSON.parse(committed);
+	assert.equal(manifestText(parsed.images), committed);
 });
 
 test("the response says the picture is not live until the deploy finishes", async () => {

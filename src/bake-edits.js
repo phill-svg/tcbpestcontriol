@@ -21,7 +21,7 @@ import { decodeEntities, escapeHtmlText } from "./html-entities.js";
 // Elements whose content is raw text, not markup. A `<` inside a script is
 // just a less-than sign, so scanning for the next tag would go badly wrong --
 // these are jumped over wholesale instead.
-const RAW_TEXT_ELEMENTS = new Set(["script", "style"]);
+export const RAW_TEXT_ELEMENTS = new Set(["script", "style"]);
 
 // Comments and declarations (`<!doctype html>`) are matched as nodes in their
 // own right, ahead of the tag alternative. That is not a detail: a real
@@ -41,7 +41,7 @@ const RAW_TEXT_ELEMENTS = new Set(["script", "style"]);
 // The trade-off is that a tag containing an *unmatched* quote no longer
 // matches at all. That is the safe failure: the scanner leaves it as text and
 // applies no edit there, rather than mis-parsing it.
-const NODE_PATTERN = /<!--[\s\S]*?-->|<![^>]*>|<(\/?)([a-zA-Z][^\s/>]*)((?:"[^"]*"|'[^']*'|[^"'>])*?)(\/?)>/g;
+export const NODE_PATTERN = /<!--[\s\S]*?-->|<![^>]*>|<(\/?)([a-zA-Z][^\s/>]*)((?:"[^"]*"|'[^']*'|[^"'>])*?)(\/?)>/g;
 
 // Splits a tag's attribute text into name/value pairs, keeping the exact
 // source offsets so a value can be replaced without disturbing anything else

@@ -125,13 +125,27 @@ before(async () => {
 
 	const workerPort = await freePort();
 	WORKER_ORIGIN = `http://127.0.0.1:${workerPort}`;
+	// The .cmd shim on Windows: spawn() there cannot execute the extensionless
+	// shell script npm writes next to it, and fails with ENOENT -- which reads
+	// as "wrangler is not installed" rather than "wrong file for this
+	// platform", and sends you looking in the wrong place entirely.
+	const wranglerBin = path.join(repoRoot, "node_modules", ".bin", process.platform === "win32" ? "wrangler.cmd" : "wrangler");
+
 	workerProcess = spawn(
-		path.join(repoRoot, "node_modules", ".bin", "wrangler"),
+		wranglerBin,
 		["dev", "--local", "--config", "test/probe/wrangler.jsonc", "--port", String(workerPort), "--ip", "127.0.0.1"],
 		// Its own process group: `wrangler dev` spawns a workerd child that
 		// survives a SIGTERM aimed at the wrapper, and a surviving workerd keeps
 		// the test runner's event loop alive forever.
-		{ cwd: repoRoot, stdio: "ignore", detached: true }
+		{
+			cwd: repoRoot,
+			stdio: "ignore",
+			detached: true,
+			// Node refuses to spawn a .cmd without a shell (the fix for
+			// CVE-2024-27980), and the Windows shim is a .cmd. Arguments here
+			// are all literals from this file, never user input.
+			shell: process.platform === "win32",
+		}
 	);
 
 	for (let attempt = 0; attempt < 90; attempt++) {

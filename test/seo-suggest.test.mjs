@@ -11,7 +11,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { validateSuggestion, parseCandidates, buildPrompt, suggest, numbersIn, claimsIn, examplePaths, draftPage, draftServicePage } from "../src/seo-suggest.js";
+import { validateSuggestion, parseCandidates, buildPrompt, suggest, numbersIn, claimsIn, examplePaths, draftPage, draftServicePage, FIELD_KINDS } from "../src/seo-suggest.js";
 
 const PAGE = {
 	title: "Termite Treatment Canberra | TCB Pest Control",
@@ -524,3 +524,54 @@ test("a clean service-page draft keeps its shape", async () => {
 	assert.equal(draft.sections[0].paragraphs.length, 2);
 	assert.equal(draft.faqs.length, 1);
 });
+
+// The composer writes a post that has no page yet, so every one of its fields
+// goes through suggest() with the draft standing in for the page. These are
+// the parts of that which fail quietly: a kind the table does not know falls
+// back to writing a meta description, and a prose field silently loses every
+// option to the one-line rule if the band is wrong.
+test("every field the composer offers is a kind suggest() knows", () => {
+	for (const kind of ["title", "description", "sectionHeading", "intro", "section", "alt", "topic"]) {
+		const spec = FIELD_KINDS[kind];
+		assert.ok(spec, `${kind} has no entry, so it would be written as a description`);
+		assert.ok(spec.min < spec.max, `${kind} has an impossible length band`);
+		assert.match(spec.wants(spec.min, spec.max), /characters/, `${kind} does not say how long it should be`);
+	}
+});
+
+test("a paragraph-shaped suggestion survives the checks a title has to pass", async () => {
+	// Prose fields run through the same validator as a title, and two of its
+	// rules bite here: anything with a newline is thrown out, and the length
+	// band is measured in characters. A section band that suited a title
+	// would reject every real paragraph.
+	const paragraph =
+		"Ants come indoors in summer looking for water, which is why they turn up around sinks and dishwashers first. " +
+		"Following the trail back to where it enters the house is usually more useful than spraying the ones you can see.";
+	const { candidates, rejected } = await suggest(null, {
+		kind: "section",
+		page: { title: "Ants in summer", description: "", h1: "Ants in summer", body: "Ants come indoors in summer looking for water." },
+		min: FIELD_KINDS.section.min,
+		max: FIELD_KINDS.section.max,
+		run: async () => ({ response: paragraph }),
+	});
+	assert.deepEqual(rejected, [], "a plain paragraph should not be thrown out");
+	assert.deepEqual(candidates, [paragraph]);
+});
+
+test("an option identical to what is in the field is not offered as a change", async () => {
+	// The draft fields are not part of `page`, so suggest() cannot find the
+	// current value on its own -- the composer passes it in. Without that,
+	// pressing Suggest on a filled field offers it back to you unchanged.
+	const already = "Ants in the kitchen, and what actually stops them coming back";
+	const { candidates, rejected } = await suggest(null, {
+		kind: "sectionHeading",
+		page: { title: "Ants", description: "", h1: "Ants", body: "Ants in the kitchen, and what actually stops them coming back" },
+		min: FIELD_KINDS.sectionHeading.min,
+		max: FIELD_KINDS.sectionHeading.max,
+		currentValue: already,
+		run: async () => ({ response: already }),
+	});
+	assert.deepEqual(candidates, []);
+	assert.equal(rejected[0].reason, "unchanged");
+});
+

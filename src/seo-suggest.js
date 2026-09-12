@@ -235,14 +235,15 @@ export function buildPrompt({ kind, page, queries = [], examples = [], gaps = []
 		.map((entry) => entry.key)
 		.filter(Boolean);
 
-	const wanted =
-		kind === "title"
-			? `a page title between ${min} and ${max} characters`
-			: kind === "heading"
-				? `a main heading — the big line at the top of the page — between ${min} and ${max} characters`
-				: `a meta description between ${min} and ${max} characters`;
+	// Unknown kinds keep answering as a description, which is what this did
+	// before the table existed.
+	const spec = FIELD_KINDS[kind] || FIELD_KINDS.description;
+	const wanted = spec.wants(min ?? spec.min, max ?? spec.max);
 
-	const field = kind === "title" ? "title" : kind === "heading" ? "h1" : "description";
+	// Which part of a sample page to show as the house style. The prose kinds
+	// have no equivalent on a sample page -- a description is the closest
+	// thing to a voice sample there is -- so they borrow that.
+	const field = kind === "title" ? "title" : kind === "heading" || kind === "sectionHeading" ? "h1" : "description";
 	const sample = examples
 		.map((example) => example[field])
 		.filter(Boolean)
@@ -267,7 +268,7 @@ export function buildPrompt({ kind, page, queries = [], examples = [], gaps = []
 				...(sample.length
 					? [
 							"",
-							`Match the voice of these, which are real ${kind === "title" ? "titles" : kind === "heading" ? "headings" : "descriptions"} from elsewhere on this site:`,
+							`Match the voice of these, which are real ${field === "title" ? "titles" : field === "h1" ? "headings" : "descriptions"} from elsewhere on this site:`,
 							...sample.map((text) => `- ${text}`),
 					  ]
 					: []),
@@ -310,7 +311,7 @@ export function buildPrompt({ kind, page, queries = [], examples = [], gaps = []
 // Returns { candidates, rejected } -- rejected is kept because a run where
 // everything was thrown away should say so rather than silently offering
 // nothing, which reads as a broken button.
-export async function suggest(env, { kind, page, queries = [], examples = [], gaps = [], steer = "", require = [], alsoWanted = [], model = CLAUDE_MODEL, min, max, run } = {}) {
+export async function suggest(env, { kind, page, queries = [], examples = [], gaps = [], steer = "", require = [], alsoWanted = [], model = CLAUDE_MODEL, min, max, currentValue, run } = {}) {
 	const messages = buildPrompt({ kind, page, queries, examples, gaps, steer, require, alsoWanted, min, max });
 	// Six asked for rather than three. Roughly half get thrown out by the
 	// checks below -- so asking for what should survive left the button
@@ -324,7 +325,10 @@ export async function suggest(env, { kind, page, queries = [], examples = [], ga
 	// description it already has -- sharpening an existing claim is fine,
 	// inventing a new one is not.
 	const source = [page.title, page.description, page.h1, page.body].filter(Boolean).join(" ");
-	const current = kind === "title" ? page.title : page.description;
+	// What the field says now, so an option identical to it is thrown out as
+	// "unchanged" rather than offered as an improvement. Passed in for the
+	// draft fields, which are not part of `page`.
+	const current = currentValue !== undefined ? currentValue : kind === "title" ? page.title : page.description;
 
 	const candidates = [];
 	const rejected = [];
@@ -412,6 +416,46 @@ export async function extractMeta(response) {
 // three lines stops being a heading.
 export const HEADING_MIN = 12;
 export const HEADING_MAX = 70;
+
+// The fields a post is written out of, and what each one is asking for.
+//
+// Everything here goes through the same suggest() as a title does -- same
+// parsing, same de-duplication, same no-invention checks. Only the sentence
+// describing the field and its length band differ, which is why they are a
+// table rather than four more branches.
+//
+// Prose fields are still one line: validateSuggestion rejects a candidate
+// containing a newline, and parseCandidates splits on them, so a paragraph
+// arrives as several sentences on a single line. That is what the fields
+// hold anyway.
+export const FIELD_KINDS = {
+	title: { min: TITLE_MIN, max: TITLE_MAX, wants: (min, max) => `a page title between ${min} and ${max} characters` },
+	description: { min: DESCRIPTION_MIN, max: DESCRIPTION_MAX, wants: (min, max) => `a meta description between ${min} and ${max} characters` },
+	heading: { min: HEADING_MIN, max: HEADING_MAX, wants: (min, max) => `a main heading — the big line at the top of the page — between ${min} and ${max} characters` },
+	sectionHeading: { min: 12, max: 70, wants: (min, max) => `a section heading for part of a blog post, between ${min} and ${max} characters. It is a subheading inside the post, not the post's own title` },
+	intro: {
+		min: 120,
+		max: 400,
+		wants: (min, max) =>
+			`an opening paragraph for a blog post, between ${min} and ${max} characters. Two or three sentences on one line, setting up what the post is about`,
+	},
+	section: {
+		min: 120,
+		max: 600,
+		wants: (min, max) => `the body text of one section of a blog post, between ${min} and ${max} characters. Two to four sentences on one line`,
+	},
+	alt: {
+		min: 15,
+		max: 125,
+		wants: (min, max) => `alt text describing what a photograph shows, between ${min} and ${max} characters. Describe the picture plainly for someone who cannot see it`,
+	},
+	topic: {
+		min: 3,
+		max: 40,
+		wants: (min, max) =>
+			`the subject of a closing call to action, between ${min} and ${max} characters. A short noun phrase that reads correctly in “a conversation about ___ in and around your home”`,
+	},
+};
 
 // Closing the page's gaps, trying each place the words could go in turn.
 //

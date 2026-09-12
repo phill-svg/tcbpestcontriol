@@ -1166,6 +1166,25 @@ class Editor {
 		const introInput = el("textarea", { class: "tcb-input tcb-textarea", rows: "3" });
 		const pestInput = el("input", { type: "text", class: "tcb-input", placeholder: "ant control" });
 
+		// What the form says right now, sent with every per-field suggestion so
+		// each one is written knowing the rest of the post. Read at click time,
+		// never captured -- the form has always moved on since, and that later
+		// state is the context worth sending.
+		//
+		// Declared above the fields it reads because addSection() attaches it
+		// to each row's buttons, and the first rows are built further down --
+		// the bodies only run on a click, by which point everything exists.
+		const readDraft = () => ({
+			title: titleInput.value,
+			description: descriptionInput.value,
+			intro: introInput.value,
+			topic: pestInput.value || topicInput.value,
+			sections: [...sectionList.children].map((row) => ({
+				heading: row.headingInput.value,
+				paragraph: row.paragraphInput.value,
+			})),
+		});
+
 		// Sections are added and removed as needed, rather than being fixed at
 		// the template's three.
 		const sectionList = el("div", { class: "tcb-sections" });
@@ -1176,7 +1195,9 @@ class Editor {
 			paragraphInput.value = paragraph;
 			const row = el("div", { class: "tcb-section" }, [
 				headingInput,
+				this.buildDraftSuggestions("sectionHeading", headingInput, readDraft),
 				paragraphInput,
+				this.buildDraftSuggestions("section", paragraphInput, readDraft),
 				el("button", {
 					type: "button",
 					class: "tcb-btn tcb-btn-quiet",
@@ -1188,39 +1209,103 @@ class Editor {
 			row.paragraphInput = paragraphInput;
 			sectionList.appendChild(row);
 		};
-		if (draft && Array.isArray(draft.sections) && draft.sections.length) {
-			for (const section of draft.sections) addSection(section.heading, section.paragraph);
-		} else {
+		// Filling the form from a draft. Two things do this -- the gap panel on
+		// the way in, and the "Draft it all" button below -- and they have to
+		// fill the same fields, so there is one description of what a draft is
+		// rather than two that drift.
+		const applyDraft = (source) => {
+			titleInput.value = source.title || "";
+			descriptionInput.value = source.description || "";
+			updateCount();
+			introInput.value = source.intro || "";
+			// The search this page exists to answer, which is also the thing
+			// the template threads through as the topic.
+			pestInput.value = source.query || "";
+			if (Array.isArray(source.sections) && source.sections.length) {
+				sectionList.replaceChildren();
+				for (const section of source.sections) addSection(section.heading, section.paragraph);
+			}
+		};
+
+		if (draft) applyDraft(draft);
+		// Two to start with, for a post being written from nothing. A draft
+		// that brought its own sections has already filled these in.
+		if (!sectionList.children.length) {
 			addSection();
 			addSection();
 		}
 
-		if (draft) {
-			titleInput.value = draft.title || "";
-			descriptionInput.value = draft.description || "";
-			updateCount();
-			introInput.value = draft.intro || "";
-			// The search this page exists to answer, which is also the thing
-			// the template threads through as the topic.
-			pestInput.value = draft.query || "";
-		}
+		// Writing the whole post from a topic rather than from a blank form.
+		//
+		// This is the same call the gap panel makes when it offers a page for
+		// a search nothing on the site answers -- it was simply only reachable
+		// from there, never from the button that actually starts a post. One
+		// request fills the title, the description, the opening paragraph and
+		// every section; the image, the category and the closing topic are
+		// still yours.
+		//
+		// Per-field "Suggest" buttons are deliberately not what this is. The
+		// suggestion endpoint reads a published page to work from, and the
+		// whole point of this dialog is that the page does not exist yet.
+		const topicInput = el("input", { type: "text", class: "tcb-input", placeholder: "ants in summer" });
+		const draftButton = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Draft it all" });
+		const draftStatus = el("p", { class: "tcb-hint" });
+
+		draftButton.addEventListener("click", async () => {
+			const query = topicInput.value.trim();
+			if (!query) {
+				draftStatus.className = "tcb-hint tcb-hint-warn";
+				draftStatus.textContent = "What should the post be about?";
+				topicInput.focus();
+				return;
+			}
+
+			draftButton.disabled = true;
+			draftStatus.className = "tcb-hint";
+			draftStatus.textContent = `Writing a draft about “${query}”…`;
+
+			let drafted;
+			try {
+				drafted = await api("/api/seo/draft-page", { method: "POST", body: JSON.stringify({ query }) });
+			} catch (error) {
+				draftButton.disabled = false;
+				draftStatus.className = "tcb-hint tcb-hint-warn";
+				draftStatus.textContent = error.message;
+				return;
+			}
+
+			draftButton.disabled = false;
+			// Says it replaces rather than adds, because the second press does
+			// exactly that to anything typed in between.
+			draftButton.textContent = "Draft it again";
+			applyDraft(drafted);
+			draftStatus.textContent = `Drafted.${modelNote(drafted)}${priceNote(drafted)} Every word is still a field — nothing is created until you press Create draft.`;
+		});
 
 		this.openDialog(
 			"New blog post",
 			[
 				el("p", { class: "tcb-hint", text: "This creates the post as a draft. Nothing links to it and Google is told to ignore it until you publish." }),
+				field("What should it be about?", topicInput, "A search someone would actually type. Everything below gets written from it, and every word stays editable."),
+				draftButton,
+				draftStatus,
 				field("Title", titleInput),
+				this.buildDraftSuggestions("title", titleInput, readDraft),
 				field("Description", descriptionInput),
 				descriptionCount,
+				this.buildDraftSuggestions("description", descriptionInput, readDraft, updateCount),
 				field("Category", categorySelect),
 				field("Main image", heroInput),
 				heroPreview,
 				picker,
 				field("Image description", heroAltInput, "What the picture shows, for screen readers and Google."),
+				this.buildDraftSuggestions("alt", heroAltInput, readDraft),
 				field("Opening paragraph", introInput),
+				this.buildDraftSuggestions("intro", introInput, readDraft),
 				sectionList,
 				el("button", { type: "button", class: "tcb-btn", text: "Add another section", onclick: () => addSection() }),
 				field("Topic for the closing call to action", pestInput, "Filled into “a conversation about ___ in and around your home”."),
+				this.buildDraftSuggestions("topic", pestInput, readDraft),
 				field("Service page to link", serviceSelect),
 			],
 			async () => {
@@ -2471,6 +2556,82 @@ class Editor {
 				if (descriptionMeta) descriptionMeta.setAttribute("content", description);
 			}
 		);
+	}
+
+	// "Suggest" next to a field of a post that does not exist yet.
+	//
+	// The published-page version below cannot serve this: it works from a
+	// path, and the whole point of the composer is that there is no page at
+	// that path. This posts the half-written form instead, so a suggestion
+	// for the third section is written knowing the title and the first two.
+	//
+	// `readDraft` is a function rather than a snapshot because it is called
+	// at click time -- the form has usually moved on since the button was
+	// built, and that later state is exactly the context worth sending.
+	buildDraftSuggestions(kind, input, readDraft, onPick = () => {}) {
+		const status = el("p", { class: "tcb-hint" });
+		const options = el("div", { class: "tcb-suggestions" });
+		const button = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Suggest" });
+
+		button.addEventListener("click", async () => {
+			button.disabled = true;
+			options.replaceChildren();
+			status.className = "tcb-hint";
+			status.textContent = "Writing a few options…";
+
+			let result;
+			try {
+				result = await api("/api/seo/draft-field", {
+					method: "POST",
+					body: JSON.stringify({ kind, draft: readDraft(), current: input.value }),
+				});
+			} catch (error) {
+				button.disabled = false;
+				status.className = "tcb-hint tcb-hint-warn";
+				status.textContent = error.message;
+				return;
+			}
+
+			button.disabled = false;
+			button.textContent = "Suggest more";
+
+			if (!result.candidates.length) {
+				// Never silently empty -- everything having been thrown out is
+				// a real outcome with a real reason, and a button that appears
+				// to do nothing reads as broken.
+				status.className = "tcb-hint tcb-hint-warn";
+				status.textContent = result.rejected.length
+					? `Every option was thrown out — ${result.rejected[0].reason}. Worth trying again.`
+					: "Nothing came back. Worth trying again.";
+				return;
+			}
+
+			status.textContent = `Click one to use it.${modelNote(result)}${priceNote(result)}`;
+			if (result.asked) status.className = "tcb-hint tcb-hint-warn";
+
+			for (const candidate of result.candidates) {
+				const option = el("button", { type: "button", class: "tcb-suggestion" }, [
+					el("span", { class: "tcb-suggestion-text", text: candidate }),
+					el("span", { class: "tcb-suggestion-count", text: `${candidate.length}` }),
+				]);
+				option.addEventListener("click", () => {
+					input.value = candidate;
+					onPick();
+					input.focus();
+				});
+				options.appendChild(option);
+			}
+
+			if (result.rejected.length) {
+				const details = el("details", { class: "tcb-rejected" }, [
+					el("summary", { text: `${result.rejected.length} thrown out` }),
+					...result.rejected.map((entry) => el("p", { class: "tcb-hint", text: `“${entry.text}” — ${entry.reason}` })),
+				]);
+				options.appendChild(details);
+			}
+		});
+
+		return el("div", { class: "tcb-suggest-row" }, [button, status, options]);
 	}
 
 	// "Suggest one" next to the title and description fields.

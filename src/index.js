@@ -29,6 +29,7 @@ import {
 	examplePaths,
 	HEADING_MIN,
 	HEADING_MAX,
+	FIELD_KINDS,
 	preferredModel,
 	describeRun,
 	NotConfigured,
@@ -313,6 +314,14 @@ const site = {
 		// half of the advice the gap panel has always given in words -- see
 		// draftPage, and note it drafts only: creating the page is still the
 		// composer, with a person looking at it.
+		// One field of a post being composed, which has no page to read yet.
+		if (url.pathname === "/api/seo/draft-field") {
+			const session = await getStaffSession(request, env);
+			if (!session) return new Response("Unauthorized", { status: 401 });
+			if (!session.isAdmin) return new Response("Forbidden", { status: 403 });
+			return handleSeoDraftField(request, url, env);
+		}
+
 		if (url.pathname === "/api/seo/draft-page") {
 			const session = await getStaffSession(request, env);
 			if (!session) return new Response("Unauthorized", { status: 401 });
@@ -938,7 +947,7 @@ function editorLauncherHtml({ editing, previewing }) {
 		// revalidated away, only stepped around with a different URL. The
 		// no-cache rule in _headers is what stops it happening again.
 		`<link rel="stylesheet" href="/assets/css/editor.css?v=14">` +
-		`<script src="/assets/js/editor.js?v=1" type="module"></script>` +
+		`<script src="/assets/js/editor.js?v=2" type="module"></script>` +
 		`</div>`
 	);
 }
@@ -1140,6 +1149,70 @@ async function handleSeoSuggest(request, url, env) {
 // does, with the draft filled in and a person reading it. That is deliberate
 // -- a new page on a real business's website is not a thing to bring into
 // existence from one click on a panel.
+// Suggestions for one field of a post that does not exist yet.
+//
+// handleSeoSuggest above reads a published page to work from, and 404s when
+// there isn't one -- which is every post being written in the composer. So
+// the draft itself is the page here: what has been typed into the other
+// fields is both the context the suggestion is written from and the source
+// the no-invention checks measure it against.
+//
+// That source is thin on an empty form, and deliberately so. With nothing
+// typed, a suggestion has only the topic to work from and the claim checks
+// have almost nothing to allow -- so the options come back plain, and that is
+// the honest result rather than a confident invention.
+async function handleSeoDraftField(request, url, env) {
+	const body = await readJsonBody(request);
+	const kind = String(body?.kind || "");
+	const spec = FIELD_KINDS[kind];
+	if (!spec) return jsonError(400, "Not a field this can write.");
+
+	const draft = body?.draft && typeof body.draft === "object" ? body.draft : {};
+	const text = (value) => String(value || "").trim();
+	const sections = Array.isArray(draft.sections) ? draft.sections : [];
+	const topic = text(draft.topic);
+
+	// Everything the post says so far, in one string. Both the model's
+	// context and the yardstick validateSuggestion measures against, which is
+	// what keeps a suggestion to rearranging what is already there.
+	const written = [
+		text(draft.title),
+		text(draft.description),
+		text(draft.intro),
+		...sections.flatMap((section) => [text(section?.heading), text(section?.paragraph)]),
+		topic,
+	].filter(Boolean);
+
+	if (!written.length) return jsonError(400, "Give it something to go on first — a topic, or a title.");
+
+	try {
+		const examples = await styleExamples(request, url, env, "/");
+		const result = await suggest(env, {
+			kind,
+			page: {
+				title: text(draft.title),
+				description: text(draft.description),
+				h1: text(draft.title),
+				body: written.join("\n"),
+			},
+			examples,
+			steer: text(body?.steer),
+			min: spec.min,
+			max: spec.max,
+			// The field being rewritten, so an option identical to what is
+			// already in it is thrown out rather than offered as a change.
+			currentValue: text(body?.current),
+			model: preferredModel(env),
+		});
+		return new Response(JSON.stringify({ ...result, ...describeRun(preferredModel(env), result) }), {
+			headers: { "content-type": "application/json", "Cache-Control": "no-store" },
+		});
+	} catch (error) {
+		if (error instanceof NotConfigured) return jsonError(409, error.message);
+		return jsonError(502, `Could not write a suggestion (${error.message}).`);
+	}
+}
+
 async function handleSeoDraftPage(request, url, env) {
 	const body = await readJsonBody(request);
 	const query = String(body?.query || "").trim();

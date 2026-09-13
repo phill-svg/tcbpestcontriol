@@ -13,7 +13,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { findBlocks, renderBlock, applyStructure, BLOCK_TAGS } from "../src/page-structure.js";
+import { findBlocks, renderBlock, applyStructure, BLOCK_TAGS, BLOCK_CLASSES, COLUMN_CLASSES } from "../src/page-structure.js";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -265,6 +265,110 @@ test("a heading is level 2 or 3, and empty text is not a block", () => {
 	assert.match(renderBlock({ type: "marquee", text: "No" }).error, /not a kind of block/);
 });
 
+// --- boxes ----------------------------------------------------------------
+//
+// A card is the first block recognised by its class rather than its tag, and
+// the first that holds other blocks. How wide it is lives on the row it sits
+// in, not on the card, which is why widening is a class swap on the parent
+// rather than anything written on the box itself.
+
+const CARDS = [
+	"<body><main>",
+	'\t<div class="grid-cards cols-3">',
+	'\t\t<div class="grid-card"><h3 class="display">One</h3><p>First card.</p></div>',
+	'\t\t<div class="grid-card"><h3 class="display">Two</h3><p>Second card.</p></div>',
+	"\t</div>",
+	"\t<p>After the row.</p>",
+	"</main></body>",
+].join("\n");
+
+test("a card is a block, and so are the heading and text inside it", () => {
+	const { blocks, error } = findBlocks(CARDS);
+	assert.equal(error, undefined);
+	// The card opens before its own children, so it takes the lower number.
+	assert.deepEqual(
+		blocks.map((b) => `${b.tag}:${b.parentTag}`),
+		["div:div", "h3:div", "p:div", "div:div", "h3:div", "p:div", "p:main"]
+	);
+	// Each card knows the row it is in, which is what a width change acts on.
+	assert.deepEqual(blocks[0].parentClasses, ["grid-cards", "cols-3"]);
+});
+
+test("widening a row swaps one class and leaves the markup alone", () => {
+	const { html, error } = applyStructure(CARDS, [{ op: "columns", block: 0, cols: "cols-2" }]);
+	assert.equal(error, undefined);
+	assert.ok(html.includes('<div class="grid-cards cols-2">'));
+	assert.ok(!html.includes("cols-3"));
+	// Same bytes but for the digit -- no reflow, no rewritten quotes.
+	assert.equal(html.length, CARDS.length);
+});
+
+test("two cards in one row asking for the same width is one change", () => {
+	// A row is a single element however many cards point at it. Without this
+	// the second card would cut the same bytes the first already cut, and the
+	// batch would be refused as overlapping.
+	const { html, error } = applyStructure(CARDS, [
+		{ op: "columns", block: 0, cols: "cols-4" },
+		{ op: "columns", block: 3, cols: "cols-4" },
+	]);
+	assert.equal(error, undefined);
+	assert.equal(html.match(/cols-4/g).length, 1);
+});
+
+test("a width only means something inside a row of boxes", () => {
+	// Block 6 is the paragraph after the row -- it has no row to widen.
+	assert.match(applyStructure(CARDS, [{ op: "columns", block: 6, cols: "cols-2" }]).error, /not in a row of boxes/);
+	assert.match(applyStructure(CARDS, [{ op: "columns", block: 0, cols: "cols-9" }]).error, /cols-2, cols-3, cols-4/);
+	assert.match(applyStructure(CARDS, [{ op: "columns", block: 0, cols: "grid-cards" }]).error, /cols-2, cols-3, cols-4/);
+});
+
+test("a new box is built to match the ones already there", () => {
+	// A card that arrived shaped differently would read as a mistake rather
+	// than as a new card.
+	assert.equal(
+		renderBlock({ type: "card", heading: "Redback", text: "Under the outdoor furniture." }).html,
+		'<div class="grid-card"><h3 class="display">Redback</h3><p>Under the outdoor furniture.</p></div>'
+	);
+	assert.match(renderBlock({ type: "card", text: "No heading" }).error, /needs a heading/);
+	assert.match(renderBlock({ type: "card", heading: "No words" }).error, /needs some words/);
+	// Same escaping as every other block -- markup cannot be smuggled in.
+	assert.ok(renderBlock({ type: "card", heading: "<script>x</script>", text: "ok" }).html.includes("&lt;script&gt;"));
+});
+
+test("a box can be added beside the ones already in a row", () => {
+	const { html, error } = applyStructure(CARDS, [
+		{ op: "insert", to: { after: 3 }, block: { type: "card", heading: "Three", text: "Third card." } },
+	]);
+	assert.equal(error, undefined);
+	assert.ok(html.includes('<h3 class="display">Three</h3>'));
+	// Indented like its siblings, on its own line.
+	assert.ok(html.includes('\n\t\t<div class="grid-card"><h3 class="display">Three</h3>'));
+});
+
+test("moving a card takes its heading and text with it", () => {
+	// The card's children are blocks in their own right, so this is also the
+	// case where a batch could try to act on a block inside a block.
+	const { html, error } = applyStructure(CARDS, [{ op: "move", block: 0, to: { after: 3 } }]);
+	assert.equal(error, undefined);
+	assert.ok(html.indexOf("Second card.") < html.indexOf("First card."));
+	assert.ok(html.includes('<div class="grid-card"><h3 class="display">One</h3><p>First card.</p></div>'));
+
+	// And moving a card while also acting on what is inside it is refused.
+	assert.match(
+		applyStructure(CARDS, [{ op: "move", block: 0, to: { after: 3 } }, { op: "delete", block: 1 }]).error,
+		/overlap/
+	);
+});
+
+test("every width the row control offers is one the stylesheet defines", () => {
+	// The control writes these class names into the file. A name the CSS does
+	// not define would silently collapse the row to a single column.
+	const css = readFileSync(path.join(repoRoot, "assets", "css", "src", "04-page-components.css"), "utf8");
+	for (const name of COLUMN_CLASSES) {
+		assert.ok(css.includes(`.grid-cards.${name}`), `${name} has no rule in the stylesheet`);
+	}
+});
+
 // --- the real pages -------------------------------------------------------
 
 test("every page in the repository can be read by the scanner", () => {
@@ -308,6 +412,11 @@ test("the editor and the scanner agree on what a block is", () => {
 	const match = editor.match(/const BLOCK_SELECTOR = "([^"]+)";/);
 	assert.ok(match, "editor.js should declare BLOCK_SELECTOR");
 
-	const fromEditor = match[1].split(",").map((tag) => tag.trim());
-	assert.deepEqual(fromEditor.slice().sort(), [...BLOCK_TAGS].sort());
+	const fromEditor = match[1].split(",").map((part) => part.trim());
+	// The selector mixes tags and one class, so the two halves are compared
+	// against the two sets they have to match.
+	const editorTags = fromEditor.filter((part) => !part.startsWith("."));
+	const editorClasses = fromEditor.filter((part) => part.startsWith(".")).map((part) => part.slice(1));
+	assert.deepEqual(editorTags.slice().sort(), [...BLOCK_TAGS].sort());
+	assert.deepEqual(editorClasses.slice().sort(), [...BLOCK_CLASSES].sort());
 });

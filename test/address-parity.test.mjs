@@ -38,7 +38,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { bakeEdits } from "../src/bake-edits.js";
-import { findBlocks, BLOCK_TAGS } from "../src/page-structure.js";
+import { findBlocks, BLOCK_TAGS, BLOCK_CLASSES } from "../src/page-structure.js";
 import { decodeEntities } from "../src/html-entities.js";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -309,7 +309,10 @@ for (const page of PAGES) {
 			`editor.js BLOCK_SKIP_SELECTOR no longer excludes <${BLOCK_SKIP_SELECTOR}>`
 		);
 
-		const blockSelector = [...BLOCK_TAGS].join(",");
+		// Tags and classes both, exactly as editor.js builds BLOCK_SELECTOR --
+		// a card is matched by class, and leaving it out here would compare the
+		// scanner against a browser that cannot see half the blocks.
+		const blockSelector = [...BLOCK_TAGS, ...[...BLOCK_CLASSES].map((name) => `.${name}`)].join(",");
 		const tab = await browser.newPage();
 		await tab.goto(`${STATIC_ORIGIN}/${page.file}`, { waitUntil: "domcontentloaded" });
 		const browserBlocks = await tab.evaluate(async ([selector, skipBlocks]) => {

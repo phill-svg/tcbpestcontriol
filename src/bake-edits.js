@@ -46,7 +46,7 @@ export const NODE_PATTERN = /<!--[\s\S]*?-->|<![^>]*>|<(\/?)([a-zA-Z][^\s/>]*)((
 // Splits a tag's attribute text into name/value pairs, keeping the exact
 // source offsets so a value can be replaced without disturbing anything else
 // about how the tag was written (quote style, attribute order, spacing).
-function readAttributes(attrText) {
+export function readAttributes(attrText) {
 	const found = [];
 	const pattern = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g;
 	let match;

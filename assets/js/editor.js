@@ -313,7 +313,15 @@ const SKIP_SELECTOR = [...SKIPPED_ELEMENTS].concat(`[${IGNORED_SUBTREE_ATTR}]`).
 //
 // A <section> or a <div> is scaffolding rather than content -- moving one
 // would take everything inside it along, which is a different feature.
-const BLOCK_SELECTOR = "p,h2,h3,h4,h5,h6,li,img";
+// Cards are matched by class rather than tag: a <div> here is usually
+// scaffolding, and a .grid-card is usually the thing somebody wants to move.
+// Must match BLOCK_TAGS and BLOCK_CLASSES in src/page-structure.js.
+const BLOCK_SELECTOR = "p,h2,h3,h4,h5,h6,li,img,.grid-card";
+
+// The row a card sits in, and the widths it can be. Every one collapses to a
+// single column on a phone -- these choose what happens above that.
+const ROW_SELECTOR = ".grid-cards";
+const COLUMN_CLASSES = ["cols-2", "cols-3", "cols-4"];
 
 // Navigation inside <main> -- the breadcrumb every page opens with. Its items
 // are links to other pages, not words on this one. Must match BLOCK_SKIP_TAGS
@@ -1371,11 +1379,27 @@ class Editor {
 			onclick: () => this.removeBlock(),
 		});
 
+		// Only shown on a card, because only a row of cards has a width to set.
+		this.toolbarWidth = el("span", { class: "tcb-toolbar-width" }, [
+			el("span", { class: "tcb-block-tag", text: "across" }),
+			...COLUMN_CLASSES.map((name) =>
+				el("button", {
+					type: "button",
+					class: "tcb-btn tcb-btn-small tcb-width-option",
+					"data-cols": name,
+					text: name.slice(-1),
+					onclick: () => this.setRowColumns(name),
+				})
+			),
+		]);
+		this.toolbarWidth.hidden = true;
+
 		this.toolbar = chrome("div", { class: "tcb-block-toolbar" }, [
 			this.toolbarTag,
 			el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add above", onclick: () => this.addBlockAt("before") }),
 			el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add below", onclick: () => this.addBlockAt("after") }),
 			this.toolbarRemove,
+			this.toolbarWidth,
 		]);
 		this.toolbar.hidden = true;
 		// Kept over the block while the page scrolls under it.
@@ -1403,8 +1427,20 @@ class Editor {
 		this.makeDraggable(target);
 
 		const toolbar = this.layoutToolbar();
-		this.toolbarTag.textContent = target.tagName.toLowerCase();
+		// "box" reads better than "div" for the one block that is a container,
+		// and it is the word the row control uses too.
+		const isCard = target.classList.contains("grid-card");
+		this.toolbarTag.textContent = isCard ? "box" : target.tagName.toLowerCase();
 		this.toolbarRemove.disabled = target.classList.contains("tcb-block-removed");
+
+		const row = isCard ? target.closest(ROW_SELECTOR) : null;
+		this.toolbarWidth.hidden = !row;
+		if (row) {
+			const current = COLUMN_CLASSES.find((name) => row.classList.contains(name));
+			for (const button of this.toolbarWidth.querySelectorAll(".tcb-width-option")) {
+				button.classList.toggle("tcb-width-current", button.dataset.cols === current);
+			}
+		}
 		toolbar.hidden = false;
 		this.positionToolbar();
 	}
@@ -1433,6 +1469,46 @@ class Editor {
 				node.classList.remove("tcb-block-removed");
 				this.layoutOps.splice(this.layoutOps.indexOf(op), 1);
 				if (this.hoveredBlock === ordinal) this.toolbarRemove.disabled = false;
+			},
+		});
+		this.refreshLayoutStatus();
+	}
+
+	// How many boxes go across the row this card is in.
+	//
+	// The width lives on the row, not on the card, so this is one change to one
+	// element however many cards are in it -- and the preview applies it to the
+	// live page immediately, because seeing three become four is the whole
+	// point of choosing.
+	setRowColumns(name) {
+		const ordinal = this.hoveredBlock;
+		const card = this.blocks[ordinal];
+		const row = card && card.closest(ROW_SELECTOR);
+		if (!row) return;
+
+		const before = COLUMN_CLASSES.find((value) => row.classList.contains(value)) || "";
+		if (before === name) return;
+		row.classList.remove(...COLUMN_CLASSES);
+		row.classList.add(name);
+
+		// One operation per row. Choosing three then four is one instruction
+		// about how wide it ends up, not two.
+		const existing = this.layoutOps.find((op) => op.op === "columns" && this.blocks[op.block] && this.blocks[op.block].closest(ROW_SELECTOR) === row);
+		const op = existing || { op: "columns", block: ordinal, expect: this.expectFor(ordinal) };
+		op.cols = name;
+		if (!existing) this.layoutOps.push(op);
+
+		for (const button of this.toolbarWidth.querySelectorAll(".tcb-width-option")) {
+			button.classList.toggle("tcb-width-current", button.dataset.cols === name);
+		}
+
+		this.pushUndo({
+			label: "width change",
+			undo: () => {
+				row.classList.remove(...COLUMN_CLASSES);
+				if (before) row.classList.add(before);
+				const at = this.layoutOps.indexOf(op);
+				if (at !== -1) this.layoutOps.splice(at, 1);
 			},
 		});
 		this.refreshLayoutStatus();
@@ -1622,16 +1698,23 @@ class Editor {
 		const kindSelect = el("select", { class: "tcb-input" });
 		// Inside a list the only legal block is another item, so it is the only
 		// thing offered rather than something to be refused after typing.
+		// Inside a row of boxes the only thing that belongs is another box, and
+		// inside a list the only thing that belongs is another item. Offering
+		// the rest would just be something to refuse later.
+		const inRow = !!node.closest(ROW_SELECTOR);
 		const kinds = inList
 			? [["list-item", "List item"]]
-			: [
-					["paragraph", "Paragraph"],
-					["heading", "Heading"],
-					["image", "Image"],
-				];
+			: inRow
+				? [["card", "Box"]]
+				: [
+						["paragraph", "Paragraph"],
+						["heading", "Heading"],
+						["image", "Image"],
+					];
 		for (const [value, label] of kinds) kindSelect.appendChild(el("option", { value, text: label }));
 
 		const textInput = el("textarea", { class: "tcb-input tcb-textarea", rows: "3" });
+		const headingInput = el("input", { type: "text", class: "tcb-input" });
 		const levelSelect = el("select", { class: "tcb-input" });
 		for (const level of [2, 3]) levelSelect.appendChild(el("option", { value: String(level), text: `Heading ${level}` }));
 		const srcInput = el("input", { type: "text", class: "tcb-input", placeholder: "/assets/images/pest-ant-macro.webp" });
@@ -1639,6 +1722,7 @@ class Editor {
 		const picker = el("div", { class: "tcb-picker" });
 
 		const textRow = el("label", { class: "tcb-label" }, [el("span", { text: "Words" }), textInput]);
+		const headingRow = el("label", { class: "tcb-label" }, [el("span", { text: "Box heading" }), headingInput]);
 		const levelRow = el("label", { class: "tcb-label" }, [el("span", { text: "Size" }), levelSelect]);
 		const srcRow = el("label", { class: "tcb-label" }, [el("span", { text: "Image" }), srcInput]);
 		const altRow = el("label", { class: "tcb-label" }, [
@@ -1649,6 +1733,7 @@ class Editor {
 
 		const showRows = () => {
 			const kind = kindSelect.value;
+			headingRow.hidden = kind !== "card";
 			levelRow.hidden = kind !== "heading";
 			textRow.hidden = kind === "image";
 			srcRow.hidden = kind !== "image";
@@ -1669,6 +1754,7 @@ class Editor {
 				el("p", { class: "tcb-hint", text: "Nothing is written yet. It goes into the page when you press Save layout." }),
 				el("label", { class: "tcb-label" }, [el("span", { text: "What kind" }), kindSelect]),
 				levelRow,
+				headingRow,
 				textRow,
 				srcRow,
 				picker,
@@ -1679,9 +1765,11 @@ class Editor {
 				const payload =
 					kind === "image"
 						? { type: "image", src: srcInput.value.trim(), alt: altInput.value }
-						: kind === "heading"
-							? { type: "heading", level: Number(levelSelect.value), text: textInput.value }
-							: { type: kind, text: textInput.value };
+						: kind === "card"
+							? { type: "card", heading: headingInput.value, text: textInput.value }
+							: kind === "heading"
+								? { type: "heading", level: Number(levelSelect.value), text: textInput.value }
+								: { type: kind, text: textInput.value };
 
 				const preview = this.previewBlock(payload);
 				if (!preview) throw new Error(kind === "image" ? "Choose an image first." : "Type some words first.");
@@ -1711,7 +1799,11 @@ class Editor {
 	previewBlock(payload) {
 		const text = String(payload.text || "").trim();
 		let node;
-		if (payload.type === "image") {
+		if (payload.type === "card") {
+			const heading = String(payload.heading || "").trim();
+			if (!heading || !text) return null;
+			node = el("div", { class: "grid-card" }, [el("h3", { class: "display", text: heading }), el("p", { text })]);
+		} else if (payload.type === "image") {
 			const safe = previewableImagePath(String(payload.src || "").trim());
 			if (!safe) return null;
 			node = el("img", { src: safe, alt: String(payload.alt || "") });

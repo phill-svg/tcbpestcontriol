@@ -16,7 +16,7 @@
 // Pure: no Worker APIs, no Node APIs, no I/O. The caller reads the file and
 // writes the commit.
 
-import { NODE_PATTERN, RAW_TEXT_ELEMENTS } from "./bake-edits.js";
+import { NODE_PATTERN, RAW_TEXT_ELEMENTS, readAttributes } from "./bake-edits.js";
 import { SKIPPED_ELEMENTS, normaliseText, MAX_TEXT_LENGTH, MAX_ATTR_LENGTH, previewableImagePath } from "../assets/js/content-address.js";
 import { escapeHtmlText, escapeStyleAttribute, decodeEntities } from "./html-entities.js";
 
@@ -25,6 +25,26 @@ import { escapeHtmlText, escapeStyleAttribute, decodeEntities } from "./html-ent
 // with it and the ordinals of everything inside would go with them, which is
 // a different feature with a different set of hazards.
 export const BLOCK_TAGS = new Set(["p", "h2", "h3", "h4", "h5", "h6", "li", "img"]);
+
+// A card is a block too, and it is the first one recognised by its class
+// rather than its tag -- because a <div> on this site is usually scaffolding
+// and a .grid-card is usually the thing somebody wants to move. It is also
+// the first block that contains other blocks: a card holds an <h3> and a <p>,
+// which keep their own numbers. Moving the card moves them with it, and
+// applyStructure already refuses a batch that tries to act on both.
+export const BLOCK_CLASSES = new Set(["grid-card"]);
+
+// The row a card sits in, and the classes that say how many go across. The
+// widths live on the row rather than on the card, and every one of them
+// collapses to a single column on a phone -- so "make this narrower" is a
+// choice between these, not a pixel measurement.
+export const ROW_CLASS = "grid-cards";
+export const COLUMN_CLASSES = ["cols-2", "cols-3", "cols-4"];
+
+function classesOf(attrText) {
+	const attr = readAttributes(attrText).find((candidate) => candidate.name === "class");
+	return attr ? String(attr.value).split(/\s+/).filter(Boolean) : [];
+}
 
 // Elements that never close, so an opening tag written without a slash must
 // not be counted as opening a depth. `<img src="x">` is the common case here
@@ -89,7 +109,7 @@ export function findBlocks(html, { root = "main" } = {}) {
 	NODE_PATTERN.lastIndex = 0;
 	let match;
 	while ((match = NODE_PATTERN.exec(source)) !== null) {
-		const [full, closing, rawName, , selfClosing] = match;
+		const [full, closing, rawName, attrText, selfClosing] = match;
 		cursor = match.index + full.length;
 
 		// Comments and declarations have no capture groups and are never
@@ -140,7 +160,7 @@ export function findBlocks(html, { root = "main" } = {}) {
 
 		if (name === root && rootDepth === -1) {
 			rootDepth = stack.length;
-			if (!isVoid) stack.push({ name });
+			if (!isVoid) stack.push({ name, tagStart: match.index, tagEnd: match.index + full.length, classes: classesOf(attrText) });
 			continue;
 		}
 
@@ -148,7 +168,11 @@ export function findBlocks(html, { root = "main" } = {}) {
 		const inRoot = rootDepth !== -1 && stack.length > rootDepth;
 		const parentTag = stack.length ? stack[stack.length - 1].name : "";
 
-		if (inRoot && navDepth === 0 && BLOCK_TAGS.has(name)) {
+		const classes = classesOf(attrText);
+		const isBlock = BLOCK_TAGS.has(name) || classes.some((value) => BLOCK_CLASSES.has(value));
+		const parent = stack.length ? stack[stack.length - 1] : null;
+
+		if (inRoot && navDepth === 0 && isBlock) {
 			const block = {
 				ordinal: -1, // assigned in document order once the walk finishes
 				tag: name,
@@ -156,13 +180,19 @@ export function findBlocks(html, { root = "main" } = {}) {
 				end: isVoid ? match.index + full.length : -1,
 				leadStart: leadStartOf(source, match.index),
 				parentTag,
+				// Where the enclosing element's own opening tag sits, so a card
+				// can change the row it is in without the row needing a number
+				// of its own.
+				parentTagStart: parent ? parent.tagStart : -1,
+				parentTagEnd: parent ? parent.tagEnd : -1,
+				parentClasses: parent ? parent.classes : [],
 			};
 			if (isVoid) blocks.push(block);
-			else stack.push({ name, block });
+			else stack.push({ name, block, tagStart: match.index, tagEnd: match.index + full.length, classes });
 			continue;
 		}
 
-		if (!isVoid) stack.push({ name });
+		if (!isVoid) stack.push({ name, tagStart: match.index, tagEnd: match.index + full.length, classes });
 	}
 
 	if (stack.length) {
@@ -224,6 +254,17 @@ export function renderBlock(payload = {}) {
 	if (type === "list-item") {
 		if (!text) return { error: "A list item needs some words." };
 		return { html: `<li>${escapeHtmlText(text)}</li>` };
+	}
+
+	if (type === "card") {
+		// Built to match its siblings exactly: the heading carries `display`
+		// and the text is a plain paragraph, which is what every .grid-card on
+		// the site already contains. A card that arrived shaped differently
+		// would look like a mistake rather than a new card.
+		const heading = cleanText(payload.heading, MAX_TEXT_LENGTH);
+		if (!heading) return { error: "A box needs a heading." };
+		if (!text) return { error: "A box needs some words." };
+		return { html: `<div class="grid-card"><h3 class="display">${escapeHtmlText(heading)}</h3><p>${escapeHtmlText(text)}</p></div>` };
 	}
 
 	if (type === "image") {
@@ -288,6 +329,37 @@ export function applyStructure(html, ops = [], { root = "main" } = {}) {
 			continue;
 		}
 
+		if (kind === "columns") {
+			const block = blocks[op.block];
+			if (!block) return { error: `There is no block ${op.block} on this page.` };
+			const mismatch = checkExpect(source, block, op.expect);
+			if (mismatch) return mismatch;
+			if (!block.parentClasses.includes(ROW_CLASS)) {
+				return { error: "That block is not in a row of boxes, so there is nothing to widen." };
+			}
+			const wanted = String(op.cols || "");
+			if (!COLUMN_CLASSES.includes(wanted)) {
+				return { error: `A row can be ${COLUMN_CLASSES.join(", ")} -- not ${JSON.stringify(wanted)}.` };
+			}
+			// The row's own opening tag, rewritten with one class swapped. Every
+			// other attribute, the quote style and the spacing are left exactly
+			// as they were written.
+			const current = block.parentClasses.find((value) => COLUMN_CLASSES.includes(value));
+			if (current === wanted) continue;
+			const next = current
+				? block.parentClasses.map((value) => (value === current ? wanted : value))
+				: [...block.parentClasses, wanted];
+			const tag = source.slice(block.parentTagStart, block.parentTagEnd);
+			const rewritten = replaceClassAttribute(tag, next.join(" "));
+			if (!rewritten) return { error: "That row's markup could not be read." };
+			// A row is one element however many cards point at it, so two cards
+			// in the same row asking for the same width is one change, not two.
+			if (pastes.some((paste) => paste.at === block.parentTagStart)) continue;
+			cuts.push({ from: block.parentTagStart, to: block.parentTagEnd, block });
+			pastes.push({ at: block.parentTagStart, text: rewritten });
+			continue;
+		}
+
 		if (kind === "delete" || kind === "move") {
 			const block = blocks[op.block];
 			if (!block) return { error: `There is no block ${op.block} on this page.` };
@@ -319,6 +391,16 @@ export function applyStructure(html, ops = [], { root = "main" } = {}) {
 
 const tagOf = (block) =>
 	block && block.type === "heading" ? `h${Number(block.level)}` : block && block.type === "list-item" ? "li" : block && block.type === "image" ? "img" : "p";
+
+// Swaps the value of an existing class attribute, leaving the rest of the tag
+// byte-for-byte alone. Returns "" if the tag has no class attribute to change,
+// which for a row of cards means the markup is not what we think it is.
+function replaceClassAttribute(tag, value) {
+	const match = tag.match(/(\sclass\s*=\s*)("([^"]*)"|'([^']*)')/i);
+	if (!match) return "";
+	const quote = match[2][0];
+	return tag.slice(0, match.index) + match[1] + quote + escapeStyleAttribute(value) + quote + tag.slice(match.index + match[0].length);
+}
 
 // The whitespace an insertion point should carry, copied from the block it is
 // landing next to so the new markup lines up with its neighbours.

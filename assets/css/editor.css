@@ -909,3 +909,25 @@ body.tcb-editing-mode {
 .tcb-layout-mode main [data-tcb-draggable] {
 	cursor: grab;
 }
+
+/* The row-width control. Only shown on a box, because only a row of boxes has
+ * a width to set — and the width belongs to the row, so choosing here changes
+ * every box in it at once. */
+.tcb-toolbar-width {
+	display: flex;
+	align-items: center;
+	gap: 0.2rem;
+	margin-left: 0.3rem;
+	padding-left: 0.4rem;
+	border-left: 1px solid #e6e6ea;
+}
+
+.tcb-width-option {
+	min-width: 1.75rem;
+}
+
+.tcb-width-current {
+	background: #4c6ef5;
+	border-color: #4c6ef5;
+	color: #fff;
+}

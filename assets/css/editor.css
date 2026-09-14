@@ -922,7 +922,9 @@ body.tcb-editing-mode {
 	border-left: 1px solid #e6e6ea;
 }
 
-.tcb-width-option {
+.tcb-width-option,
+.tcb-align-option,
+.tcb-share-option {
 	min-width: 1.75rem;
 }
 

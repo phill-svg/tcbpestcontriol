@@ -327,6 +327,7 @@ const COLUMN_CLASSES = ["cols-2", "cols-3", "cols-4"];
 // Must match ALIGN_CLASSES and isAlignRow in src/page-structure.js.
 const ALIGN_ROW_SELECTOR = ".split-media-grid, .section-head.split";
 const ALIGN_CLASSES = { top: "align-top", middle: "align-middle", bottom: "align-bottom" };
+const WIDTH_CLASSES = { "1-2": "widths-1-2", "1-1": "widths-1-1", "2-1": "widths-2-1" };
 
 // Navigation inside <main> -- the breadcrumb every page opens with. Its items
 // are links to other pages, not words on this one. Must match BLOCK_SKIP_TAGS
@@ -1415,11 +1416,31 @@ class Editor {
 					class: "tcb-btn tcb-btn-small tcb-align-option",
 					"data-align": name,
 					text: name[0].toUpperCase() + name.slice(1),
-					onclick: () => this.setRowAlign(name),
+					onclick: () => this.setRowChoice("align", name),
 				})
 			),
 		]);
 		this.toolbarAlign.hidden = true;
+
+		// How much of the row the hovered half takes.
+		this.toolbarWidths = el("span", { class: "tcb-toolbar-width" }, [
+			el("span", { class: "tcb-block-tag", text: "width" }),
+			...[["third", "⅓"], ["half", "½"], ["two-thirds", "⅔"]].map(([share, label]) =>
+				el("button", {
+					type: "button",
+					class: "tcb-btn tcb-btn-small tcb-share-option",
+					"data-share": share,
+					"aria-label": `Make this side ${share.replace("-", " ")} of the row`,
+					text: label,
+					onclick: () => {
+						const node = this.blocks[this.hoveredBlock];
+						const row = node && node.closest(ALIGN_ROW_SELECTOR);
+						if (row) this.setRowChoice("widths", this.widthsFor(row, node, share));
+					},
+				})
+			),
+		]);
+		this.toolbarWidths.hidden = true;
 
 		// Side by side. Hidden where it cannot apply -- see trackLayoutHover.
 		this.toolbarBeside = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add beside", onclick: () => this.addBlockAt("beside") });
@@ -1455,6 +1476,7 @@ class Editor {
 			this.toolbarRemove,
 			this.toolbarWidth,
 			this.toolbarAlign,
+			this.toolbarWidths,
 			this.toolbarChange,
 			this.toolbarDiscard,
 		]);
@@ -1486,6 +1508,7 @@ class Editor {
 			for (const button of [this.toolbarAbove, this.toolbarBelow, this.toolbarBeside, this.toolbarRemove]) button.hidden = true;
 			this.toolbarWidth.hidden = true;
 			this.toolbarAlign.hidden = true;
+			this.toolbarWidths.hidden = true;
 			this.toolbarChange.hidden = false;
 			this.toolbarDiscard.hidden = false;
 			this.toolbar.hidden = false;
@@ -1557,7 +1580,9 @@ class Editor {
 		// to line up until the layout is saved.
 		const alignRow = wrapped ? null : target.closest(ALIGN_ROW_SELECTOR);
 		this.toolbarAlign.hidden = !alignRow;
-		if (alignRow) this.markAlign(alignRow);
+		// Widths set two columns, so only for a row that has exactly two halves.
+		this.toolbarWidths.hidden = !alignRow || alignRow.children.length !== 2;
+		if (alignRow) this.markRow(alignRow, target);
 		toolbar.hidden = false;
 		this.positionToolbar();
 	}
@@ -1634,48 +1659,63 @@ class Editor {
 		this.refreshLayoutStatus();
 	}
 
-	// Which way the halves of the row this block is in line up. Like the width,
-	// one change to one element, previewed on the live page straight away.
-	setRowAlign(name) {
+	// A class on the side-by-side row this block is in: how its halves line up
+	// ("align"), or how wide they are ("widths"). Like the width of a row of
+	// boxes, one change to one element, previewed on the live page straight away.
+	setRowChoice(kind, name) {
 		const ordinal = this.hoveredBlock;
 		const node = this.blocks[ordinal];
 		const row = node && node.closest(ALIGN_ROW_SELECTOR);
 		if (!row) return;
 
-		const values = Object.values(ALIGN_CLASSES);
+		const group = kind === "align" ? ALIGN_CLASSES : WIDTH_CLASSES;
+		const values = Object.values(group);
 		const before = values.find((value) => row.classList.contains(value)) || "";
-		if (before === ALIGN_CLASSES[name]) return;
+		if (before === group[name]) return;
 		const apply = (value) => {
 			row.classList.remove(...values);
 			if (value) row.classList.add(value);
-			this.markAlign(row);
+			this.markRow(row, node);
 		};
-		apply(ALIGN_CLASSES[name]);
+		apply(group[name]);
 
-		const existing = this.layoutOps.find((op) => op.op === "align" && this.blocks[op.block] && this.blocks[op.block].closest(ALIGN_ROW_SELECTOR) === row);
-		const op = existing || { op: "align", block: ordinal, expect: this.expectFor(ordinal) };
-		const previous = op.align;
-		op.align = name;
+		const existing = this.layoutOps.find((op) => op.op === kind && this.blocks[op.block] && this.blocks[op.block].closest(ALIGN_ROW_SELECTOR) === row);
+		const op = existing || { op: kind, block: ordinal, expect: this.expectFor(ordinal) };
+		const previous = op[kind];
+		op[kind] = name;
 		if (!existing) this.layoutOps.push(op);
 
 		this.pushUndo({
-			label: "line-up change",
+			label: kind === "align" ? "line-up change" : "width change",
 			undo: () => {
 				apply(before);
 				// Back to the earlier choice this session, or to no change at all.
-				if (previous) op.align = previous;
+				if (previous) op[kind] = previous;
 				else if (this.layoutOps.includes(op)) this.layoutOps.splice(this.layoutOps.indexOf(op), 1);
 			},
 		});
 		this.refreshLayoutStatus();
 	}
 
-	markAlign(row) {
+	// The width buttons are about the half being hovered: "⅔" on the left half
+	// is 2-1, on the right half 1-2.
+	widthsFor(row, node, share) {
+		const left = row.firstElementChild && row.firstElementChild.contains(node);
+		if (share === "half") return "1-1";
+		return (share === "third") === left ? "1-2" : "2-1";
+	}
+
+	markRow(row, node) {
 		if (!this.toolbarAlign) return;
-		// With no class set, the row lines up the way its stylesheet says.
-		const current = Object.keys(ALIGN_CLASSES).find((name) => row.classList.contains(ALIGN_CLASSES[name])) || "";
+		// With no class set, the row looks the way its stylesheet says, and no
+		// button is marked.
+		const align = Object.keys(ALIGN_CLASSES).find((name) => row.classList.contains(ALIGN_CLASSES[name])) || "";
 		for (const button of this.toolbarAlign.querySelectorAll(".tcb-align-option")) {
-			button.classList.toggle("tcb-width-current", button.dataset.align === current);
+			button.classList.toggle("tcb-width-current", button.dataset.align === align);
+		}
+		const widths = Object.keys(WIDTH_CLASSES).find((name) => row.classList.contains(WIDTH_CLASSES[name])) || "";
+		for (const button of this.toolbarWidths.querySelectorAll(".tcb-share-option")) {
+			button.classList.toggle("tcb-width-current", this.widthsFor(row, node, button.dataset.share) === widths);
 		}
 	}
 

@@ -498,6 +498,7 @@ test("lining up a side-by-side row swaps one class on the row", () => {
 test("a line-up only means something inside a side-by-side row", () => {
 	assert.match(applyStructure(SPLITS, [{ op: "align", block: 4, align: "top" }]).error, /not in a side-by-side row/);
 	assert.match(applyStructure(SPLITS, [{ op: "align", block: 1, align: "centre" }]).error, /top, middle, bottom/);
+	assert.match(applyStructure(SPLITS, [{ op: "widths", block: 1, widths: "3-1" }]).error, /1-2, 1-1, 2-1/);
 	// Deleting the half that collapses the row, and lining the row up, is refused.
 	assert.ok(applyStructure(SPLITS, [{ op: "delete", block: 3 }, { op: "align", block: 2, align: "top" }]).error);
 });
@@ -505,6 +506,23 @@ test("a line-up only means something inside a side-by-side row", () => {
 test("every line-up class has a style behind it", () => {
 	const css = readFileSync(path.join(repoRoot, "assets/css/style.min.css"), "utf8");
 	for (const name of ["align-top", "align-middle", "align-bottom"]) {
+		assert.ok(css.includes(`.split-media-grid.${name}`) && css.includes(`.section-head.split.${name}`), name);
+	}
+});
+
+test("widths and line-up on the same row are one rewrite of its tag", () => {
+	const { html, error } = applyStructure(SPLITS, [
+		{ op: "align", block: 1, align: "bottom" },
+		{ op: "widths", block: 0, widths: "2-1" },
+		{ op: "widths", block: 1, widths: "2-1" },
+	]);
+	assert.equal(error, undefined);
+	assert.equal(html, SPLITS.replace('"section-head split"', '"section-head split align-bottom widths-2-1"'));
+});
+
+test("every width class has a style behind it", () => {
+	const css = readFileSync(path.join(repoRoot, "assets/css/style.min.css"), "utf8");
+	for (const name of ["widths-1-2", "widths-1-1", "widths-2-1"]) {
 		assert.ok(css.includes(`.split-media-grid.${name}`) && css.includes(`.section-head.split.${name}`), name);
 	}
 });

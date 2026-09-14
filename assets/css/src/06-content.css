@@ -535,3 +535,28 @@
   object-fit: cover;
   display: block;
 }
+
+/* How wide each half of a side-by-side row is, left then right. Set from the
+   editor (WIDTH_CLASSES in src/page-structure.js). Phones stack the halves. */
+@media (min-width: 768px) {
+  .split-media-grid.widths-1-2,
+  .section-head.split.widths-1-2 {
+    grid-template-columns: 1fr 2fr;
+  }
+  .split-media-grid.widths-1-1,
+  .section-head.split.widths-1-1 {
+    grid-template-columns: 1fr 1fr;
+  }
+  .split-media-grid.widths-2-1,
+  .section-head.split.widths-2-1 {
+    grid-template-columns: 2fr 1fr;
+  }
+  /* The heading row places its halves on a 12-column grid; with a width
+     chosen it is two columns, so each half just takes the next one. */
+  .section-head.split[class*="widths-"] {
+    column-gap: 3rem;
+  }
+  .section-head.split[class*="widths-"] > * {
+    grid-column: auto;
+  }
+}

@@ -54,6 +54,8 @@ const SPLIT_IMAGE_COLUMN = "split-media-image";
 // a row of boxes. Phones stack the halves, so this only shows from 768px up.
 // .section-head.split is the site's heading-left, paragraph-right row.
 export const ALIGN_CLASSES = { top: "align-top", middle: "align-middle", bottom: "align-bottom" };
+// How wide each half is, left then right, in thirds. Also a class on the row.
+export const WIDTH_CLASSES = { "1-2": "widths-1-2", "1-1": "widths-1-1", "2-1": "widths-2-1" };
 const isAlignRow = (classes) => classes.includes(SPLIT_ROW_CLASS) || (classes.includes("section-head") && classes.includes("split"));
 
 function classesOf(attrText) {
@@ -335,6 +337,7 @@ export function applyStructure(html, ops = [], { root = "main" } = {}) {
 	// tag starts. Not "a paste already lands there": an insert after the block
 	// just before a row lands on the same offset, and would hide the change.
 	const rewrittenRows = new Set();
+	const rowChanges = new Map();
 
 	// A block that gets something put beside it is wrapped into a new row, and
 	// then nothing else in the same batch may name it. The reason is where things
@@ -438,27 +441,28 @@ export function applyStructure(html, ops = [], { root = "main" } = {}) {
 			continue;
 		}
 
-		if (kind === "align") {
+		// Line-up and widths are both one class on the row, and both can be
+		// chosen for the same row in one save -- so they are gathered per row
+		// and the row's tag is rewritten once, after every op has been read.
+		if (kind === "align" || kind === "widths") {
 			const block = blocks[op.block];
 			if (!block) return { error: `There is no block ${op.block} on this page.` };
 			const mismatch = checkExpect(source, block, op.expect);
 			if (mismatch) return mismatch;
-			const wanted = ALIGN_CLASSES[op.align];
-			if (!wanted) return { error: `A row lines up ${Object.keys(ALIGN_CLASSES).join(", ")} -- not ${JSON.stringify(op.align)}.` };
+			const group = kind === "align" ? ALIGN_CLASSES : WIDTH_CLASSES;
+			const wanted = group[op[kind]];
+			if (!wanted) {
+				return { error: `A row ${kind === "align" ? "lines up" : "can be split"} ${Object.keys(group).join(", ")} -- not ${JSON.stringify(op[kind])}.` };
+			}
 			// The nearest side-by-side row around the block, the same one
 			// closest() finds in the editor.
 			let row = block.parentEntry;
 			while (row && !isAlignRow(row.classes)) row = row.parentEntry;
-			if (!row) return { error: "That block is not in a side-by-side row, so there is nothing to line up." };
-			const alignValues = Object.values(ALIGN_CLASSES);
-			const next = [...row.classes.filter((value) => !alignValues.includes(value)), wanted];
-			if (next.join(" ") === row.classes.join(" ")) continue;
-			const rewritten = replaceClassAttribute(source.slice(row.tagStart, row.tagEnd), next.join(" "));
-			if (!rewritten) return { error: "That row's markup could not be read." };
-			if (rewrittenRows.has(row.tagStart)) continue;
-			rewrittenRows.add(row.tagStart);
-			cuts.push({ from: row.tagStart, to: row.tagEnd, block });
-			pastes.push({ at: row.tagStart, text: rewritten });
+			if (!row) return { error: "That block is not in a side-by-side row." };
+			const change = rowChanges.get(row.tagStart) || { row, block, classes: row.classes.slice() };
+			const values = Object.values(group);
+			change.classes = [...change.classes.filter((value) => !values.includes(value)), wanted];
+			rowChanges.set(row.tagStart, change);
 			continue;
 		}
 
@@ -498,6 +502,14 @@ export function applyStructure(html, ops = [], { root = "main" } = {}) {
 		}
 
 		return { error: `"${kind}" is not something this can do.` };
+	}
+
+	for (const { row, block, classes } of rowChanges.values()) {
+		if (classes.join(" ") === row.classes.join(" ")) continue;
+		const rewritten = replaceClassAttribute(source.slice(row.tagStart, row.tagEnd), classes.join(" "));
+		if (!rewritten) return { error: "That row's markup could not be read." };
+		cuts.push({ from: row.tagStart, to: row.tagEnd, block });
+		pastes.push({ at: row.tagStart, text: rewritten });
 	}
 
 	const conflict = findConflict(cuts, pastes);

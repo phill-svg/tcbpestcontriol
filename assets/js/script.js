@@ -19,6 +19,72 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  // Dropdowns in the header menu. A parent item's words stay a link to its
+  // page; the arrow beside them opens the list. On desktop hover and focus open
+  // it too, from CSS -- this handles the arrow, which is the only way in on a
+  // phone and the keyboard's way in everywhere.
+  //
+  // The arrow is a <button>, not a link, so the mobile-menu handler above never
+  // sees it: tapping the arrow opens the list without closing the menu.
+  function closeDropdowns(except) {
+    document.querySelectorAll(".nav-item.is-open").forEach(function (item) {
+      if (item === except) return;
+      item.classList.remove("is-open");
+      var button = item.querySelector(".nav-expand");
+      if (button) button.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  document.querySelectorAll(".nav-expand").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var item = button.closest(".nav-item");
+      var open = !item.classList.contains("is-open");
+      closeDropdowns(item);
+      item.classList.toggle("is-open", open);
+      item.classList.remove("is-dismissed");
+      button.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  });
+
+  document.querySelectorAll(".nav-item").forEach(function (item) {
+    // Escape marks a dropdown dismissed so CSS hover and focus stop holding it
+    // open; leaving it, by pointer or by focus, makes it openable again.
+    item.addEventListener("mouseleave", function () {
+      item.classList.remove("is-dismissed");
+    });
+    item.addEventListener("focusout", function (event) {
+      if (!item.contains(event.relatedTarget)) item.classList.remove("is-dismissed");
+    });
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape") return;
+    closeDropdowns(null);
+
+    // A dropdown can be held open two ways, and Escape has to beat both. By
+    // focus is the obvious one. By hover is the one that is easy to miss: the
+    // pointer resting on a menu leaves focus on the page itself, so looking
+    // only at the focused element finds nothing to dismiss and the list stays
+    // open under the cursor.
+    document.querySelectorAll(".nav-item:hover").forEach(function (item) {
+      item.classList.add("is-dismissed");
+    });
+
+    var active = document.activeElement;
+    var focused = active && active.closest ? active.closest(".nav-item") : null;
+    if (focused) {
+      focused.classList.add("is-dismissed");
+      // Back to the arrow, so keyboard focus is not left inside a list that
+      // has just disappeared.
+      var button = focused.querySelector(".nav-expand");
+      if (button) button.focus();
+    }
+  });
+
+  document.addEventListener("click", function (event) {
+    if (!event.target.closest || !event.target.closest(".nav-item")) closeDropdowns(null);
+  });
+
   var header = document.querySelector(".site-header");
   if (header) {
     // The shadow only has two states, so only write the style when the state

@@ -1,0 +1,11 @@
+{
+	"items": [
+		{ "label": "Residential", "href": "/residential", "children": [] },
+		{ "label": "Commercial", "href": "/commercial", "children": [] },
+		{ "label": "Pests We Treat", "href": "/pests-we-treat", "children": [] },
+		{ "label": "Areas We Cover", "href": "/locations", "children": [] },
+		{ "label": "Blog", "href": "/blog", "children": [] },
+		{ "label": "Pricing", "href": "/pricing", "children": [] },
+		{ "label": "Contact", "href": "/contact", "children": [] }
+	]
+}

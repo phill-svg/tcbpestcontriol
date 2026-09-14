@@ -234,6 +234,37 @@ test("every page with a menu, and both templates, can have it rewritten", () => 
 	assert.deepEqual(problems, []);
 });
 
+test("every page's menu is exactly what assets/menu.json renders", () => {
+	// The drift this whole module exists to stop. Before it, the menu had been
+	// copied into 139 files by hand and had quietly become four different menus.
+	// A page edited by hand now fails here instead -- run `npm run build:menu`
+	// to put it back.
+	const { menu, error } = validateMenu(JSON.parse(readFileSync(path.join(repoRoot, "assets", "menu.json"), "utf8")));
+	assert.equal(error, undefined, "assets/menu.json must itself be a valid menu");
+
+	const drifted = [];
+	for (const file of htmlFilesWithMenus()) {
+		const html = readFileSync(file, "utf8");
+		if (replaceMenus(html, menu).html !== html) drifted.push(path.relative(repoRoot, file));
+	}
+	assert.deepEqual(drifted, [], "these pages' menus differ from assets/menu.json -- run npm run build:menu");
+});
+
+test("every page carries the dropdown rules in its critical CSS", () => {
+	// The header is above the fold, so its CSS is inlined into each page and
+	// the full stylesheet loads later. A page whose inline copy lacked
+	// .nav-menu{display:none} would paint every dropdown's links expanded
+	// until the stylesheet arrived.
+	const blocks = new Set();
+	for (const file of htmlFilesWithMenus()) {
+		const inline = (readFileSync(file, "utf8").match(/<style>(@font-face[\s\S]*?)<\/style>/) || [])[1] || "";
+		assert.ok(inline.includes(".nav-menu{display:none"), `${path.relative(repoRoot, file)} has no inline rule hiding dropdowns`);
+		blocks.add(inline);
+	}
+	// And it is one block, not a slowly diverging copy per page.
+	assert.equal(blocks.size, 1, "the inline critical CSS differs between pages");
+});
+
 test("writing today's menu back only changes the pages whose links were relative", () => {
 	// Pages that already use absolute links come back byte-identical, which is
 	// the proof that the rest of the header survives untouched. The ones that

@@ -139,6 +139,11 @@ export function findBlocks(html, { root = "main" } = {}) {
 			if (!open || open.name !== name) {
 				return { blocks: [], error: `Unbalanced markup: </${name}> at ${match.index} does not close <${open ? open.name : "nothing"}>.` };
 			}
+			// Where this element closes. Blocks inside it hold a reference to the
+			// entry, so they can find the full extent of their column and row once
+			// the walk is over -- which a side-by-side row needs to collapse itself.
+			open.closeStart = match.index;
+			open.end = match.index + full.length;
 			if (open.block) {
 				open.block.end = match.index + full.length;
 				blocks.push(open.block);
@@ -194,13 +199,14 @@ export function findBlocks(html, { root = "main" } = {}) {
 				parentTagStart: parent ? parent.tagStart : -1,
 				parentTagEnd: parent ? parent.tagEnd : -1,
 				parentClasses: parent ? parent.classes : [],
+				parentEntry: parent,
 			};
 			if (isVoid) blocks.push(block);
-			else stack.push({ name, block, tagStart: match.index, tagEnd: match.index + full.length, classes });
+			else stack.push({ name, block, tagStart: match.index, tagEnd: match.index + full.length, classes, parentEntry: parent });
 			continue;
 		}
 
-		if (!isVoid) stack.push({ name, tagStart: match.index, tagEnd: match.index + full.length, classes });
+		if (!isVoid) stack.push({ name, tagStart: match.index, tagEnd: match.index + full.length, classes, parentEntry: parent });
 	}
 
 	if (stack.length) {
@@ -425,6 +431,21 @@ export function applyStructure(html, ops = [], { root = "main" } = {}) {
 			if (!block) return { error: `There is no block ${op.block} on this page.` };
 			const mismatch = checkExpect(source, block, op.expect);
 			if (mismatch) return mismatch;
+
+			// Removing one half of a side-by-side row. If the block is the only
+			// thing in its column, deleting just the block would leave an empty
+			// column holding half the row's width open for nothing. So the whole
+			// row goes, and the other column's contents are put back where the row
+			// was, unwrapped -- the reverse of "Add beside".
+			if (kind === "delete") {
+				const collapsed = collapseSplitRow(source, block);
+				if (collapsed) {
+					cuts.push({ from: collapsed.from, to: collapsed.to, block });
+					pastes.push({ at: collapsed.from, text: collapsed.text });
+					continue;
+				}
+			}
+
 			cuts.push({ from: block.leadStart, to: block.end, block });
 
 			if (kind === "move") {
@@ -451,6 +472,34 @@ export function applyStructure(html, ops = [], { root = "main" } = {}) {
 
 const tagOf = (block) =>
 	block && block.type === "heading" ? `h${Number(block.level)}` : block && block.type === "list-item" ? "li" : block && block.type === "image" ? "img" : "p";
+
+// If deleting `block` should collapse the side-by-side row it sits in, the
+// range to replace and what replaces it; otherwise null, and it is an ordinary
+// delete.
+//
+// Only when the block is the whole of its column, and that column is one of
+// exactly two in a .split-media-grid. A column that still holds other things --
+// the site's own rows keep an eyebrow, a heading and a paragraph together in one
+// -- loses the block and keeps the row. Anything not shaped like that is left
+// to an ordinary delete rather than guessed at.
+function collapseSplitRow(source, block) {
+	const column = block.parentEntry;
+	const row = column && column.parentEntry;
+	if (!column || !row || column.end === undefined || row.end === undefined) return null;
+	const isColumn = column.classes.includes(SPLIT_TEXT_COLUMN) || column.classes.includes(SPLIT_IMAGE_COLUMN);
+	if (!isColumn || !row.classes.includes(SPLIT_ROW_CLASS)) return null;
+
+	const columnInner = source.slice(column.tagEnd, column.closeStart).trim();
+	if (columnInner !== source.slice(block.start, block.end)) return null;
+
+	// The row without this column is the other column, and nothing else.
+	const rowInner = source.slice(row.tagEnd, row.closeStart);
+	const rest = (rowInner.slice(0, column.tagStart - row.tagEnd) + rowInner.slice(column.end - row.tagEnd)).trim();
+	if (!rest) return { from: row.tagStart, to: row.end, text: "" };
+	const other = rest.match(/^<div\b[^>]*\bclass\s*=\s*["'][^"']*\bsplit-media-(?:text|image)\b[^"']*["'][^>]*>([\s\S]*)<\/div>$/i);
+	if (!other) return null;
+	return { from: row.tagStart, to: row.end, text: other[1].trim() };
+}
 
 // Swaps the value of an existing class attribute, leaving the rest of the tag
 // byte-for-byte alone. Returns "" if the tag has no class attribute to change,

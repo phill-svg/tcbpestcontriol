@@ -1331,6 +1331,9 @@ class Editor {
 		// One operation per moved block, so dragging the same one twice is a
 		// correction rather than a second instruction.
 		this.movedBlocks = new Map();
+		// Additions waiting to be saved, keyed by the preview element on the page,
+		// so hovering one can find the change it belongs to.
+		this.pendingAdditions = new Map();
 		this.dragging = null;
 	}
 
@@ -1400,6 +1403,27 @@ class Editor {
 		this.toolbarAbove = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add above", onclick: () => this.addBlockAt("before") });
 		this.toolbarBelow = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add below", onclick: () => this.addBlockAt("after") });
 
+		// For something added but not saved yet: it is not a block in the file, so
+		// the ordinary controls do not apply to it -- but it has to be possible to
+		// change your mind about it without undoing everything done since.
+		this.toolbarChange = el("button", {
+			type: "button",
+			class: "tcb-btn tcb-btn-small",
+			text: "Change",
+			onclick: () => {
+				const pending = this.hoveredPending;
+				if (pending) this.openAddBlock(pending.ordinal, pending.where, pending.node, { replacing: pending });
+			},
+		});
+		this.toolbarDiscard = el("button", {
+			type: "button",
+			class: "tcb-btn tcb-btn-small tcb-btn-quiet",
+			text: "Remove",
+			onclick: () => {
+				if (this.hoveredPending) this.cancelAddition(this.hoveredPending);
+			},
+		});
+
 		this.toolbar = chrome("div", { class: "tcb-block-toolbar" }, [
 			this.toolbarTag,
 			this.toolbarAbove,
@@ -1407,6 +1431,8 @@ class Editor {
 			this.toolbarBeside,
 			this.toolbarRemove,
 			this.toolbarWidth,
+			this.toolbarChange,
+			this.toolbarDiscard,
 		]);
 		this.toolbar.hidden = true;
 		// Kept over the block while the page scrolls under it.
@@ -1419,10 +1445,42 @@ class Editor {
 	// Which block the pointer is over, if any. Called from the same mousemove
 	// the hover outline uses, so layout mode costs no extra listener.
 	trackLayoutHover(event) {
+		// Something added but not yet saved takes priority: it is not in the
+		// frozen block list at all, so without this branch it had no toolbar and
+		// could only be taken back with Ctrl+Z, undoing everything after it too.
+		const pendingNode = event.target && event.target.closest ? event.target.closest(".tcb-block-added") : null;
+		const pending = pendingNode ? this.pendingAdditions.get(pendingNode) : null;
+		if (pending) {
+			if (this.hoveredPending === pending) return;
+			if (this.hoveredNode) this.hoveredNode.classList.remove("tcb-block-hover");
+			this.hoveredBlock = -1;
+			this.hoveredPending = pending;
+			this.hoveredNode = pendingNode;
+			pendingNode.classList.add("tcb-block-hover");
+			this.layoutToolbar();
+			this.toolbarTag.textContent = "new";
+			for (const button of [this.toolbarAbove, this.toolbarBelow, this.toolbarBeside, this.toolbarRemove]) button.hidden = true;
+			this.toolbarWidth.hidden = true;
+			this.toolbarChange.hidden = false;
+			this.toolbarDiscard.hidden = false;
+			this.toolbar.hidden = false;
+			this.positionToolbar();
+			return;
+		}
+
 		const target = event.target && event.target.closest ? event.target.closest(BLOCK_SELECTOR) : null;
 		const ordinal = target ? this.blocks.indexOf(target) : -1;
 		if (ordinal === -1) return;
 		if (this.hoveredBlock === ordinal) return;
+
+		this.hoveredPending = null;
+		if (this.toolbar) {
+			this.toolbarChange.hidden = true;
+			this.toolbarDiscard.hidden = true;
+			this.toolbarAbove.hidden = false;
+			this.toolbarBelow.hidden = false;
+			this.toolbarRemove.hidden = false;
+		}
 
 		if (this.hoveredNode) this.hoveredNode.classList.remove("tcb-block-hover");
 		this.hoveredBlock = ordinal;
@@ -1495,7 +1553,10 @@ class Editor {
 			label: "removal",
 			undo: () => {
 				node.classList.remove("tcb-block-removed");
-				this.layoutOps.splice(this.layoutOps.indexOf(op), 1);
+				// Guarded: indexOf is -1 once the op is gone (a later drag of the
+				// same block replaces it), and splice(-1, 1) would remove whichever
+				// unrelated change happens to be last.
+				if (this.layoutOps.includes(op)) this.layoutOps.splice(this.layoutOps.indexOf(op), 1);
 				if (this.hoveredBlock === ordinal) this.toolbarRemove.disabled = false;
 			},
 		});
@@ -1551,6 +1612,7 @@ class Editor {
 		if (this.hoveredNode) this.hoveredNode.classList.remove("tcb-block-hover");
 		this.hoveredNode = null;
 		this.hoveredBlock = -1;
+		this.hoveredPending = null;
 		if (this.toolbar) this.toolbar.hidden = true;
 	}
 
@@ -1684,7 +1746,10 @@ class Editor {
 				if (from.next) from.parent.insertBefore(node, from.next);
 				else from.parent.appendChild(node);
 				node.classList.remove("tcb-block-moved");
-				this.layoutOps.splice(this.layoutOps.indexOf(op), 1);
+				// Guarded: indexOf is -1 once the op is gone (a later drag of the
+				// same block replaces it), and splice(-1, 1) would remove whichever
+				// unrelated change happens to be last.
+				if (this.layoutOps.includes(op)) this.layoutOps.splice(this.layoutOps.indexOf(op), 1);
 				this.movedBlocks.delete(ordinal);
 			},
 		});
@@ -1725,7 +1790,7 @@ class Editor {
 	// Adding a block. The payload is a shape, never markup -- page-structure.js
 	// renders the tag on the server, so nothing typed here can become an
 	// element in the file.
-	openAddBlock(ordinal, where, node) {
+	openAddBlock(ordinal, where, node, { replacing = null } = {}) {
 		const inList = node.parentElement && ["UL", "OL"].includes(node.parentElement.tagName);
 		const kindSelect = el("select", { class: "tcb-input" });
 		// Inside a list the only legal block is another item, so it is the only
@@ -1787,6 +1852,18 @@ class Editor {
 			altRow.hidden = kind !== "image";
 			picker.hidden = kind !== "image";
 		};
+		// Changing something already added: the dialog opens holding what it says
+		// now, so a typo is fixed rather than retyped.
+		if (replacing) {
+			const was = replacing.payload;
+			kindSelect.value = was.type;
+			sideSelect.value = replacing.side || "right";
+			textInput.value = was.text || "";
+			headingInput.value = was.heading || "";
+			if (was.level) levelSelect.value = String(was.level);
+			srcInput.value = was.src || "";
+			altInput.value = was.alt || "";
+		}
 		kindSelect.addEventListener("change", showRows);
 		showRows();
 		this.fillImagePicker(picker, srcInput, () => {});
@@ -1796,7 +1873,7 @@ class Editor {
 		picker.before(uploader);
 
 		this.openDialog(
-			beside ? "Add something beside this" : where === "before" ? "Add a block above" : "Add a block below",
+			replacing ? "Change what you added" : beside ? "Add something beside this" : where === "before" ? "Add a block above" : "Add a block below",
 			[
 				el("p", { class: "tcb-hint", text: "Nothing is written yet. It goes into the page when you press Save layout." }),
 				el("label", { class: "tcb-label" }, [el("span", { text: "What kind" }), kindSelect]),
@@ -1819,63 +1896,86 @@ class Editor {
 								? { type: "heading", level: Number(levelSelect.value), text: textInput.value }
 								: { type: kind, text: textInput.value };
 
-				const preview = this.previewBlock(payload);
-				if (!preview) throw new Error(kind === "image" ? "Choose an image first." : "Type some words first.");
+				// Checked before anything on the page changes, so a change that is
+				// missing its words or its picture leaves the old one where it was.
+				if (!this.previewBlock(payload)) throw new Error(kind === "image" ? "Choose an image first." : "Type some words first.");
 
-				if (beside) {
-					// The same markup the server will write: the site's two-column row,
-					// with the existing block moved into one column untouched and the new
-					// one in the other. The row itself is not marked as editor chrome --
-					// the existing block lives inside it and must stay reachable.
-					const side = sideSelect.value;
-					const column = (child, isImage) => {
-						const wrapper = el("div", { class: isImage ? "split-media-image" : "split-media-text" });
-						wrapper.appendChild(child);
-						return wrapper;
-					};
-					const row = el("div", { class: "split-media-grid" });
-					const placeholder = document.createComment("tcb-beside");
-					node.before(placeholder);
-					const existing = column(node, node.tagName === "IMG");
-					const added = column(preview, payload.type === "image");
-					row.append(...(side === "left" ? [added, existing] : [existing, added]));
-					placeholder.replaceWith(row);
-					node.dataset.tcbBeside = "1";
-					// The toolbar skips work when the pointer returns to the block it
-					// was already describing, so forget that block: the next hover has
-					// to see that it can no longer be changed.
-					this.hideToolbar();
-
-					const op = { op: "beside", target: ordinal, side, block: payload, expect: this.expectFor(ordinal) };
-					this.layoutOps.push(op);
-					this.pushUndo({
-						label: "addition beside",
-						undo: () => {
-							row.replaceWith(node);
-							delete node.dataset.tcbBeside;
-							this.layoutOps.splice(this.layoutOps.indexOf(op), 1);
-							this.hideToolbar();
-						},
-					});
-					this.refreshLayoutStatus();
-					return;
-				}
-
-				const op = { op: "insert", to: { [where]: ordinal }, block: payload };
-				this.layoutOps.push(op);
-				if (where === "before") node.before(preview);
-				else node.after(preview);
-				this.pushUndo({
-					label: "addition",
-					undo: () => {
-						preview.remove();
-						this.layoutOps.splice(this.layoutOps.indexOf(op), 1);
-					},
-				});
-				this.refreshLayoutStatus();
+				// Changing an addition is taking the old one out and putting the new
+				// one in its place. Out first: for something beside a block, the old
+				// row has to be unwrapped before a new one can be wrapped around it.
+				if (replacing) this.cancelAddition(replacing);
+				this.applyAddition({ ordinal, where, node, payload, side: sideSelect.value });
 			},
-			{ confirmLabel: "Add it", successMessage: null }
+			{ confirmLabel: replacing ? "Change it" : "Add it", successMessage: null }
 		);
+	}
+
+	// Puts a pending addition on the page and records how to take it off again.
+	//
+	// Every addition -- above, below or beside -- goes through here and comes out
+	// through cancelAddition, whichever way it is taken back: its own Remove
+	// button, Change, or Ctrl+Z. One way in and one way out is what keeps the
+	// page, the pending list and the undo history from disagreeing about what is
+	// still waiting to be saved.
+	applyAddition({ ordinal, where, node, payload, side }) {
+		const preview = this.previewBlock(payload);
+		let op;
+		let revert;
+
+		if (where === "beside") {
+			// The same markup the server will write: the site's two-column row, with
+			// the existing block moved into one column untouched and the new one in
+			// the other. The row itself is not marked as editor chrome -- the
+			// existing block lives inside it and must stay reachable.
+			const column = (child, isImage) => {
+				const wrapper = el("div", { class: isImage ? "split-media-image" : "split-media-text" });
+				wrapper.appendChild(child);
+				return wrapper;
+			};
+			const row = el("div", { class: "split-media-grid" });
+			const placeholder = document.createComment("tcb-beside");
+			node.before(placeholder);
+			const existing = column(node, node.tagName === "IMG");
+			const added = column(preview, payload.type === "image");
+			row.append(...(side === "left" ? [added, existing] : [existing, added]));
+			placeholder.replaceWith(row);
+			node.dataset.tcbBeside = "1";
+			op = { op: "beside", target: ordinal, side, block: payload, expect: this.expectFor(ordinal) };
+			revert = () => {
+				row.replaceWith(node);
+				delete node.dataset.tcbBeside;
+			};
+		} else {
+			if (where === "before") node.before(preview);
+			else node.after(preview);
+			op = { op: "insert", to: { [where]: ordinal }, block: payload };
+			revert = () => preview.remove();
+		}
+
+		const entry = { op, ordinal, where, node, side, payload, preview, revert };
+		this.layoutOps.push(op);
+		this.pendingAdditions.set(preview, entry);
+		this.pushUndo({ label: where === "beside" ? "addition beside" : "addition", op, undo: () => this.cancelAddition(entry) });
+		// The toolbar skips work when the pointer returns to the block it was
+		// already describing, so forget that block: the next hover has to see
+		// what the page looks like now.
+		this.hideToolbar();
+		this.refreshLayoutStatus();
+		return entry;
+	}
+
+	cancelAddition(entry) {
+		const at = this.layoutOps.indexOf(entry.op);
+		// Already taken back. splice(-1, 1) would remove whichever change happens
+		// to be last in the list instead -- a different, unrelated change -- so
+		// this has to stop here rather than fall through to it.
+		if (at === -1) return;
+		this.layoutOps.splice(at, 1);
+		entry.revert();
+		this.pendingAdditions.delete(entry.preview);
+		this.undoStack = this.undoStack.filter((item) => item.op !== entry.op);
+		this.hideToolbar();
+		this.refreshLayoutStatus();
 	}
 
 	// A stand-in for what the server will write, so the page shows the shape of

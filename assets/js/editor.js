@@ -558,6 +558,9 @@ class Editor {
 				el("button", { type: "button", class: "tcb-btn", text: "New post", onclick: () => this.openNewPost() }),
 				el("button", { type: "button", class: "tcb-btn", text: "Changes", onclick: () => this.openChanges() }),
 				el("button", { type: "button", class: "tcb-btn", text: "Menu", onclick: () => this.openMenuEditor() }),
+				// It used to live only inside the Changes dialog, where nobody
+				// looking for it would think to look.
+				el("button", { type: "button", class: "tcb-btn", text: "Sync to code", onclick: () => this.openSync() }),
 				this.layoutButton,
 				this.saveLayoutButton,
 				this.previewButton,
@@ -4040,6 +4043,29 @@ class Editor {
 	// toolbar is already full, and this acts on every published edit across the
 	// whole site, not just this page -- so it belongs next to the change list
 	// rather than next to the per-page Publish button.
+	// The bar's own way into Sync to code. Same panel the Changes dialog shows;
+	// what it adds is saying plainly which changes it covers, because the three
+	// kinds of change here reach the code in three different ways and that is
+	// not something anyone should have to work out from the result.
+	openSync() {
+		this.openDialog(
+			"Sync to code",
+			[
+				el("p", {
+					class: "tcb-hint",
+					text: "Writes every published wording change, on every page, into the site's code as one change. The site looks the same afterwards — the code just catches up with it.",
+				}),
+				el("p", {
+					class: "tcb-hint",
+					text: "Unpublished drafts are not included: publish them first. Layout, menu and picture changes do not need this — they are written into the code the moment you save them. Text styling (size and colour) stays as a live setting and is not written into the code.",
+				}),
+				this.buildSyncPanel(),
+			],
+			null,
+			{ confirmLabel: null, cancelLabel: "Close" }
+		);
+	}
+
 	buildSyncPanel() {
 		const status = el("p", { class: "tcb-hint" });
 		const button = el("button", { type: "button", class: "tcb-btn", text: "Sync to code" });

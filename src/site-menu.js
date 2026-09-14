@@ -202,14 +202,21 @@ export function navTextCounts(html) {
 	if (where.error) return where;
 
 	const counts = new Map();
+	// Link addresses are overlay-addressable too, by the same hash-and-count
+	// scheme, so an href override further down the page is renumbered the same
+	// way a text override is.
+	const hrefs = new Map();
 	for (const span of [where.main, where.mobile]) {
 		const links = source.slice(span.innerStart, span.linksEnd);
-		for (const [, text] of links.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)) {
+		for (const [, attrText, text] of links.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
 			const normalised = normaliseText(decodeEntities(text.replace(/<[^>]*>/g, " ")));
 			if (normalised) counts.set(normalised, (counts.get(normalised) || 0) + 1);
+			const href = readAttributes(attrText).find((attr) => attr.name === "href");
+			const address = href ? normaliseText(decodeEntities(href.value)) : "";
+			if (address) hrefs.set(address, (hrefs.get(address) || 0) + 1);
 		}
 	}
-	return { counts };
+	return { counts, hrefs };
 }
 
 // Texts whose count in the menu differs between two pages' worth of markup.
@@ -218,9 +225,6 @@ export function changedNavTexts(before, after) {
 	const b = navTextCounts(after);
 	if (a.error) return a;
 	if (b.error) return b;
-	const changed = [];
-	for (const text of new Set([...a.counts.keys(), ...b.counts.keys()])) {
-		if ((a.counts.get(text) || 0) !== (b.counts.get(text) || 0)) changed.push(text);
-	}
-	return { changed };
+	const differ = (x, y) => [...new Set([...x.keys(), ...y.keys()])].filter((key) => (x.get(key) || 0) !== (y.get(key) || 0));
+	return { changed: differ(a.counts, b.counts), changedHrefs: differ(a.hrefs, b.hrefs) };
 }

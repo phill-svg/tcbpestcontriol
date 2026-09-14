@@ -138,7 +138,21 @@ export function readFile(env, path, branch) {
 // encoder that decodes and re-encodes the same bytes for no reason.
 //
 // Returns the new commit's sha and short url.
-export async function commitFiles(env, branch, files, message) {
+//
+// `inline` puts text files' contents straight into the tree request instead of
+// uploading each as its own blob first. That turns a commit of N text files
+// from N+4 requests into 5, which matters for the menu: it rewrites 139 files,
+// and a Worker on the free plan may make only 50 requests to the internet per
+// invocation. GitHub accepts a tree of that size inline -- checked against the
+// real repository with a 6.3 MB, 139-file payload before this was written.
+// Binary files still go up as blobs, since tree content has to be text.
+//
+// `expectedHead` refuses the commit unless the branch is still at that sha. A
+// caller that read files at one commit and would write them back must pass it:
+// if someone pushed in between, those files would silently undo their change,
+// and the non-forced ref update below cannot catch that on its own because the
+// new commit would be built on top of the newer head.
+export async function commitFiles(env, branch, files, message, { inline = false, expectedHead } = {}) {
 	const [owner, repo] = String(env.GITHUB_REPO).split("/");
 	const base = `/repos/${owner}/${repo}`;
 	const token = env.GITHUB_TOKEN;
@@ -148,10 +162,19 @@ export async function commitFiles(env, branch, files, message) {
 	// fail rather than silently discarding someone else's work.
 	const ref = await call(token, `${base}/git/ref/heads/${encodeURIComponent(branch)}`);
 	const headSha = ref.object.sha;
+	if (expectedHead && headSha !== expectedHead) {
+		const error = new Error("the site changed while this was being prepared -- reload the page and try again");
+		error.status = 409;
+		throw error;
+	}
 	const headCommit = await call(token, `${base}/git/commits/${headSha}`);
 
 	const tree = [];
 	for (const file of files) {
+		if (inline && file.base64 === undefined) {
+			tree.push({ path: file.path, mode: "100644", type: "blob", content: file.content });
+			continue;
+		}
 		const blob = await call(token, `${base}/git/blobs`, {
 			method: "POST",
 			body: JSON.stringify({
@@ -181,6 +204,42 @@ export async function commitFiles(env, branch, files, message) {
 	});
 
 	return { sha: commit.sha, url: `https://github.com/${owner}/${repo}/commit/${commit.sha}` };
+}
+
+// Every file on the branch, as path -> git blob sha, and the commit that
+// describes. Three requests however many files there are.
+export async function readTree(env, branch) {
+	const [owner, repo] = String(env.GITHUB_REPO).split("/");
+	const base = `/repos/${owner}/${repo}`;
+	const token = env.GITHUB_TOKEN;
+
+	const ref = await call(token, `${base}/git/ref/heads/${encodeURIComponent(branch)}`);
+	const headSha = ref.object.sha;
+	const commit = await call(token, `${base}/git/commits/${headSha}`);
+	const listing = await call(token, `${base}/git/trees/${commit.tree.sha}?recursive=1`);
+	// GitHub cuts a very large listing short and says so. A partial listing
+	// would make missing files look like files that do not exist.
+	if (listing.truncated) throw new Error("GitHub returned a partial file listing for this repository.");
+
+	const entries = new Map();
+	for (const entry of listing.tree || []) {
+		if (entry.type === "blob") entries.set(entry.path, entry.sha);
+	}
+	return { headSha, entries };
+}
+
+// git's own name for a file's contents: SHA-1 of "blob <byte length>\0"
+// followed by the bytes. Comparing it with the sha in a tree listing proves a
+// copy of a file is byte-for-byte the one on the branch, without downloading
+// the branch's copy to compare against.
+export async function gitBlobSha(bytes) {
+	const body = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+	const header = new TextEncoder().encode(`blob ${body.byteLength}\0`);
+	const joined = new Uint8Array(header.byteLength + body.byteLength);
+	joined.set(header, 0);
+	joined.set(body, header.byteLength);
+	const digest = await crypto.subtle.digest("SHA-1", joined);
+	return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export { decodeBase64Utf8 };

@@ -7,7 +7,22 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { isConfigured, missingConfig, setupMessage, commitFiles, readFile, decodeBase64Utf8, explainForTest } from "../src/github-sync.js";
+import { isConfigured, missingConfig, setupMessage, commitFiles, readFile, decodeBase64Utf8, explainForTest, gitBlobSha } from "../src/github-sync.js";
+import { execFileSync } from "node:child_process";
+
+test("gitBlobSha is git's own hash of a file, byte for byte", async () => {
+	// The menu save refuses to write a page back unless its deployed copy has
+	// exactly this hash. If the hash were computed even slightly differently
+	// from git's, every page would look stale and the menu could never be
+	// saved -- or, worse, a stale page would look current.
+	assert.equal(await gitBlobSha(new TextEncoder().encode("")), "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391");
+	assert.equal(await gitBlobSha(new TextEncoder().encode("hello\n")), "ce013625030ba8dba906f756967f9e9ca394464a");
+	// Non-ASCII counts in bytes, not characters: "blob 7" not "blob 5".
+	assert.equal(
+		await gitBlobSha(new TextEncoder().encode("Ants — \n")),
+		execFileSync("git", ["hash-object", "--stdin"], { input: "Ants — \n" }).toString().trim()
+	);
+});
 
 const ENV = { GITHUB_TOKEN: "test-token", GITHUB_REPO: "owner/repo" };
 

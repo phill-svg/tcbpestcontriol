@@ -33,8 +33,9 @@ import {
 import { decodeEntities, escapeHtmlText, escapeStyleAttribute } from "./html-entities.js";
 import { MINIMUM_ENDING } from "../assets/js/seo-site.js";
 import { bakeEdits, pathToFile } from "./bake-edits.js";
-import { missingConfig, setupMessage, readFile, commitFiles, decodeBase64Utf8 } from "./github-sync.js";
+import { missingConfig, setupMessage, readFile, readTree, gitBlobSha, commitFiles, decodeBase64Utf8 } from "./github-sync.js";
 import { applyStructure } from "./page-structure.js";
+import { validateMenu, replaceMenus, changedNavTexts } from "./site-menu.js";
 
 const TABLE_DDL = `CREATE TABLE IF NOT EXISTS content_edits (
   path         TEXT NOT NULL,
@@ -669,6 +670,146 @@ export async function handleContentApi(request, url, env, session) {
 	// minute or two later, when Cloudflare finishes rebuilding. That is why
 	// the editor batches a whole rearrangement into one call rather than
 	// sending each drag.
+	// The header menu, written into every page at once.
+	//
+	// Every page carries its own copy of the menu, so a menu change is a change
+	// to all of them: 136 pages, 404.html and the two templates new pages are
+	// made from, plus assets/menu.json, in one commit. `dryRun` does every
+	// check and reports what would change without committing anything.
+	//
+	// The pages are read from this Worker's own assets rather than one GitHub
+	// request each. A Worker on the free plan may make only 50 requests to the
+	// internet per invocation, and 139 reads would blow through that before a
+	// single file was written. The risk in reading deployed copies is that they
+	// lag a commit that is still deploying, and writing a stale copy back would
+	// undo that commit -- so every copy is checked against git's own hash of the
+	// file on the branch, and any mismatch refuses the save.
+	if (route === "menu" && request.method === "POST") {
+		const missing = missingConfig(env);
+		if (missing.length) return json({ error: setupMessage(missing), missing }, 501);
+
+		const body = await readJsonBody(request);
+		const checked = validateMenu(body && body.menu);
+		if (checked.error) return json({ error: checked.error }, 400);
+		const dryRun = body.dryRun === true;
+
+		await ensureTable(env);
+		// Same rule as a layout save, for the same reason: a pending draft is
+		// waiting on a page this is about to rewrite.
+		const pendingDraft = await env.DB.prepare("SELECT path FROM content_edits WHERE draft IS NOT NULL LIMIT 1").first();
+		if (pendingDraft) {
+			return json({ error: `There are unpublished wording changes on ${pendingDraft.path}. Publish or revert them first.` }, 409);
+		}
+
+		const branch = env.GITHUB_BRANCH || "main";
+		let tree;
+		try {
+			tree = await readTree(env, branch);
+		} catch (error) {
+			return json({ error: `Could not read the site's files from GitHub: ${error.message}` }, 502);
+		}
+
+		const pages = [];
+		const stale = [];
+		for (const [filePath, sha] of tree.entries) {
+			if (!filePath.endsWith(".html")) continue;
+
+			let bytes = null;
+			const asset = await env.ASSETS.fetch(new Request(new URL(`/${filePath}`, url)));
+			if (asset.ok) {
+				bytes = new Uint8Array(await asset.arrayBuffer());
+				if ((await gitBlobSha(bytes)) !== sha) {
+					stale.push(filePath);
+					continue;
+				}
+			} else {
+				// Not deployed at all -- the templates are kept out of the public
+				// assets on purpose (.assetsignore). Read those from the branch.
+				if (asset.body) await asset.body.cancel().catch(() => {});
+				try {
+					const file = await readFile(env, filePath, branch);
+					bytes = new TextEncoder().encode(decodeBase64Utf8(file.content));
+				} catch (error) {
+					return json({ error: `Could not read ${filePath}: ${error.message}` }, 502);
+				}
+			}
+
+			const text = new TextDecoder().decode(bytes);
+			if (text.includes('class="main-nav"')) pages.push({ filePath, text });
+		}
+
+		if (stale.length) {
+			return json(
+				{
+					error: "The site is still rebuilding from a recent change, so its pages cannot be checked against GitHub yet. Try again in a couple of minutes.",
+					stale: stale.slice(0, 10),
+				},
+				409
+			);
+		}
+
+		// Overrides a menu change could renumber. Text and style overrides are
+		// numbered by how many copies of their text come before them; link
+		// overrides the same way by their address. Only unsynced ones still
+		// apply as an overlay -- a synced one is text in the file already.
+		const pending = await env.DB.prepare(
+			"SELECT path, kind, original FROM content_edits WHERE published IS NOT NULL AND synced_at IS NULL AND kind IN ('text', 'style', 'attr')"
+		).all();
+		const overridesByFile = new Map();
+		for (const row of pending.results || []) {
+			const file = pathToFile(row.path);
+			if (!overridesByFile.has(file)) overridesByFile.set(file, []);
+			overridesByFile.get(file).push(row);
+		}
+
+		const writes = [];
+		const conflicts = [];
+		for (const page of pages) {
+			const result = replaceMenus(page.text, checked.menu);
+			if (result.error) return json({ error: `${page.filePath}: ${result.error}` }, 422);
+			if (result.html === page.text) continue;
+
+			const { changed, changedHrefs } = changedNavTexts(page.text, result.html);
+			for (const row of overridesByFile.get(page.filePath) || []) {
+				const original = normaliseText(row.original);
+				const renumbered = row.kind === "attr" ? changedHrefs.includes(original) : changed.includes(original);
+				if (renumbered) conflicts.push({ path: row.path, text: original });
+			}
+			writes.push({ path: page.filePath, content: result.html });
+		}
+
+		// Refused with the whole list, not the first one, so the person fixing
+		// it can deal with them together.
+		if (conflicts.length) {
+			const named = conflicts.slice(0, 5).map((conflict) => `"${conflict.text}" on ${conflict.path}`).join(", ");
+			return json(
+				{
+					error: `This menu change would move ${conflicts.length === 1 ? "an edit" : `${conflicts.length} edits`} onto the wrong words: ${named}. Sync to code or revert ${conflicts.length === 1 ? "it" : "them"} first.`,
+					conflicts,
+				},
+				409
+			);
+		}
+
+		if (!writes.length) return json({ ok: true, changed: false, message: "The menu is already like that." });
+		if (dryRun) return json({ ok: true, dryRun: true, files: writes.length, pages: pages.length });
+
+		writes.push({ path: "assets/menu.json", content: `${JSON.stringify(checked.menu, null, "\t")}\n` });
+
+		let commit;
+		try {
+			commit = await commitFiles(env, branch, writes, `Update the header menu\n\nWritten into ${writes.length - 1} files from the visual editor.`, {
+				inline: true,
+				expectedHead: tree.headSha,
+			});
+		} catch (error) {
+			console.error("Menu commit failed:", error && (error.stack || error.message));
+			return json({ error: `Could not save the menu: ${error.message}` }, error.status === 409 ? 409 : 502);
+		}
+
+		return json({ ok: true, changed: true, files: writes.length - 1, commit });
+	}
+
 	if (route === "structure" && request.method === "POST") {
 		const missing = missingConfig(env);
 		if (missing.length) return json({ error: setupMessage(missing), missing }, 501);

@@ -13,7 +13,12 @@
 		{
 			"label": "Pests We Treat",
 			"href": "/pests-we-treat",
-			"children": []
+			"children": [
+				{
+					"label": "Birds",
+					"href": "/bird-control"
+				}
+			]
 		},
 		{
 			"label": "Areas We Cover",

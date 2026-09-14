@@ -369,6 +369,60 @@ test("every width the row control offers is one the stylesheet defines", () => {
 	}
 });
 
+// --- beside ---------------------------------------------------------------
+//
+// Putting something next to a block wraps the two into the two-column row the
+// site already uses on 105 pages, side by side from 768px and stacked on a
+// phone. The existing block's bytes go into the row untouched.
+
+test("something put beside a paragraph wraps both into a two-column row", () => {
+	const { html, error } = applyStructure(PAGE, [
+		{ op: "beside", target: 1, block: { type: "image", src: "/assets/images/x.webp", alt: "An ant" } },
+	]);
+	assert.equal(error, undefined);
+	assert.ok(
+		html.includes(
+			'\t<div class="split-media-grid"><div class="split-media-text"><p>First.</p></div><div class="split-media-image"><img src="/assets/images/x.webp" alt="An ant" loading="lazy"></div></div>\n'
+		),
+		html
+	);
+	// Everything around it is where it was.
+	assert.ok(html.includes("\t<h2>Ants</h2>\n\t<div class=\"split-media-grid\">"));
+	assert.ok(html.includes("</div></div>\n\t<p>Second.</p>"));
+});
+
+test("the new block can go on the left instead", () => {
+	const { html } = applyStructure(PAGE, [{ op: "beside", target: 1, side: "left", block: { type: "paragraph", text: "Left." } }]);
+	assert.ok(html.includes('<div class="split-media-grid"><div class="split-media-text"><p>Left.</p></div><div class="split-media-text"><p>First.</p></div></div>'));
+});
+
+test("things that cannot sensibly have something beside them are refused", () => {
+	assert.match(applyStructure(PAGE, [{ op: "beside", target: 3, block: { type: "paragraph", text: "x" } }]).error, /list item/);
+	const inRow = '<body><main><div class="grid-cards cols-2"><div class="grid-card"><h3>A</h3><p>B</p></div></div></main></body>';
+	assert.match(applyStructure(inRow, [{ op: "beside", target: 0, block: { type: "paragraph", text: "x" } }]).error, /already in a row/);
+	const split = '<body><main><div class="split-media-grid"><div class="split-media-text"><p>A</p></div><div class="split-media-image"><img src="/assets/images/x.webp" alt=""></div></div></main></body>';
+	assert.match(applyStructure(split, [{ op: "beside", target: 0, block: { type: "paragraph", text: "x" } }]).error, /already has something beside it/);
+	assert.match(applyStructure(PAGE, [{ op: "beside", target: 1, block: { type: "card", heading: "A", text: "B" } }]).error, /Only a paragraph/);
+	assert.match(applyStructure(PAGE, [{ op: "beside", target: 99, block: { type: "paragraph", text: "x" } }]).error, /no block 99/);
+});
+
+test("a block being put beside something cannot also be named by another change in the same save", () => {
+	// In the editor, "add below" on a wrapped paragraph lands inside its
+	// column. In the file, "after the paragraph" is resolved against the page as
+	// loaded -- before the wrapper exists -- and would land after the whole row.
+	// The preview and the saved page would disagree, so it is refused.
+	const beside = { op: "beside", target: 1, block: { type: "paragraph", text: "Beside." } };
+	for (const other of [
+		{ op: "insert", to: { after: 1 }, block: { type: "paragraph", text: "Below." } },
+		{ op: "delete", block: 1 },
+		{ op: "move", block: 2, to: { before: 1 } },
+	]) {
+		assert.match(applyStructure(PAGE, [beside, other]).error, /cannot also be moved or added next to/, JSON.stringify(other));
+	}
+	// A change to a different block in the same save is fine.
+	assert.equal(applyStructure(PAGE, [beside, { op: "delete", block: 2 }]).error, undefined);
+});
+
 // --- the real pages -------------------------------------------------------
 
 test("every page in the repository can be read by the scanner", () => {

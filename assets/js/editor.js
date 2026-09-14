@@ -1395,10 +1395,16 @@ class Editor {
 		]);
 		this.toolbarWidth.hidden = true;
 
+		// Side by side. Hidden where it cannot apply -- see trackLayoutHover.
+		this.toolbarBeside = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add beside", onclick: () => this.addBlockAt("beside") });
+		this.toolbarAbove = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add above", onclick: () => this.addBlockAt("before") });
+		this.toolbarBelow = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add below", onclick: () => this.addBlockAt("after") });
+
 		this.toolbar = chrome("div", { class: "tcb-block-toolbar" }, [
 			this.toolbarTag,
-			el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add above", onclick: () => this.addBlockAt("before") }),
-			el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add below", onclick: () => this.addBlockAt("after") }),
+			this.toolbarAbove,
+			this.toolbarBelow,
+			this.toolbarBeside,
 			this.toolbarRemove,
 			this.toolbarWidth,
 		]);
@@ -1433,6 +1439,27 @@ class Editor {
 		const isCard = target.classList.contains("grid-card");
 		this.toolbarTag.textContent = isCard ? "box" : target.tagName.toLowerCase();
 		this.toolbarRemove.disabled = target.classList.contains("tcb-block-removed");
+
+		// "Add beside" only where the server would accept it: not a list item,
+		// not a box already in a row (add to the row instead), and not something
+		// that already has a neighbour. The same rules as page-structure.js, so
+		// the button is never offered for a save that would be refused.
+		const inList = !!(target.parentElement && ["UL", "OL"].includes(target.parentElement.tagName));
+		const alreadySplit = !!target.closest(".split-media-text, .split-media-image");
+		this.toolbarBeside.hidden = inList || (isCard && !!target.closest(ROW_SELECTOR)) || alreadySplit;
+
+		// A block that has just had something put beside it takes no further
+		// change until the layout is saved: "below" it would mean inside its
+		// new column here, and after the whole row in the saved file.
+		const wrapped = target.dataset.tcbBeside === "1";
+		for (const button of [this.toolbarAbove, this.toolbarBelow, this.toolbarBeside, this.toolbarRemove]) {
+			if (wrapped) button.disabled = true;
+		}
+		if (!wrapped) {
+			this.toolbarAbove.disabled = false;
+			this.toolbarBelow.disabled = false;
+			this.toolbarBeside.disabled = false;
+		}
 
 		const row = isCard ? target.closest(ROW_SELECTOR) : null;
 		this.toolbarWidth.hidden = !row;
@@ -1545,6 +1572,8 @@ class Editor {
 			if (!this.layoutMode) return event.preventDefault();
 			const ordinal = this.blocks.indexOf(node);
 			if (ordinal === -1 || node.classList.contains("tcb-block-removed")) return event.preventDefault();
+			// Something was just put beside it; it stays put until the layout is saved.
+			if (node.dataset.tcbBeside === "1") return event.preventDefault();
 			this.dragging = { ordinal, node };
 			node.classList.add("tcb-block-dragging");
 			this.hideToolbar();
@@ -1584,7 +1613,9 @@ class Editor {
 	isStableAnchor(ordinal) {
 		if (this.movedBlocks.has(ordinal)) return false;
 		const node = this.blocks[ordinal];
-		return !!node && !node.classList.contains("tcb-block-removed");
+		// A block that has just had something put beside it has moved into a new
+		// column, which does not exist in the file yet either.
+		return !!node && !node.classList.contains("tcb-block-removed") && node.dataset.tcbBeside !== "1";
 	}
 
 	showDropMarker(target) {
@@ -1703,16 +1734,31 @@ class Editor {
 		// inside a list the only thing that belongs is another item. Offering
 		// the rest would just be something to refuse later.
 		const inRow = !!node.closest(ROW_SELECTOR);
-		const kinds = inList
-			? [["list-item", "List item"]]
-			: inRow
-				? [["card", "Box"]]
-				: [
-						["paragraph", "Paragraph"],
-						["heading", "Heading"],
-						["image", "Image"],
-					];
+		const beside = where === "beside";
+		const kinds =
+			inList && !beside
+				? [["list-item", "List item"]]
+				: inRow && !beside
+					? [["card", "Box"]]
+					: [
+							// An image is the usual thing to put beside words, so it leads.
+							...(beside ? [["image", "Image"]] : []),
+							["paragraph", "Paragraph"],
+							["heading", "Heading"],
+							...(beside ? [] : [["image", "Image"]]),
+						];
 		for (const [value, label] of kinds) kindSelect.appendChild(el("option", { value, text: label }));
+
+		const sideSelect = el("select", { class: "tcb-input" }, [
+			el("option", { value: "right", text: "On the right" }),
+			el("option", { value: "left", text: "On the left" }),
+		]);
+		const sideRow = el("label", { class: "tcb-label" }, [
+			el("span", { text: "Which side" }),
+			sideSelect,
+			el("span", { class: "tcb-hint", text: "Side by side on a computer or tablet. On a phone they stack, one above the other." }),
+		]);
+		sideRow.hidden = !beside;
 
 		const textInput = el("textarea", { class: "tcb-input tcb-textarea", rows: "3" });
 		const headingInput = el("input", { type: "text", class: "tcb-input" });
@@ -1750,10 +1796,11 @@ class Editor {
 		picker.before(uploader);
 
 		this.openDialog(
-			where === "before" ? "Add a block above" : "Add a block below",
+			beside ? "Add something beside this" : where === "before" ? "Add a block above" : "Add a block below",
 			[
 				el("p", { class: "tcb-hint", text: "Nothing is written yet. It goes into the page when you press Save layout." }),
 				el("label", { class: "tcb-label" }, [el("span", { text: "What kind" }), kindSelect]),
+				sideRow,
 				levelRow,
 				headingRow,
 				textRow,
@@ -1774,6 +1821,45 @@ class Editor {
 
 				const preview = this.previewBlock(payload);
 				if (!preview) throw new Error(kind === "image" ? "Choose an image first." : "Type some words first.");
+
+				if (beside) {
+					// The same markup the server will write: the site's two-column row,
+					// with the existing block moved into one column untouched and the new
+					// one in the other. The row itself is not marked as editor chrome --
+					// the existing block lives inside it and must stay reachable.
+					const side = sideSelect.value;
+					const column = (child, isImage) => {
+						const wrapper = el("div", { class: isImage ? "split-media-image" : "split-media-text" });
+						wrapper.appendChild(child);
+						return wrapper;
+					};
+					const row = el("div", { class: "split-media-grid" });
+					const placeholder = document.createComment("tcb-beside");
+					node.before(placeholder);
+					const existing = column(node, node.tagName === "IMG");
+					const added = column(preview, payload.type === "image");
+					row.append(...(side === "left" ? [added, existing] : [existing, added]));
+					placeholder.replaceWith(row);
+					node.dataset.tcbBeside = "1";
+					// The toolbar skips work when the pointer returns to the block it
+					// was already describing, so forget that block: the next hover has
+					// to see that it can no longer be changed.
+					this.hideToolbar();
+
+					const op = { op: "beside", target: ordinal, side, block: payload, expect: this.expectFor(ordinal) };
+					this.layoutOps.push(op);
+					this.pushUndo({
+						label: "addition beside",
+						undo: () => {
+							row.replaceWith(node);
+							delete node.dataset.tcbBeside;
+							this.layoutOps.splice(this.layoutOps.indexOf(op), 1);
+							this.hideToolbar();
+						},
+					});
+					this.refreshLayoutStatus();
+					return;
+				}
 
 				const op = { op: "insert", to: { [where]: ordinal }, block: payload };
 				this.layoutOps.push(op);

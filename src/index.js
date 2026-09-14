@@ -952,7 +952,7 @@ function editorLauncherHtml({ editing, previewing }) {
 		// revalidated away, only stepped around with a different URL. The
 		// no-cache rule in _headers is what stops it happening again.
 		`<link rel="stylesheet" href="/assets/css/editor.css?v=19">` +
-		`<script src="/assets/js/editor.js?v=7" type="module"></script>` +
+		`<script src="/assets/js/editor.js?v=8" type="module"></script>` +
 		`</div>`
 	);
 }

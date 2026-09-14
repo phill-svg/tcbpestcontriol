@@ -41,6 +41,14 @@ export const BLOCK_CLASSES = new Set(["grid-card"]);
 export const ROW_CLASS = "grid-cards";
 export const COLUMN_CLASSES = ["cols-2", "cols-3", "cols-4"];
 
+// Two things side by side. Not a new layout: .split-media-grid is the two-column
+// row the site already uses on 105 pages -- side by side from 768px up, one above
+// the other on a phone -- so something put beside a block looks like the rest of
+// the site on every screen size, with no new CSS behind it.
+export const SPLIT_ROW_CLASS = "split-media-grid";
+const SPLIT_TEXT_COLUMN = "split-media-text";
+const SPLIT_IMAGE_COLUMN = "split-media-image";
+
 function classesOf(attrText) {
 	const attr = readAttributes(attrText).find((candidate) => candidate.name === "class");
 	return attr ? String(attr.value).split(/\s+/).filter(Boolean) : [];
@@ -311,8 +319,60 @@ export function applyStructure(html, ops = [], { root = "main" } = {}) {
 	const cuts = [];
 	const pastes = [];
 
+	// A block that gets something put beside it is wrapped into a new row, and
+	// then nothing else in the same batch may name it. The reason is where things
+	// land. In the editor, "add below" on a wrapped paragraph appears inside its
+	// column; in the file, "after the paragraph" is resolved against the page as
+	// loaded, where the wrapper does not exist yet, so it would land after the
+	// whole row instead. Two different answers to the same request, and the
+	// person only ever sees the first one -- so it is refused rather than saved.
+	const besideTargets = new Set(ops.filter((op) => op && op.op === "beside").map((op) => op.target));
+	for (const op of ops) {
+		if (!op || op.op === "beside") continue;
+		const named = [op.block, op.to && op.to.before, op.to && op.to.after].filter((value) => typeof value === "number");
+		const clash = named.find((ordinal) => besideTargets.has(ordinal));
+		if (clash !== undefined) {
+			return { error: `Block ${clash} has something being put beside it, so it cannot also be moved or added next to in the same save. Save first, then carry on.` };
+		}
+	}
+
 	for (const op of ops) {
 		const kind = String(op && op.op);
+
+		if (kind === "beside") {
+			const target = blocks[op.target];
+			if (!target) return { error: `There is no block ${op.target} on this page.` };
+			const mismatch = checkExpect(source, target, op.expect);
+			if (mismatch) return mismatch;
+			if (target.parentTag === "ul" || target.parentTag === "ol") {
+				return { error: "A list item cannot have something put beside it." };
+			}
+			if (target.parentClasses.includes(ROW_CLASS)) {
+				return { error: "That box is already in a row. Add another box to the row instead." };
+			}
+			if (target.parentClasses.includes(SPLIT_TEXT_COLUMN) || target.parentClasses.includes(SPLIT_IMAGE_COLUMN)) {
+				return { error: "That already has something beside it." };
+			}
+			const type = op.block && op.block.type;
+			if (type !== "paragraph" && type !== "heading" && type !== "image") {
+				return { error: "Only a paragraph, a heading or an image can go beside something." };
+			}
+			const rendered = renderBlock(op.block);
+			if (rendered.error) return rendered;
+
+			// An image column is the site's framed picture slot; anything else is a
+			// plain text column. The existing block's bytes go in untouched.
+			const column = (html, isImage) => `<div class="${isImage ? SPLIT_IMAGE_COLUMN : SPLIT_TEXT_COLUMN}">${html}</div>`;
+			const existing = column(source.slice(target.start, target.end), target.tag === "img");
+			const added = column(rendered.html, type === "image");
+			const pair = op.side === "left" ? added + existing : existing + added;
+
+			// Only the block's own bytes are cut, not its indentation, so the new
+			// row sits on the line the block sat on.
+			cuts.push({ from: target.start, to: target.end, block: target });
+			pastes.push({ at: target.start, text: `<div class="${SPLIT_ROW_CLASS}">${pair}</div>` });
+			continue;
+		}
 
 		if (kind === "insert") {
 			const at = resolveAnchor(op.to, blocks);

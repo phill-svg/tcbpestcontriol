@@ -703,6 +703,7 @@ export async function handleContentApi(request, url, env, session) {
 		// draft is only at risk if the menu change renumbers its words, and the
 		// override check below already finds exactly those, drafts included.
 		const branch = env.GITHUB_BRANCH || "main";
+		const startedAt = Date.now();
 		let tree;
 		try {
 			tree = await readTree(env, branch);
@@ -710,34 +711,40 @@ export async function handleContentApi(request, url, env, session) {
 			return json({ error: `Could not read the site's files from GitHub: ${error.message}` }, 502);
 		}
 
-		const pages = [];
-		const stale = [];
-		for (const [filePath, sha] of tree.entries) {
-			if (!filePath.endsWith(".html")) continue;
+		// Every page is read at once, not one after another. The first version
+		// awaited each read in turn, and on the live site that took 36 seconds of
+		// waiting for 61ms of actual work -- long enough that the browser gave up
+		// and the Save button just sat there looking dead.
+		const timings = { tree: Date.now() - startedAt };
+		const readStarted = Date.now();
+		const reads = await Promise.all(
+			[...tree.entries]
+				.filter(([filePath]) => filePath.endsWith(".html"))
+				.map(async ([filePath, sha]) => {
+					const asset = await env.ASSETS.fetch(new Request(new URL(`/${filePath}`, url)));
+					if (asset.ok) {
+						const bytes = new Uint8Array(await asset.arrayBuffer());
+						if ((await gitBlobSha(bytes)) !== sha) return { filePath, stale: true };
+						return { filePath, text: new TextDecoder().decode(bytes) };
+					}
+					// Not deployed at all -- the templates are kept out of the public
+					// assets on purpose (.assetsignore). Read those from the branch.
+					if (asset.body) await asset.body.cancel().catch(() => {});
+					try {
+						const file = await readFile(env, filePath, branch);
+						return { filePath, text: decodeBase64Utf8(file.content) };
+					} catch (error) {
+						return { filePath, error: error.message };
+					}
+				})
+		);
+		timings.read = Date.now() - readStarted;
+		timings.files = reads.length;
 
-			let bytes = null;
-			const asset = await env.ASSETS.fetch(new Request(new URL(`/${filePath}`, url)));
-			if (asset.ok) {
-				bytes = new Uint8Array(await asset.arrayBuffer());
-				if ((await gitBlobSha(bytes)) !== sha) {
-					stale.push(filePath);
-					continue;
-				}
-			} else {
-				// Not deployed at all -- the templates are kept out of the public
-				// assets on purpose (.assetsignore). Read those from the branch.
-				if (asset.body) await asset.body.cancel().catch(() => {});
-				try {
-					const file = await readFile(env, filePath, branch);
-					bytes = new TextEncoder().encode(decodeBase64Utf8(file.content));
-				} catch (error) {
-					return json({ error: `Could not read ${filePath}: ${error.message}` }, 502);
-				}
-			}
-
-			const text = new TextDecoder().decode(bytes);
-			if (text.includes('class="main-nav"')) pages.push({ filePath, text });
-		}
+		const failed = reads.find((read) => read.error);
+		if (failed) return json({ error: `Could not read ${failed.filePath}: ${failed.error}` }, 502);
+		const stale = reads.filter((read) => read.stale).map((read) => read.filePath);
+		const pages = reads.filter((read) => read.text && read.text.includes('class="main-nav"')).map(({ filePath, text }) => ({ filePath, text }));
 
 		if (stale.length) {
 			return json(
@@ -793,6 +800,11 @@ export async function handleContentApi(request, url, env, session) {
 			);
 		}
 
+		// One line per save saying where the time went, so a slow save shows up
+		// in the Worker logs as a phase rather than as a bare wall-clock number.
+		timings.total = Date.now() - startedAt;
+		console.log(JSON.stringify({ menuSave: { ...timings, pages: pages.length, writes: writes.length, dryRun } }));
+
 		if (!writes.length) return json({ ok: true, changed: false, message: "The menu is already like that." });
 		if (dryRun) return json({ ok: true, dryRun: true, files: writes.length, pages: pages.length });
 
@@ -809,6 +821,7 @@ export async function handleContentApi(request, url, env, session) {
 			return json({ error: `Could not save the menu: ${error.message}` }, error.status === 409 ? 409 : 502);
 		}
 
+		console.log(JSON.stringify({ menuSaveCommitted: { total: Date.now() - startedAt, files: writes.length } }));
 		return json({ ok: true, changed: true, files: writes.length - 1, commit });
 	}
 

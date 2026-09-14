@@ -2164,6 +2164,8 @@ class Editor {
 		);
 
 		const list = el("div", { class: "tcb-menu-list" });
+		const menuStatus = el("p", { class: "tcb-hint" });
+		menuStatus.hidden = true;
 
 		const move = (array, index, by) => {
 			const to = index + by;
@@ -2267,6 +2269,7 @@ class Editor {
 					text: "The menu across the top of every page. Saving changes all of them at once, and it goes live when the site finishes rebuilding, a minute or two later.",
 				}),
 				datalist,
+				menuStatus,
 				list,
 				el("button", {
 					type: "button",
@@ -2285,7 +2288,16 @@ class Editor {
 				// count for the confirmation comes from here, and so does every
 				// reason it would be refused -- before anyone is asked to confirm a
 				// save that was never going to go through.
-				const check = await api("menu", { method: "POST", body: JSON.stringify({ menu: payload(), dryRun: true }) });
+				// Said out loud, because otherwise the only sign anything is happening
+				// is the Save button going pale -- which reads as broken, not busy.
+				menuStatus.hidden = false;
+				menuStatus.textContent = "Checking every page on the site…";
+				let check;
+				try {
+					check = await api("menu", { method: "POST", body: JSON.stringify({ menu: payload(), dryRun: true }) });
+				} finally {
+					menuStatus.hidden = true;
+				}
 				if (check.changed === false) {
 					this.toast("The menu is already like that.");
 					return;

@@ -931,3 +931,43 @@ body.tcb-editing-mode {
 	border-color: #4c6ef5;
 	color: #fff;
 }
+
+/* The Menu panel: one row per menu item, its dropdown pages indented under
+ * it. Rows wrap on a narrow screen rather than squeezing the address field to
+ * nothing. */
+.tcb-menu-list {
+	display: grid;
+	gap: 0.75rem;
+	margin: 0.75rem 0;
+}
+
+.tcb-menu-item {
+	display: grid;
+	gap: 0.4rem;
+	padding: 0.6rem;
+	border: 1px solid #e6e6ea;
+	border-radius: 6px;
+}
+
+.tcb-menu-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.3rem;
+}
+
+.tcb-menu-row .tcb-input {
+	flex: 1 1 9rem;
+	min-width: 0;
+}
+
+.tcb-menu-children {
+	display: grid;
+	gap: 0.3rem;
+	padding-left: 1.25rem;
+	border-left: 2px solid #e6e6ea;
+}
+
+.tcb-menu-item > .tcb-btn {
+	justify-self: start;
+}

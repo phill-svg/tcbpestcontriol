@@ -557,6 +557,7 @@ class Editor {
 				el("button", { type: "button", class: "tcb-btn", text: "SEO check", onclick: () => this.openSeoCheck() }),
 				el("button", { type: "button", class: "tcb-btn", text: "New post", onclick: () => this.openNewPost() }),
 				el("button", { type: "button", class: "tcb-btn", text: "Changes", onclick: () => this.openChanges() }),
+				el("button", { type: "button", class: "tcb-btn", text: "Menu", onclick: () => this.openMenuEditor() }),
 				this.layoutButton,
 				this.saveLayoutButton,
 				this.previewButton,
@@ -1916,6 +1917,217 @@ class Editor {
 				}
 			);
 		});
+	}
+
+	// -- the header menu -------------------------------------------------------
+
+	// The menu across the top of every page, and the dropdowns under it.
+	//
+	// Unlike everything else in this editor it is not about the page you are on:
+	// every page carries its own copy of the menu, so saving writes all of them
+	// at once, as one commit, and it appears after the site rebuilds. The server
+	// (the `menu` route in src/content-edits.js) does the checking; this is only
+	// the list.
+	//
+	// Reordering is up and down buttons rather than dragging. A dialog holding a
+	// dozen short rows does not need drag and drop, and buttons work the same
+	// from a keyboard and a phone.
+	async openMenuEditor() {
+		let menu;
+		let pages = [];
+		try {
+			const [menuResponse, pagesResponse] = await Promise.all([
+				fetch("/assets/menu.json", { cache: "no-store" }),
+				fetch("/assets/search-index.json", { cache: "no-store" }),
+			]);
+			if (!menuResponse.ok) throw new Error("The current menu could not be loaded.");
+			menu = await menuResponse.json();
+			// The page list is a convenience. Without it every address is typed,
+			// which still works, so its failure is not a reason to refuse.
+			if (pagesResponse.ok) pages = await pagesResponse.json();
+		} catch (error) {
+			this.toast(error.message, "error");
+			return;
+		}
+
+		// Worked on as plain data and redrawn after every change: the list is a
+		// dozen rows, so rebuilding it is cheaper than keeping DOM and data in
+		// step by hand.
+		const items = (menu.items || []).map((item) => ({
+			label: item.label,
+			href: item.href,
+			children: (item.children || []).map((child) => ({ label: child.label, href: child.href })),
+		}));
+
+		// A page's title is written for Google -- "Ant Control Canberra | TCB
+		// Pest Control" -- so the part before the bar is the useful label.
+		const titleFor = new Map(
+			(Array.isArray(pages) ? pages : []).map((page) => [page.url, String(page.title || "").split("|")[0].trim()])
+		);
+
+		// Native autocomplete for the address field: pick a page from the list,
+		// or type anything else -- a phone number, an outside site.
+		const datalistId = "tcb-menu-pages";
+		const datalist = el(
+			"datalist",
+			{ id: datalistId },
+			[...titleFor].map(([url, title]) => el("option", { value: url, label: title }))
+		);
+
+		const list = el("div", { class: "tcb-menu-list" });
+
+		const move = (array, index, by) => {
+			const to = index + by;
+			if (to < 0 || to >= array.length) return;
+			[array[index], array[to]] = [array[to], array[index]];
+			draw();
+		};
+
+		const linkFields = (entry) => {
+			const label = el("input", { type: "text", class: "tcb-input", value: entry.label, placeholder: "Label", "aria-label": "Label" });
+			const href = el("input", {
+				type: "text",
+				class: "tcb-input",
+				value: entry.href,
+				placeholder: "/page-address",
+				list: datalistId,
+				"aria-label": "Address",
+			});
+			label.addEventListener("input", () => {
+				entry.label = label.value;
+			});
+			href.addEventListener("input", () => {
+				entry.href = href.value;
+				// Picking a page with no label yet fills the label in from its
+				// title. An existing label is never overwritten.
+				if (!label.value.trim() && titleFor.has(href.value)) {
+					label.value = titleFor.get(href.value);
+					entry.label = label.value;
+				}
+			});
+			return [label, href];
+		};
+
+		const smallButton = (text, onclick, extra = {}) =>
+			el("button", { type: "button", class: "tcb-btn tcb-btn-small tcb-btn-quiet", text, onclick, ...extra });
+
+		function draw() {
+			list.replaceChildren();
+			items.forEach((item, index) => {
+				const children = el(
+					"div",
+					{ class: "tcb-menu-children" },
+					item.children.map((child, childIndex) =>
+						el("div", { class: "tcb-menu-row tcb-menu-child" }, [
+							...linkFields(child),
+							smallButton("↑", () => move(item.children, childIndex, -1), { "aria-label": "Move up" }),
+							smallButton("↓", () => move(item.children, childIndex, 1), { "aria-label": "Move down" }),
+							smallButton("Remove", () => {
+								item.children.splice(childIndex, 1);
+								draw();
+							}),
+						])
+					)
+				);
+
+				list.appendChild(
+					el("div", { class: "tcb-menu-item" }, [
+						el("div", { class: "tcb-menu-row" }, [
+							...linkFields(item),
+							smallButton("↑", () => move(items, index, -1), { "aria-label": "Move up" }),
+							smallButton("↓", () => move(items, index, 1), { "aria-label": "Move down" }),
+							smallButton("Remove", () => {
+								if (item.children.length && !window.confirm(`Remove "${item.label}" and the ${item.children.length} pages under it?`)) return;
+								items.splice(index, 1);
+								draw();
+							}),
+						]),
+						children,
+						el("button", {
+							type: "button",
+							class: "tcb-btn tcb-btn-small",
+							text: item.children.length ? "Add another page under this" : "Add a dropdown under this",
+							onclick: () => {
+								item.children.push({ label: "", href: "" });
+								draw();
+								// Straight into the new row's address, where the page list is.
+								const rows = list.querySelectorAll(".tcb-menu-item")[index].querySelectorAll(".tcb-menu-child");
+								const last = rows[rows.length - 1];
+								if (last) last.querySelectorAll("input")[1].focus();
+							},
+						}),
+					])
+				);
+			});
+		}
+		draw();
+
+		const payload = () => ({
+			items: items.map((item) => ({
+				label: item.label,
+				href: item.href,
+				children: item.children.map((child) => ({ label: child.label, href: child.href })),
+			})),
+		});
+
+		this.openDialog(
+			"Menu",
+			[
+				el("p", {
+					class: "tcb-hint",
+					text: "The menu across the top of every page. Saving changes all of them at once, and it goes live when the site finishes rebuilding, a minute or two later.",
+				}),
+				datalist,
+				list,
+				el("button", {
+					type: "button",
+					class: "tcb-btn",
+					text: "Add a menu item",
+					onclick: () => {
+						items.push({ label: "", href: "", children: [] });
+						draw();
+						const rows = list.querySelectorAll(".tcb-menu-item");
+						rows[rows.length - 1].querySelector("input").focus();
+					},
+				}),
+			],
+			async () => {
+				// Checked on the server first, without writing anything: the page
+				// count for the confirmation comes from here, and so does every
+				// reason it would be refused -- before anyone is asked to confirm a
+				// save that was never going to go through.
+				const check = await api("menu", { method: "POST", body: JSON.stringify({ menu: payload(), dryRun: true }) });
+				if (check.changed === false) {
+					this.toast("The menu is already like that.");
+					return;
+				}
+
+				const goAhead = await this.confirmDialog(
+					"Change the menu on every page?",
+					`This updates the menu on ${check.files} ${check.files === 1 ? "page" : "pages"} as one change to the site. It goes live in a minute or two. To undo it later, the change can be reverted on GitHub.`,
+					"Update the menu"
+				);
+				// Kept open, with what was typed still in it.
+				if (!goAhead) throw new Error("Not saved.");
+
+				const result = await api("menu", { method: "POST", body: JSON.stringify({ menu: payload() }) });
+				this.openDialog(
+					"Menu saved",
+					[
+						el("p", {
+							class: "tcb-hint",
+							text: `The menu has been written into ${result.files} ${result.files === 1 ? "page" : "pages"}. It appears once the site finishes rebuilding, usually a minute or two.`,
+						}),
+						...(result.commit && result.commit.url
+							? [el("p", {}, [el("a", { href: result.commit.url, target: "_blank", rel: "noopener", text: "See the change" })])]
+							: []),
+					],
+					null,
+					{ confirmLabel: null, cancelLabel: "Close" }
+				);
+			},
+			{ confirmLabel: "Save menu", successMessage: null }
+		);
 	}
 
 	// -- writing a new blog post ----------------------------------------------

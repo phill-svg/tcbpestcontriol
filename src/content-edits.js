@@ -694,13 +694,14 @@ export async function handleContentApi(request, url, env, session) {
 		const dryRun = body.dryRun === true;
 
 		await ensureTable(env);
-		// Same rule as a layout save, for the same reason: a pending draft is
-		// waiting on a page this is about to rewrite.
-		const pendingDraft = await env.DB.prepare("SELECT path FROM content_edits WHERE draft IS NOT NULL LIMIT 1").first();
-		if (pendingDraft) {
-			return json({ error: `There are unpublished wording changes on ${pendingDraft.path}. Publish or revert them first.` }, 409);
-		}
 
+		// Unlike a layout save, a pending draft does not stop this. A layout save
+		// rewrites one page and refuses if that page has drafts. This rewrites
+		// every page, and the first version refused if any page anywhere had
+		// one -- which on the live site meant eight forgotten drafts, some a
+		// month old, blocked the menu entirely until each was hunted down. A
+		// draft is only at risk if the menu change renumbers its words, and the
+		// override check below already finds exactly those, drafts included.
 		const branch = env.GITHUB_BRANCH || "main";
 		let tree;
 		try {
@@ -750,10 +751,11 @@ export async function handleContentApi(request, url, env, session) {
 
 		// Overrides a menu change could renumber. Text and style overrides are
 		// numbered by how many copies of their text come before them; link
-		// overrides the same way by their address. Only unsynced ones still
-		// apply as an overlay -- a synced one is text in the file already.
+		// overrides the same way by their address. That covers drafts as well
+		// as published ones not yet synced -- both still apply as an overlay,
+		// one in preview and one live. A synced one is text in the file already.
 		const pending = await env.DB.prepare(
-			"SELECT path, kind, original FROM content_edits WHERE published IS NOT NULL AND synced_at IS NULL AND kind IN ('text', 'style', 'attr')"
+			"SELECT path, kind, original FROM content_edits WHERE (draft IS NOT NULL OR (published IS NOT NULL AND synced_at IS NULL)) AND kind IN ('text', 'style', 'attr')"
 		).all();
 		const overridesByFile = new Map();
 		for (const row of pending.results || []) {

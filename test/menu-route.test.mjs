@@ -238,11 +238,32 @@ test("saving the menu that is already there makes no commit", async () => {
 	assert.equal(tree, null);
 });
 
-test("unpublished wording changes anywhere block a menu change", async () => {
-	const { status, body, calls } = await saveMenu({ menu: WITH_DROPDOWN }, { db: stubDb({ draftOn: "/pricing" }) });
+test("forgotten drafts on other words do not block a menu change", async () => {
+	// The first version refused while any page anywhere had an unpublished
+	// draft. On the live site that was eight drafts, some a month old, and the
+	// menu could not be saved at all until every one was found and dealt with.
+	// A draft on words the menu does not touch is not at risk, so it no longer
+	// blocks anything. These are the kinds of drafts that were actually there.
+	const db = stubDb({
+		overrides: [
+			{ path: "/contact", kind: "text", original: "Message" },
+			{ path: "/about", kind: "text", original: "Canberra ACT" },
+			{ path: "/ant-control", kind: "text", original: "Carpenter ant control" },
+		],
+	});
+	const { status, body } = await saveMenu({ menu: WITH_DROPDOWN }, { db });
+	assert.equal(status, 200, JSON.stringify(body));
+	assert.equal(body.changed, true);
+});
+
+test("a draft on words the menu change renumbers still blocks it", async () => {
+	// A draft applies in preview the same way a published override applies
+	// live, so it can land on the wrong copy of repeated words just the same.
+	const db = stubDb({ overrides: [{ path: "/about", kind: "text", original: "Ant Control" }] });
+	const { status, body, tree } = await saveMenu({ menu: WITH_DROPDOWN }, { db });
 	assert.equal(status, 409);
-	assert.match(body.error, /\/pricing/);
-	assert.equal(calls.length, 0, "refused before GitHub is touched");
+	assert.deepEqual(body.conflicts, [{ path: "/about", text: "Ant Control" }]);
+	assert.equal(tree, null);
 });
 
 test("a menu that is not valid is refused before anything is read", async () => {

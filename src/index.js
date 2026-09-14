@@ -49,7 +49,12 @@ import {
 // for the same pages, which is the duplicate-site problem search engines
 // resolve by picking a winner themselves. Named once here so the redirect
 // below and the guard at the bottom can't drift apart.
-export const CANONICAL_HOST = "www.tcbpestcontrolcanberra.com.au";
+// Not exported. The Workers runtime treats every named export of this module
+// as an entrypoint and newer versions refuse to start a Worker that exports
+// anything else -- a plain string here stopped `wrangler dev` with "Incorrect
+// type for map entry 'CANONICAL_HOST'". test/canonical-host.test.mjs keeps its
+// own copy and reads this file as text, so nothing needs it from outside.
+const CANONICAL_HOST = "www.tcbpestcontrolcanberra.com.au";
 
 const site = {
 	async fetch(request, env, ctx) {

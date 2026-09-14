@@ -474,3 +474,37 @@ test("the editor and the scanner agree on what a block is", () => {
 	assert.deepEqual(editorTags.slice().sort(), [...BLOCK_TAGS].sort());
 	assert.deepEqual(editorClasses.slice().sort(), [...BLOCK_CLASSES].sort());
 });
+
+// The heading-left, paragraph-right row from /bird-control, and a picture row.
+const SPLITS =
+	'<main><div class="section-head split"><div class="head-title"><div class="section-eyebrow mono">[01]</div><h2 class="section-title display">Birds.</h2></div><div class="head-text"><p>Four species.</p></div></div>' +
+	'<div class="split-media-grid"><div class="split-media-text"><p>Same team.</p></div><div class="split-media-image"><img src="/a.webp" alt="x"/></div></div><p>After.</p></main>';
+
+test("lining up a side-by-side row swaps one class on the row", () => {
+	// Block 1 is the paragraph in .head-text; its row is two levels up.
+	const middle = applyStructure(SPLITS, [{ op: "align", block: 1, align: "middle" }]);
+	assert.equal(middle.error, undefined);
+	assert.equal(middle.html, SPLITS.replace('"section-head split"', '"section-head split align-middle"'));
+
+	// Changing it again replaces the class rather than adding a second one.
+	const bottom = applyStructure(middle.html, [{ op: "align", block: 0, align: "bottom" }]);
+	assert.equal(bottom.html, SPLITS.replace('"section-head split"', '"section-head split align-bottom"'));
+
+	// The picture row works from either half.
+	const top = applyStructure(SPLITS, [{ op: "align", block: 3, align: "top" }]);
+	assert.ok(top.html.includes('<div class="split-media-grid align-top">'));
+});
+
+test("a line-up only means something inside a side-by-side row", () => {
+	assert.match(applyStructure(SPLITS, [{ op: "align", block: 4, align: "top" }]).error, /not in a side-by-side row/);
+	assert.match(applyStructure(SPLITS, [{ op: "align", block: 1, align: "centre" }]).error, /top, middle, bottom/);
+	// Deleting the half that collapses the row, and lining the row up, is refused.
+	assert.ok(applyStructure(SPLITS, [{ op: "delete", block: 3 }, { op: "align", block: 2, align: "top" }]).error);
+});
+
+test("every line-up class has a style behind it", () => {
+	const css = readFileSync(path.join(repoRoot, "assets/css/style.min.css"), "utf8");
+	for (const name of ["align-top", "align-middle", "align-bottom"]) {
+		assert.ok(css.includes(`.split-media-grid.${name}`) && css.includes(`.section-head.split.${name}`), name);
+	}
+});

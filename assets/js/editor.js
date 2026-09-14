@@ -323,6 +323,11 @@ const BLOCK_SELECTOR = "p,h2,h3,h4,h5,h6,li,img,.grid-card";
 const ROW_SELECTOR = ".grid-cards";
 const COLUMN_CLASSES = ["cols-2", "cols-3", "cols-4"];
 
+// Side-by-side rows, and how their two halves line up when one is taller.
+// Must match ALIGN_CLASSES and isAlignRow in src/page-structure.js.
+const ALIGN_ROW_SELECTOR = ".split-media-grid, .section-head.split";
+const ALIGN_CLASSES = { top: "align-top", middle: "align-middle", bottom: "align-bottom" };
+
 // Navigation inside <main> -- the breadcrumb every page opens with. Its items
 // are links to other pages, not words on this one. Must match BLOCK_SKIP_TAGS
 // in src/page-structure.js, or the two sides number the blocks differently.
@@ -1401,6 +1406,21 @@ class Editor {
 		]);
 		this.toolbarWidth.hidden = true;
 
+		// Only shown inside a side-by-side row.
+		this.toolbarAlign = el("span", { class: "tcb-toolbar-width" }, [
+			el("span", { class: "tcb-block-tag", text: "line up" }),
+			...Object.keys(ALIGN_CLASSES).map((name) =>
+				el("button", {
+					type: "button",
+					class: "tcb-btn tcb-btn-small tcb-align-option",
+					"data-align": name,
+					text: name[0].toUpperCase() + name.slice(1),
+					onclick: () => this.setRowAlign(name),
+				})
+			),
+		]);
+		this.toolbarAlign.hidden = true;
+
 		// Side by side. Hidden where it cannot apply -- see trackLayoutHover.
 		this.toolbarBeside = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add beside", onclick: () => this.addBlockAt("beside") });
 		this.toolbarAbove = el("button", { type: "button", class: "tcb-btn tcb-btn-small", text: "Add above", onclick: () => this.addBlockAt("before") });
@@ -1434,6 +1454,7 @@ class Editor {
 			this.toolbarBeside,
 			this.toolbarRemove,
 			this.toolbarWidth,
+			this.toolbarAlign,
 			this.toolbarChange,
 			this.toolbarDiscard,
 		]);
@@ -1464,6 +1485,7 @@ class Editor {
 			this.toolbarTag.textContent = "new";
 			for (const button of [this.toolbarAbove, this.toolbarBelow, this.toolbarBeside, this.toolbarRemove]) button.hidden = true;
 			this.toolbarWidth.hidden = true;
+			this.toolbarAlign.hidden = true;
 			this.toolbarChange.hidden = false;
 			this.toolbarDiscard.hidden = false;
 			this.toolbar.hidden = false;
@@ -1530,6 +1552,12 @@ class Editor {
 				button.classList.toggle("tcb-width-current", button.dataset.cols === current);
 			}
 		}
+
+		// A row made by "Add beside" is not in the file yet, so it has nothing
+		// to line up until the layout is saved.
+		const alignRow = wrapped ? null : target.closest(ALIGN_ROW_SELECTOR);
+		this.toolbarAlign.hidden = !alignRow;
+		if (alignRow) this.markAlign(alignRow);
 		toolbar.hidden = false;
 		this.positionToolbar();
 	}
@@ -1604,6 +1632,51 @@ class Editor {
 			},
 		});
 		this.refreshLayoutStatus();
+	}
+
+	// Which way the halves of the row this block is in line up. Like the width,
+	// one change to one element, previewed on the live page straight away.
+	setRowAlign(name) {
+		const ordinal = this.hoveredBlock;
+		const node = this.blocks[ordinal];
+		const row = node && node.closest(ALIGN_ROW_SELECTOR);
+		if (!row) return;
+
+		const values = Object.values(ALIGN_CLASSES);
+		const before = values.find((value) => row.classList.contains(value)) || "";
+		if (before === ALIGN_CLASSES[name]) return;
+		const apply = (value) => {
+			row.classList.remove(...values);
+			if (value) row.classList.add(value);
+			this.markAlign(row);
+		};
+		apply(ALIGN_CLASSES[name]);
+
+		const existing = this.layoutOps.find((op) => op.op === "align" && this.blocks[op.block] && this.blocks[op.block].closest(ALIGN_ROW_SELECTOR) === row);
+		const op = existing || { op: "align", block: ordinal, expect: this.expectFor(ordinal) };
+		const previous = op.align;
+		op.align = name;
+		if (!existing) this.layoutOps.push(op);
+
+		this.pushUndo({
+			label: "line-up change",
+			undo: () => {
+				apply(before);
+				// Back to the earlier choice this session, or to no change at all.
+				if (previous) op.align = previous;
+				else if (this.layoutOps.includes(op)) this.layoutOps.splice(this.layoutOps.indexOf(op), 1);
+			},
+		});
+		this.refreshLayoutStatus();
+	}
+
+	markAlign(row) {
+		if (!this.toolbarAlign) return;
+		// With no class set, the row lines up the way its stylesheet says.
+		const current = Object.keys(ALIGN_CLASSES).find((name) => row.classList.contains(ALIGN_CLASSES[name])) || "";
+		for (const button of this.toolbarAlign.querySelectorAll(".tcb-align-option")) {
+			button.classList.toggle("tcb-width-current", button.dataset.align === current);
+		}
 	}
 
 	addBlockAt(where) {

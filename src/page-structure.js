@@ -49,6 +49,13 @@ export const SPLIT_ROW_CLASS = "split-media-grid";
 const SPLIT_TEXT_COLUMN = "split-media-text";
 const SPLIT_IMAGE_COLUMN = "split-media-image";
 
+// How the two halves of a side-by-side row line up against each other, when
+// one is taller than the other. The class goes on the row, like the widths on
+// a row of boxes. Phones stack the halves, so this only shows from 768px up.
+// .section-head.split is the site's heading-left, paragraph-right row.
+export const ALIGN_CLASSES = { top: "align-top", middle: "align-middle", bottom: "align-bottom" };
+const isAlignRow = (classes) => classes.includes(SPLIT_ROW_CLASS) || (classes.includes("section-head") && classes.includes("split"));
+
 function classesOf(attrText) {
 	const attr = readAttributes(attrText).find((candidate) => candidate.name === "class");
 	return attr ? String(attr.value).split(/\s+/).filter(Boolean) : [];
@@ -324,6 +331,10 @@ export function applyStructure(html, ops = [], { root = "main" } = {}) {
 	// what makes the batch order-independent.
 	const cuts = [];
 	const pastes = [];
+	// Rows whose opening tag has already been rewritten this batch, by where the
+	// tag starts. Not "a paste already lands there": an insert after the block
+	// just before a row lands on the same offset, and would hide the change.
+	const rewrittenRows = new Set();
 
 	// A block that gets something put beside it is wrapped into a new row, and
 	// then nothing else in the same batch may name it. The reason is where things
@@ -420,9 +431,34 @@ export function applyStructure(html, ops = [], { root = "main" } = {}) {
 			if (!rewritten) return { error: "That row's markup could not be read." };
 			// A row is one element however many cards point at it, so two cards
 			// in the same row asking for the same width is one change, not two.
-			if (pastes.some((paste) => paste.at === block.parentTagStart)) continue;
+			if (rewrittenRows.has(block.parentTagStart)) continue;
+			rewrittenRows.add(block.parentTagStart);
 			cuts.push({ from: block.parentTagStart, to: block.parentTagEnd, block });
 			pastes.push({ at: block.parentTagStart, text: rewritten });
+			continue;
+		}
+
+		if (kind === "align") {
+			const block = blocks[op.block];
+			if (!block) return { error: `There is no block ${op.block} on this page.` };
+			const mismatch = checkExpect(source, block, op.expect);
+			if (mismatch) return mismatch;
+			const wanted = ALIGN_CLASSES[op.align];
+			if (!wanted) return { error: `A row lines up ${Object.keys(ALIGN_CLASSES).join(", ")} -- not ${JSON.stringify(op.align)}.` };
+			// The nearest side-by-side row around the block, the same one
+			// closest() finds in the editor.
+			let row = block.parentEntry;
+			while (row && !isAlignRow(row.classes)) row = row.parentEntry;
+			if (!row) return { error: "That block is not in a side-by-side row, so there is nothing to line up." };
+			const alignValues = Object.values(ALIGN_CLASSES);
+			const next = [...row.classes.filter((value) => !alignValues.includes(value)), wanted];
+			if (next.join(" ") === row.classes.join(" ")) continue;
+			const rewritten = replaceClassAttribute(source.slice(row.tagStart, row.tagEnd), next.join(" "));
+			if (!rewritten) return { error: "That row's markup could not be read." };
+			if (rewrittenRows.has(row.tagStart)) continue;
+			rewrittenRows.add(row.tagStart);
+			cuts.push({ from: row.tagStart, to: row.tagEnd, block });
+			pastes.push({ at: row.tagStart, text: rewritten });
 			continue;
 		}
 

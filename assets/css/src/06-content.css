@@ -244,6 +244,22 @@
   }
 }
 
+/* How the two halves of a side-by-side row line up when one is taller. Set
+   from the editor (ALIGN_CLASSES in src/page-structure.js). Stacked on a
+   phone, where there is nothing to line up. */
+.split-media-grid.align-top,
+.section-head.split.align-top {
+  align-items: start;
+}
+.split-media-grid.align-middle,
+.section-head.split.align-middle {
+  align-items: center;
+}
+.split-media-grid.align-bottom,
+.section-head.split.align-bottom {
+  align-items: end;
+}
+
 .split-media-image {
   position: relative;
   aspect-ratio: 4 / 3;

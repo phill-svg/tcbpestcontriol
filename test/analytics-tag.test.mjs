@@ -51,6 +51,13 @@ test("there are public pages to check", () => {
 	assert.ok(pages.length > 100, `expected the full site, found ${pages.length} pages`);
 });
 
+// Anchored to the protocol and a trailing "/" on both sides of the hostname,
+// rather than a bare substring check, so this can't be tricked by an
+// unrelated URL that merely contains "googletagmanager.com" somewhere in it
+// (e.g. as a query value) and can't miss a host that merely starts with it
+// (e.g. "evilgoogletagmanager.com").
+const GTM_HOST_PATTERN = /https:\/\/www\.googletagmanager\.com\//;
+
 test("no public page carries a hardcoded gtag.js or GTM snippet", () => {
 	// Both properties are configured as Zaraz tools now, and Zaraz injects its
 	// own loader at the edge. A hand-added gtag.js/GTM block back in the HTML
@@ -58,7 +65,7 @@ test("no public page carries a hardcoded gtag.js or GTM snippet", () => {
 	const found = [];
 	for (const page of pages) {
 		const html = readFileSync(path.join(repoRoot, page), "utf8");
-		if (html.includes("googletagmanager.com")) found.push(page);
+		if (GTM_HOST_PATTERN.test(html)) found.push(page);
 	}
 	assert.deepEqual(found, [], `pages with a leftover googletagmanager.com reference:\n${found.join("\n")}`);
 });
@@ -69,7 +76,7 @@ test("the page templates don't carry a hardcoded gtag.js or GTM snippet either",
 	// reintroduced here would propagate into every page generated from it.
 	for (const template of ["_service-template.html", "_blog-template.html"]) {
 		const html = readFileSync(path.join(repoRoot, template), "utf8");
-		assert.ok(!html.includes("googletagmanager.com"), `${template} has a leftover googletagmanager.com reference`);
+		assert.ok(!GTM_HOST_PATTERN.test(html), `${template} has a leftover googletagmanager.com reference`);
 	}
 });
 

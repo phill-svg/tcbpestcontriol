@@ -85,13 +85,14 @@ test("a rendered post leaves no placeholder behind", () => {
 
 test("authoring notes are stripped, but the analytics comments survive", () => {
 	// Every published post on the site has the guidance comments removed, and
-	// one of them contains a literal {{PLACEHOLDER}}. The Google Tag Manager
-	// markers are functional and must not be caught by the same broom.
+	// one of them contains a literal {{PLACEHOLDER}}. The Meta Pixel markers
+	// (GA4 now loads through Zaraz, not a template-carried tag) are functional
+	// and must not be caught by the same broom.
 	const html = renderPost(TEMPLATE, POST);
 	assert.doesNotMatch(html, /DO NOT EDIT/);
 	assert.doesNotMatch(html, /BLOG-GUIDE/);
-	assert.ok(html.includes("<!-- Google Tag Manager -->"), "tracking must still be there");
-	assert.ok(html.includes("<!-- End Google Tag Manager (noscript) -->"));
+	assert.ok(html.includes("Deferred: chat widget and Meta Pixel"), "the deferred loader comment must still be there");
+	assert.ok(html.includes("connect.facebook.net/en_US/fbevents.js"), "the Meta Pixel loader must still be there");
 
 	// And the page itself is untouched apart from the comments.
 	assert.ok(html.includes("book-panel"), "the shared book panel must remain");

@@ -1,20 +1,20 @@
-// Every public page must carry the GA4 tag in the served HTML.
+// GA4 used to be loaded straight from every page's <head> via a hardcoded
+// gtag.js block plus a GTM-KHML52L9 container -- both properties (G-P3FB9505V3,
+// G-00992RETSJ) are now configured as Zaraz tools instead, and Zaraz injects
+// its own loader at the edge, so there is nothing analytics-related left for
+// the static HTML to carry.
 //
-// This is guarding a footgun that already went off once. On 2026-08-28 the
-// eager gtag.js block was stripped from every page, leaving only the Tag
-// Manager container -- which reads like the tag is still there, because GTM is
-// how most sites load GA4. It is not: the published GTM-KHML52L9 container
-// carries no GA4 configuration tag, so removing the hardcoded gtag("config")
-// calls left nothing sending hits at all. Collection stopped dead that day and
-// nobody noticed for twelve days.
+// This file is guarding a footgun that already went off once (2026-08-28: an
+// edit stripped the eager gtag.js block and left GA4 collecting nothing for
+// twelve days before anyone noticed -- GA4 does not backfill). The specific
+// risk now is different: someone re-adding a hardcoded gtag.js/GTM snippet by
+// hand would double-report every hit against the Zaraz-managed properties, so
+// the checks below assert the *opposite* of what they used to -- that no page
+// or template carries that snippet again -- plus that the three lead-reporting
+// call sites still fire through zaraz.track rather than a dead window.gtag.
 //
-// Nothing about that failure is visible from the page: it renders fine, GTM
-// still loads, and the only symptom is a number going to zero in a dashboard
-// nobody opens daily. GA4 does not backfill, so every day of silence is data
-// that cannot be recovered. Hence a test rather than a note.
-//
-// If GA4 is ever moved into the GTM container properly, this test should be
-// changed to assert *that*, not deleted.
+// If analytics loading ever moves again, this test should be changed to
+// assert *that*, not deleted.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -23,10 +23,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-// The web stream feeding GA4 property 495764012 ("TCB Pest"), plus the second
-// property the site has always reported into alongside it.
-const MEASUREMENT_IDS = ["G-P3FB9505V3", "G-00992RETSJ"];
 
 const SKIP_DIRS = new Set(["node_modules", ".git", ".wrangler", ".claude", "test", "assets"]);
 
@@ -55,45 +51,25 @@ test("there are public pages to check", () => {
 	assert.ok(pages.length > 100, `expected the full site, found ${pages.length} pages`);
 });
 
-test("every public page loads gtag.js and configures both GA4 properties", () => {
-	const missing = [];
+test("no public page carries a hardcoded gtag.js or GTM snippet", () => {
+	// Both properties are configured as Zaraz tools now, and Zaraz injects its
+	// own loader at the edge. A hand-added gtag.js/GTM block back in the HTML
+	// would double-report every hit against the same Zaraz-managed properties.
+	const found = [];
 	for (const page of pages) {
 		const html = readFileSync(path.join(repoRoot, page), "utf8");
-		const gaps = [];
-		if (!html.includes(`googletagmanager.com/gtag/js?id=${MEASUREMENT_IDS[0]}`)) gaps.push("gtag.js loader");
-		for (const id of MEASUREMENT_IDS) {
-			if (!html.includes(`gtag("config", "${id}")`)) gaps.push(`config ${id}`);
-		}
-		if (gaps.length) missing.push(`${page}: ${gaps.join(", ")}`);
+		if (html.includes("googletagmanager.com")) found.push(page);
 	}
-	assert.deepEqual(missing, [], `pages missing GA4 tagging:\n${missing.join("\n")}`);
+	assert.deepEqual(found, [], `pages with a leftover googletagmanager.com reference:\n${found.join("\n")}`);
 });
 
-test("the gtag block is served eagerly, ahead of the deferred third-party scripts", () => {
-	// Tag Assistant and Google's own detection scan the served HTML, so a tag
-	// injected later from JS reads as an untagged page. The block also has to
-	// sit above the interaction-gated loader below it, or visitors who bounce
-	// before touching the page are never counted.
-	const html = readFileSync(path.join(repoRoot, "index.html"), "utf8");
-	const gtag = html.indexOf("gtag/js?id=");
-	const deferred = html.indexOf("loadPixel");
-
-	assert.ok(gtag !== -1, "the gtag.js loader should be in the served HTML");
-	assert.ok(deferred !== -1, "the deferred loader should still exist");
-	assert.ok(gtag < deferred, "gtag.js must load ahead of the interaction-gated scripts");
-	assert.doesNotMatch(html.slice(gtag - 200, gtag), /createElement\("script"\)/, "gtag must not be injected from JS");
-});
-
-test("the page templates carry the tag, so generated pages inherit it", () => {
+test("the page templates don't carry a hardcoded gtag.js or GTM snippet either", () => {
 	// _service-template.html and _blog-template.html are filled at request time
-	// by src/service-pages.js and src/blog-posts.js. A page generated from an
-	// untagged template is invisible to analytics no matter what the static
-	// pages say.
+	// by src/service-pages.js and src/blog-posts.js. A stray gtag.js/GTM block
+	// reintroduced here would propagate into every page generated from it.
 	for (const template of ["_service-template.html", "_blog-template.html"]) {
 		const html = readFileSync(path.join(repoRoot, template), "utf8");
-		for (const id of MEASUREMENT_IDS) {
-			assert.ok(html.includes(`gtag("config", "${id}")`), `${template} is missing config for ${id}`);
-		}
+		assert.ok(!html.includes("googletagmanager.com"), `${template} has a leftover googletagmanager.com reference`);
 	}
 });
 
@@ -108,14 +84,15 @@ test("the page templates carry the tag, so generated pages inherit it", () => {
 const scriptJs = readFileSync(path.join(repoRoot, "assets", "js", "script.js"), "utf8");
 const bookingJs = readFileSync(path.join(repoRoot, "assets", "js", "booking.js"), "utf8");
 
-test("every lead path reports the same GA4 event", () => {
-	// One event name means one key event to mark in GA4 Admin. Three names
-	// would mean three, and whichever was forgotten would silently not count.
-	assert.match(scriptJs, /gtag\("event", "generate_lead"/, "click-to-call should report a lead");
-	assert.match(bookingJs, /gtag\("event", "generate_lead"/, "the booking form should report a lead");
+test("every lead path reports the same event through zaraz.track", () => {
+	// One event name means one key event to mark in GA4 Admin (via the Zaraz
+	// GA4 tools' Actions mapping). Three names would mean three, and whichever
+	// was forgotten would silently not count.
+	assert.match(scriptJs, /zaraz\.track\("generate_lead"/, "click-to-call should report a lead");
+	assert.match(bookingJs, /zaraz\.track\("generate_lead"/, "the booking form should report a lead");
 
 	const thankYou = readFileSync(path.join(repoRoot, "thank-you", "index.html"), "utf8");
-	assert.match(thankYou, /generate_lead/, "/thank-you is where a contact enquiry is confirmed");
+	assert.match(thankYou, /zaraz\.track\("generate_lead"/, "/thank-you is where a contact enquiry is confirmed");
 });
 
 test("each lead path says which kind it is", () => {
@@ -126,11 +103,11 @@ test("each lead path says which kind it is", () => {
 });
 
 test("reporting can never break the thing it is reporting on", () => {
-	// gtag is simply absent whenever an ad blocker eats the tag. A visitor
+	// zaraz is simply absent whenever an ad blocker eats the tag. A visitor
 	// tapping the phone number must not care.
 	const handler = scriptJs.slice(scriptJs.indexOf('a[href^="tel:"]'));
-	assert.match(handler, /typeof window\.gtag === "function"/, "the call must be guarded");
-	assert.match(handler, /catch \(analyticsError\)/, "and wrapped, in case gtag itself throws");
+	assert.match(handler, /window\.zaraz && typeof window\.zaraz\.track === "function"/, "the call must be guarded");
+	assert.match(handler, /catch \(analyticsError\)/, "and wrapped, in case zaraz itself throws");
 });
 
 test("script.js is requested with a version past the one frozen in browsers", () => {

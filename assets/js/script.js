@@ -129,7 +129,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Delegated from the document, so it covers every tel: link on the page
   // (header, hero, footer, the sticky mobile bar) and any added later. In the
   // capture phase so it still runs if something else stops the event first,
-  // and wrapped in try/catch because an ad blocker eating gtag must never
+  // and wrapped in try/catch because an ad blocker eating zaraz must never
   // interfere with a customer placing a call.
   document.addEventListener(
     "click",
@@ -138,8 +138,8 @@ document.addEventListener("DOMContentLoaded", function () {
       var link = target && target.closest ? target.closest('a[href^="tel:"]') : null;
       if (!link) return;
       try {
-        if (typeof window.gtag === "function") {
-          window.gtag("event", "generate_lead", {
+        if (window.zaraz && typeof window.zaraz.track === "function") {
+          window.zaraz.track("generate_lead", {
             lead_type: "phone_call",
             // Which page earned the call -- the useful half of the report.
             page_path: window.location.pathname,

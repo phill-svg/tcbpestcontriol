@@ -387,12 +387,12 @@ document.addEventListener("DOMContentLoaded", function () {
         // it counts attempts -- including the ones that hit a taken slot or a
         // failed Turnstile. Here we know a job exists.
         //
-        // Guarded because gtag is simply absent whenever an ad blocker eats the
+        // Guarded because zaraz is simply absent whenever an ad blocker eats the
         // tag, and a missing analytics call must never break a booking that has
         // already been taken.
         try {
-          if (typeof window.gtag === "function") {
-            window.gtag("event", "generate_lead", {
+          if (window.zaraz && typeof window.zaraz.track === "function") {
+            window.zaraz.track("generate_lead", {
               lead_type: isQuoteMode() ? "quote_request" : "booking",
               service: payload.service || "(unspecified)",
             });

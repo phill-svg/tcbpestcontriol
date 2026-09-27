@@ -15,8 +15,24 @@
 			"href": "/pests-we-treat",
 			"children": [
 				{
-					"label": "Birds",
+					"label": "Bird Control",
 					"href": "/bird-control"
+				},
+				{
+					"label": "Ant Control",
+					"href": "/ant-control"
+				},
+				{
+					"label": "Bee Control",
+					"href": "/bees"
+				},
+				{
+					"label": "spider Control",
+					"href": "/spider-control"
+				},
+				{
+					"label": "all other pests",
+					"href": "/pests-we-treat"
 				}
 			]
 		},

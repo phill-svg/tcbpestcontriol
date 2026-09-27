@@ -330,7 +330,8 @@
 .hero h1 {
   margin-top: 1.25rem;
   max-width: 56rem;
-  font-size: 3rem;
+  /* Shrinks on narrow phones so one long word ("Straightforward", "Jerrabomberra") still fits. */
+  font-size: min(3rem, 11vw);
   line-height: 0.95;
   font-weight: 700;
 }

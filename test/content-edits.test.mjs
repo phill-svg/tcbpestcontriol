@@ -16,7 +16,7 @@ import {
 	styleAddress,
 } from "../assets/js/content-address.js";
 import { decodeEntities, escapeHtmlText } from "../src/html-entities.js";
-import { bakeEdits, pathToFile } from "../src/bake-edits.js";
+import { bakeEdits, pathToFile, metaOverride } from "../src/bake-edits.js";
 import { parseAddress, validateValue } from "../src/content-edits.js";
 
 // ---------------------------------------------------------------------------
@@ -236,6 +236,56 @@ test("bakeEdits updates the page title and description", () => {
 	assert.deepEqual(missing, []);
 	assert.match(html, /<title>Spider Control Canberra \| TCB<\/title>/);
 	assert.match(html, /<meta name="description" content="New description">/);
+});
+
+// Title and description edits are addressed by field, not by wording, so
+// they would otherwise override the file forever -- including after someone
+// rewrites the title in the file itself. They apply only while the file still
+// says what it said when the edit was made.
+const SOCIAL_PAGE = `<head>
+<title>Spider Control Canberra</title>
+<meta name="description" content="Old description">
+<meta property="og:title" content="Spider Control Canberra">
+<meta property="og:description" content="Old description">
+</head>`;
+
+function metaEdits(originals) {
+	const edits = new Map([
+		["m:title", "Spider Control Canberra | TCB"],
+		["m:description", "New description"],
+	]);
+	edits.originals = new Map(Object.entries(originals));
+	return edits;
+}
+
+test("a title or description edit applies while the file still says its original", () => {
+	const { html, missing, stale } = bakeEdits(
+		SOCIAL_PAGE,
+		metaEdits({ "m:title": "Spider Control Canberra", "m:description": "Old description" })
+	);
+	assert.deepEqual(missing, []);
+	assert.deepEqual(stale, []);
+	assert.match(html, /<title>Spider Control Canberra \| TCB<\/title>/);
+	assert.match(html, /<meta property="og:description" content="New description">/);
+});
+
+test("a title or description edit goes stale once the file is changed, and leaves the file alone", () => {
+	const { html, missing, stale } = bakeEdits(
+		SOCIAL_PAGE,
+		metaEdits({ "m:title": "An older title", "m:description": "An older description" })
+	);
+	assert.equal(html, SOCIAL_PAGE, "the file's own title, description and social tags win");
+	assert.deepEqual(missing, [], "stale is not missing -- it must not block a sync or a layout change");
+	assert.deepEqual(stale.sort(), ["m:description", "m:title"]);
+});
+
+test("metaOverride gives the published value only while it is not stale", () => {
+	const edits = metaEdits({ "m:title": "Spider Control Canberra" });
+	assert.equal(metaOverride(edits, "m:title", "Spider  Control Canberra "), "Spider Control Canberra | TCB");
+	assert.equal(metaOverride(edits, "m:title", "Something else"), undefined);
+	// No recorded original: the old always-apply behaviour.
+	assert.equal(metaOverride(edits, "m:description", "Anything"), "New description");
+	assert.equal(metaOverride(null, "m:title", "x"), undefined);
 });
 
 test("an edit that no longer matches is reported, not applied somewhere else", () => {

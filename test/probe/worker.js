@@ -1,7 +1,7 @@
 // Harness for the parity tests -- exposes the real Worker-side code over HTTP
 // so the tests can run it inside real workerd rather than a stand-in.
 //
-//   POST /     {html, edits}  -> applyContentEdits(), for address parity
+//   POST /     {html, edits, originals?} -> applyContentEdits(), for address parity
 //   POST /seo  {html}         -> extractPageSummary(), for SEO parity
 //
 // Not deployed; it exists only so those two tests can compare workerd's
@@ -20,8 +20,10 @@ export default {
 			return new Response(JSON.stringify(summary), { headers: { "content-type": "application/json" } });
 		}
 
-		const { html, edits } = await request.json();
-		const rewritten = applyContentEdits(new HTMLRewriter(), new Map(Object.entries(edits))).transform(
+		const { html, edits, originals } = await request.json();
+		const map = new Map(Object.entries(edits));
+		if (originals) map.originals = new Map(Object.entries(originals));
+		const rewritten = applyContentEdits(new HTMLRewriter(), map).transform(
 			new Response(html, { headers: { "content-type": "text/html" } })
 		);
 		return new Response(await rewritten.text(), { headers: { "content-type": "text/plain; charset=utf-8" } });

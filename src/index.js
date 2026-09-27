@@ -11,6 +11,7 @@ import { computeSlots } from "./availability.js";
 import {
 	loadPageEdits,
 	applyContentEdits,
+	metaOverride,
 	handleContentApi,
 	handleSeoSocialFix,
 	handleSeoTitleEndings,
@@ -1059,8 +1060,8 @@ async function handleSeoSuggest(request, url, env) {
 	// suggestion has to improve on.
 	const edits = await loadPageEdits(env, path).catch(() => null);
 	if (edits) {
-		const title = edits.get("m:title");
-		const description = edits.get("m:description");
+		const title = metaOverride(edits, "m:title", summary.title);
+		const description = metaOverride(edits, "m:description", summary.description);
 		if (title !== undefined) summary.title = title;
 		if (description !== undefined) summary.description = description;
 	}
@@ -1297,8 +1298,8 @@ async function handleSeoFix(request, url, env) {
 	]);
 	const edits = await loadPageEdits(env, path).catch(() => null);
 	if (edits) {
-		const title = edits.get("m:title");
-		const description = edits.get("m:description");
+		const title = metaOverride(edits, "m:title", summary.title);
+		const description = metaOverride(edits, "m:description", summary.description);
 		if (title !== undefined) summary.title = title;
 		if (description !== undefined) summary.description = description;
 	}
@@ -1439,8 +1440,8 @@ async function handleSearchConsole(url, env) {
 				]);
 				const edits = await loadPageEdits(env, wanted).catch(() => null);
 				if (edits) {
-					const title = edits.get("m:title");
-					const description = edits.get("m:description");
+					const title = metaOverride(edits, "m:title", summary.title);
+					const description = metaOverride(edits, "m:description", summary.description);
 					if (title !== undefined) summary.title = title;
 					if (description !== undefined) summary.description = description;
 				}

@@ -14,6 +14,7 @@
 import { checkSeo, analyseSchema, countWords } from "../assets/js/seo-check.js";
 import { normalisePath } from "../assets/js/content-address.js";
 import { decodeEntities } from "./html-entities.js";
+import { metaOverride } from "./bake-edits.js";
 import { linkTarget, bodySketch } from "../assets/js/seo-site.js";
 
 // Pulled out of the <loc> elements. Only the path is kept -- the scan asks the
@@ -274,8 +275,8 @@ export async function scanBatch({ paths, offset, limit, fetchPage, loadEdits, ex
 			// What a visitor sees, not what the file says.
 			const edits = await loadEdits(path);
 			if (edits) {
-				const title = edits.get("m:title");
-				const description = edits.get("m:description");
+				const title = metaOverride(edits, "m:title", summary.title);
+				const description = metaOverride(edits, "m:description", summary.description);
 				if (title !== undefined) {
 					summary.title = title;
 					// Serving a published title rewrites og:title and

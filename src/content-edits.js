@@ -32,7 +32,9 @@ import {
 } from "../assets/js/content-address.js";
 import { decodeEntities, escapeHtmlText, escapeStyleAttribute } from "./html-entities.js";
 import { MINIMUM_ENDING } from "../assets/js/seo-site.js";
-import { bakeEdits, pathToFile } from "./bake-edits.js";
+import { bakeEdits, pathToFile, metaOverride, metaStillApplies } from "./bake-edits.js";
+
+export { metaOverride };
 import { missingConfig, setupMessage, readFile, readTree, gitBlobSha, commitFiles, decodeBase64Utf8 } from "./github-sync.js";
 import { applyStructure } from "./page-structure.js";
 import { validateMenu, replaceMenus, changedNavTexts } from "./site-menu.js";
@@ -152,10 +154,14 @@ export async function loadPageEdits(env, path, { includeDrafts = false } = {}) {
 	const rows = result && result.results ? result.results : [];
 
 	const edits = new Map();
+	// Title and description edits need their original to tell whether they
+	// have gone stale -- see metaStillApplies in bake-edits.js.
+	edits.originals = new Map();
 	for (const row of rows) {
 		const value = includeDrafts && row.draft !== null && row.draft !== undefined ? row.draft : row.published;
 		if (value === null || value === undefined) continue;
 		edits.set(row.address, value);
+		if (row.address === META_TITLE_ADDRESS || row.address === META_DESCRIPTION_ADDRESS) edits.originals.set(row.address, row.original);
 	}
 
 	if (!includeDrafts) {
@@ -303,11 +309,26 @@ export function applyContentEdits(rewriter, edits) {
 		});
 	}
 
+	// Title and description edits only apply while the file still says what
+	// it said when they were made (metaStillApplies). The decision is taken at
+	// <title> and <meta name="description">; the og: and twitter: copies that
+	// follow in the head go the same way.
+	const originals = edits.originals || new Map();
+	let titleApplies = true;
+	let descriptionApplies = true;
+
 	const title = edits.get(META_TITLE_ADDRESS);
 	if (title !== undefined) {
+		let seen = "";
 		rewriter.on("title", {
-			element(el) {
-				el.setInnerContent(title);
+			text(chunk) {
+				seen += chunk.text;
+				if (!chunk.lastInTextNode) {
+					chunk.remove();
+					return;
+				}
+				titleApplies = metaStillApplies(originals.get(META_TITLE_ADDRESS), seen);
+				chunk.replace(titleApplies ? escapeHtmlText(title) : seen, { html: true });
 			},
 		});
 	}
@@ -316,7 +337,8 @@ export function applyContentEdits(rewriter, edits) {
 	if (description !== undefined) {
 		rewriter.on('meta[name="description"]', {
 			element(el) {
-				el.setAttribute("content", description);
+				descriptionApplies = metaStillApplies(originals.get(META_DESCRIPTION_ADDRESS), el.getAttribute("content"));
+				if (descriptionApplies) el.setAttribute("content", description);
 			},
 		});
 		// Keep the social-preview tags in step. Leaving them behind is the
@@ -324,7 +346,7 @@ export function applyContentEdits(rewriter, edits) {
 		// page is shared to Facebook or a group chat.
 		rewriter.on('meta[property="og:description"], meta[name="twitter:description"]', {
 			element(el) {
-				el.setAttribute("content", description);
+				if (descriptionApplies) el.setAttribute("content", description);
 			},
 		});
 	}
@@ -332,7 +354,7 @@ export function applyContentEdits(rewriter, edits) {
 	if (title !== undefined) {
 		rewriter.on('meta[property="og:title"], meta[name="twitter:title"]', {
 			element(el) {
-				el.setAttribute("content", title);
+				if (titleApplies) el.setAttribute("content", title);
 			},
 		});
 	}
@@ -598,7 +620,9 @@ export async function handleContentApi(request, url, env, session) {
 			}
 
 			const html = decodeBase64Utf8(file.content);
-			const { html: updated, applied, missing } = bakeEdits(html, new Map(edits.map((e) => [e.address, e.published])));
+			const map = new Map(edits.map((e) => [e.address, e.published]));
+			map.originals = new Map(edits.map((e) => [e.address, e.original]));
+			const { html: updated, applied, missing, stale } = bakeEdits(html, map);
 
 			for (const address of missing) {
 				const edit = edits.find((candidate) => candidate.address === address);
@@ -607,7 +631,9 @@ export async function handleContentApi(request, url, env, session) {
 				problems.push(`${pagePath}: could not find ${JSON.stringify(edit ? edit.original : address)} in the file`);
 			}
 			if (updated !== html) files.push({ path: filePath, content: updated });
-			for (const address of applied) synced.push({ path: pagePath, address });
+			// Stale title/description edits no longer apply anywhere, so they are
+			// done with too.
+			for (const address of [...applied, ...stale]) synced.push({ path: pagePath, address });
 		}
 
 		if (!files.length) {
@@ -876,7 +902,9 @@ export async function handleContentApi(request, url, env, session) {
 		let html = source;
 		const synced = [];
 		if (rows.length) {
-			const baked = bakeEdits(html, new Map(rows.map((row) => [row.address, row.published])));
+			const map = new Map(rows.map((row) => [row.address, row.published]));
+			map.originals = new Map(rows.map((row) => [row.address, row.original]));
+			const baked = bakeEdits(html, map);
 			// An override that cannot be found is one that would still be
 			// applying as an overlay after this commit -- against a page whose
 			// blocks have moved. That is exactly the case where it could land on

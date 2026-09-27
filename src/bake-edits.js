@@ -64,9 +64,31 @@ export function readAttributes(attrText) {
 	return found;
 }
 
+// A title or description override is addressed by its field ("m:title"),
+// not by its wording, so unlike every other edit it never stops matching on
+// its own. It applies only while the file still says what it said when the
+// edit was made (`original`). Once the file is changed by hand -- or the edit
+// is baked in -- the file wins, same as for body copy. Rows with no recorded
+// original keep the old always-apply behaviour.
+export function metaStillApplies(original, fileValue) {
+	if (!original) return true;
+	return normaliseText(original) === normaliseText(decodeEntities(fileValue == null ? "" : fileValue));
+}
+
+// The published title or description for a page, or undefined when there is
+// none or it has gone stale. `edits.originals` (address -> original) is set by
+// loadPageEdits; `fileValue` is what the page file itself says.
+export function metaOverride(edits, address, fileValue) {
+	const value = edits ? edits.get(address) : undefined;
+	if (value === undefined) return undefined;
+	return metaStillApplies(edits.originals && edits.originals.get(address), fileValue) ? value : undefined;
+}
+
 // Rewrites one HTML document.
 //
-// `edits` is a Map of address -> new value. Returns the new HTML plus the
+// `edits` is a Map of address -> new value, optionally carrying
+// `edits.originals` for title and description edits (see metaStillApplies).
+// Stale ones come back in `stale`, apart from `missing`. Returns the new HTML plus the
 // addresses that were actually applied and the ones that could not be found,
 // so the caller can report honestly rather than claiming a clean sweep.
 export function bakeEdits(html, edits) {
@@ -82,6 +104,10 @@ export function bakeEdits(html, edits) {
 	let cursor = 0;
 	let skipDepth = 0;
 	let inTitle = false;
+	// Whether the title/description overrides still apply, decided when the
+	// <title> and <meta name="description"> are reached; the og: and twitter:
+	// copies that follow them go the same way.
+	const metaApplies = new Map();
 
 	NODE_PATTERN.lastIndex = 0;
 	let match;
@@ -95,7 +121,10 @@ export function bakeEdits(html, edits) {
 				out.push(text);
 			} else if (inTitle) {
 				const replacement = edits.get(META_TITLE_ADDRESS);
-				if (replacement === undefined) {
+				if (replacement !== undefined) {
+					metaApplies.set(META_TITLE_ADDRESS, metaStillApplies(edits.originals && edits.originals.get(META_TITLE_ADDRESS), text));
+				}
+				if (replacement === undefined || !metaApplies.get(META_TITLE_ADDRESS)) {
 					out.push(text);
 				} else {
 					out.push(escapeHtmlText(replacement));
@@ -132,7 +161,7 @@ export function bakeEdits(html, edits) {
 		// address the other two never issue.
 		let tagText = full;
 		if (skipDepth === 0 && (EDITABLE_ATTRS[name] || name === "meta")) {
-			tagText = rewriteTag(full, name, attrText, edits, nextOrdinal, applied);
+			tagText = rewriteTag(full, name, attrText, edits, nextOrdinal, applied, metaApplies);
 		}
 		out.push(tagText);
 
@@ -162,8 +191,11 @@ export function bakeEdits(html, edits) {
 	const tail = html.slice(cursor);
 	if (tail) out.push(skipDepth > 0 ? tail : rewriteTextRun(tail, edits, nextOrdinal, applied));
 
-	const missing = [...edits.keys()].filter((address) => !applied.has(address));
-	return { html: out.join(""), applied: [...applied], missing };
+	// A stale title/description edit is not "missing" -- the file was changed
+	// on purpose and the edit no longer applies anywhere, live or here.
+	const stale = [...metaApplies].filter(([, applies]) => !applies).map(([address]) => address);
+	const missing = [...edits.keys()].filter((address) => !applied.has(address) && !stale.includes(address));
+	return { html: out.join(""), applied: [...applied], missing, stale };
 }
 
 function rewriteTextRun(raw, edits, nextOrdinal, applied) {
@@ -182,7 +214,7 @@ function rewriteTextRun(raw, edits, nextOrdinal, applied) {
 	return `${leading}${escapeHtmlText(replacement)}${trailing}`;
 }
 
-function rewriteTag(full, name, attrText, edits, nextOrdinal, applied) {
+function rewriteTag(full, name, attrText, edits, nextOrdinal, applied, metaApplies) {
 	const attributes = readAttributes(attrText);
 
 	// <meta name="description"> and the social variants are addressed by name
@@ -195,10 +227,14 @@ function rewriteTag(full, name, attrText, edits, nextOrdinal, applied) {
 		const isTitle = ["og:title", "twitter:title"].includes(key);
 		const address = isDescription ? META_DESCRIPTION_ADDRESS : isTitle ? META_TITLE_ADDRESS : null;
 		if (!address) return full;
-		const replacement = edits.get(address);
-		if (replacement === undefined) return full;
 		const content = attributes.find((attr) => attr.name === "content");
 		if (!content) return full;
+		const replacement = edits.get(address);
+		if (replacement === undefined) return full;
+		if (key === "description") {
+			metaApplies.set(address, metaStillApplies(edits.originals && edits.originals.get(address), content.value));
+		}
+		if (metaApplies.get(address) === false) return full;
 		applied.add(address);
 		return replaceAttrValue(full, attrText, content, replacement);
 	}

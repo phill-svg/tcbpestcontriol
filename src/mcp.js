@@ -114,7 +114,7 @@ function toolGetServicePricing(args) {
 		rows = PRICING.filter((p) => normalize(p.service).includes(q) || q.includes(normalize(p.service)));
 		if (rows.length === 0) {
 			return textResult(
-				`TCB Pest Control doesn't publish a starting price for "${args.service}". Only General Pest Control (from $249), Termite Inspection (from $289) and Rodent Control (from $249) have a published starting price -- every other service is quoted for free after a look at the property. See ${SITE}/pricing or get a free quote at ${SITE}/book.`
+				`TCB Pest Control doesn't publish a starting price for "${args.service}". Only General Pest Control (from $249), Termite Inspection (from $289) and Rodent Control ($289) have a published starting price -- every other service is quoted for free after a look at the property. See ${SITE}/pricing or get a free quote at ${SITE}/book.`
 			);
 		}
 	}

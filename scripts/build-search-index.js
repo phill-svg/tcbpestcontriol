@@ -68,7 +68,8 @@ function walk(dir, urlPath, results) {
 
 	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
 		if (!entry.isDirectory()) continue;
-		if (dir === ROOT && SKIP_DIRS.has(entry.name)) continue;
+		// Dot folders (.claude worktrees, .agents) hold copies of the site, not pages.
+		if (dir === ROOT && (SKIP_DIRS.has(entry.name) || entry.name.startsWith("."))) continue;
 		walk(path.join(dir, entry.name), `${urlPath}/${entry.name}`, results);
 	}
 }

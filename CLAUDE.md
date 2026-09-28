@@ -1,5 +1,8 @@
 # Notes for Claude
 
+This file is the memory. When the owner says "remember this", add it here and
+commit it — cloud sessions don't keep anything else between runs.
+
 - **The HTML files in this repo are the source of truth.** The live site also
   applies wording edits from the `content_edits` table in the `tcb-booking-db`
   D1 database, but the repo wins. See `EDITING-GUIDE.md` for how the overlay works.

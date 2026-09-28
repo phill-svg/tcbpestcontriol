@@ -22,3 +22,5 @@ test
 schema.sql
 .dev.vars
 EDITING-GUIDE.md
+CLAUDE.md
+.claude

@@ -15,6 +15,10 @@
     "frontend-design@claude-plugins-official": true,
     "caveman@caveman": true
   },
+  "statusLine": {
+    "type": "command",
+    "command": "f=$(ls \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}\"/plugins/cache/caveman/caveman/*/src/hooks/caveman-statusline.sh 2>/dev/null | tail -1); [ -n \"$f\" ] && bash \"$f\" || true"
+  },
   "hooks": {
     "SessionStart": [
       {

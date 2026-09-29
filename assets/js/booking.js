@@ -162,6 +162,116 @@ document.addEventListener("DOMContentLoaded", function () {
     return el ? el.value.trim() : "";
   }
 
+  // -- Address lookup ------------------------------------------------------
+  // Type 3+ letters, pick from the list, and street/suburb/postcode fill in.
+  // Suggestions come from Google via our Worker (/api/address/*). If that
+  // isn't set up or fails, the list just stops appearing and the three
+  // fields are typed by hand as normal.
+  var addrInput = form.querySelector("#bk-address");
+  var addrList = form.querySelector("[data-address-list]");
+  var suburbInput = form.querySelector("#bk-suburb");
+  var postcodeInput = form.querySelector("#bk-postcode");
+  var addrOff = false;
+  var addrTimer = null;
+  var addrSeq = 0;
+  var addrItems = [];
+  var addrActive = -1;
+  var addrSession = "";
+
+  function newAddrSession() {
+    var a = new Uint8Array(16);
+    (window.crypto || window.msCrypto).getRandomValues(a);
+    return Array.prototype.map.call(a, function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+  }
+
+  function closeAddrList() {
+    addrItems = [];
+    addrActive = -1;
+    if (addrList) { addrList.hidden = true; addrList.innerHTML = ""; }
+    if (addrInput) { addrInput.setAttribute("aria-expanded", "false"); addrInput.removeAttribute("aria-activedescendant"); }
+  }
+
+  function markAddrActive(i) {
+    addrActive = i;
+    var lis = addrList.querySelectorAll("li");
+    for (var k = 0; k < lis.length; k++) lis[k].setAttribute("aria-selected", k === i ? "true" : "false");
+    if (lis[i]) { addrInput.setAttribute("aria-activedescendant", lis[i].id); lis[i].scrollIntoView({ block: "nearest" }); }
+  }
+
+  function showAddrList(items) {
+    addrItems = items;
+    addrActive = -1;
+    addrList.innerHTML = "";
+    if (!items.length) { closeAddrList(); return; }
+    items.forEach(function (it, i) {
+      var li = document.createElement("li");
+      li.id = "bk-address-opt-" + i;
+      li.setAttribute("role", "option");
+      li.setAttribute("aria-selected", "false");
+      li.textContent = it.text;
+      // mousedown, not click: fires before the input's blur closes the list.
+      li.addEventListener("mousedown", function (ev) { ev.preventDefault(); pickAddr(i); });
+      addrList.appendChild(li);
+    });
+    addrList.hidden = false;
+    addrInput.setAttribute("aria-expanded", "true");
+  }
+
+  function fetchAddr(path) {
+    return fetch(path, { headers: { accept: "application/json" } }).then(function (res) {
+      if (res.status === 503 || res.status === 403) addrOff = true;
+      if (!res.ok) throw new Error("lookup " + res.status);
+      return res.json();
+    });
+  }
+
+  function pickAddr(i) {
+    var it = addrItems[i];
+    closeAddrList();
+    if (!it) return;
+    var session = addrSession;
+    addrSession = ""; // one session per address picked
+    fetchAddr("/api/address/details?id=" + encodeURIComponent(it.id) + "&session=" + session)
+      .then(function (d) {
+        if (!d || !d.ok) return;
+        if (d.street) addrInput.value = d.street;
+        if (d.suburb && suburbInput) suburbInput.value = d.suburb;
+        if (d.postcode && postcodeInput) postcodeInput.value = d.postcode;
+        if (serviceSelect && !serviceSelect.value) serviceSelect.focus();
+      })
+      .catch(function () {
+        // Leave whatever they typed; they can fill suburb/postcode by hand.
+      });
+  }
+
+  if (addrInput && addrList) {
+    addrInput.addEventListener("input", function () {
+      clearTimeout(addrTimer);
+      var q = addrInput.value.trim();
+      if (addrOff || q.length < 3) { closeAddrList(); return; }
+      addrTimer = setTimeout(function () {
+        if (!addrSession) addrSession = newAddrSession();
+        var seq = ++addrSeq;
+        fetchAddr("/api/address/suggest?q=" + encodeURIComponent(q) + "&session=" + addrSession)
+          .then(function (d) {
+            if (seq !== addrSeq) return; // a newer keystroke already asked
+            showAddrList((d && d.suggestions) || []);
+          })
+          .catch(closeAddrList);
+      }, 250);
+    });
+
+    addrInput.addEventListener("keydown", function (ev) {
+      if (addrList.hidden || !addrItems.length) return;
+      if (ev.key === "ArrowDown") { ev.preventDefault(); markAddrActive((addrActive + 1) % addrItems.length); }
+      else if (ev.key === "ArrowUp") { ev.preventDefault(); markAddrActive(addrActive <= 0 ? addrItems.length - 1 : addrActive - 1); }
+      else if (ev.key === "Enter" && addrActive >= 0) { ev.preventDefault(); pickAddr(addrActive); }
+      else if (ev.key === "Escape") { closeAddrList(); }
+    });
+
+    addrInput.addEventListener("blur", function () { setTimeout(closeAddrList, 150); });
+  }
+
   function pad(n) {
     return n < 10 ? "0" + n : "" + n;
   }
@@ -342,6 +452,8 @@ document.addEventListener("DOMContentLoaded", function () {
       email: val("email"),
       phone: val("phone"),
       address: val("address"),
+      suburb: val("suburb"),
+      postcode: val("postcode"),
       service: serviceSelect ? serviceSelect.value : "",
       slotStartIso: isQuoteMode() ? "" : slotInput ? slotInput.value : "",
       date: isQuoteMode() ? "" : chosenDate,

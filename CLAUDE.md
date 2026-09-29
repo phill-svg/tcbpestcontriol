@@ -12,3 +12,7 @@ commit it — cloud sessions don't keep anything else between runs.
 - Owner preference: sweet and quick to the point.
 - Goal in progress: make the site read less AI-generated — plainer, local-sounding
   headlines, fewer stock phrases, correct counts, real reviews/people.
+- **Booking address lookup** (`/book`): street, suburb and postcode fill in from
+  Google Places, called through the Worker at `/api/address/*`
+  (`src/address-lookup.js`). The key is the Worker secret `GOOGLE_MAPS_KEY`
+  (Places API (New)). No key = no dropdown, form still works by typing.

@@ -40,7 +40,7 @@ export function renderSections(sections = []) {
 				.join("");
 			return (
 				`<section class="section${soft}"><div class="container">` +
-				`<div class="section-eyebrow mono">[${pad(at + 1)}] ${escapeHtml(section.eyebrow || "Detail")}</div>` +
+				`<div class="section-eyebrow mono">${escapeHtml(section.eyebrow || "Detail")}</div>` +
 				`<h2 class="section-title display">${escapeHtml(section.heading || "")}</h2>` +
 				`<div class="prose">${paragraphs}</div>` +
 				`</div></section>`
@@ -54,16 +54,13 @@ export function renderFaqSection(faqs = [], { heading = "The questions Canberra 
 	const cards = faqs
 		.map(
 			(faq, at) =>
-				`<div class="grid-card"><div class="step-num">[FAQ- ${pad(at + 1)} ]</div>` +
+				`<div class="grid-card"><div class="step-num">Q${at + 1}</div>` +
 				`<h3 class="display">${escapeHtml(faq.question)}</h3><p>${escapeHtml(faq.answer)}</p></div>`
 		)
 		.join("");
 	return (
 		`<section class="section bg-soft"><div class="container">` +
-		// Numbered after the sections it follows, not at a fixed [04] -- the
-		// hand-written pages happen to have three sections and a generated one
-		// may not, and an eyebrow that skips a number reads as a missing section.
-		`<div class="section-eyebrow mono">[${pad(after + 1)}] FAQ</div>` +
+		`<div class="section-eyebrow mono">FAQ</div>` +
 		`<h2 class="section-title display">${escapeHtml(heading)}</h2>` +
 		`<div class="grid-cards cols-3">${cards}</div></div></section>`
 	);
@@ -93,7 +90,7 @@ export function renderRelatedLinks(related = []) {
 		.join("");
 	return (
 		`<section class="section compact"><div class="container"><div class="link-strip">` +
-		`<span class="section-eyebrow mono" style="margin-right:0.5rem;">[Related services]</span>` +
+		`<span class="section-eyebrow mono" style="margin-right:0.5rem;">Related services</span>` +
 		`${links}</div></div></section>`
 	);
 }

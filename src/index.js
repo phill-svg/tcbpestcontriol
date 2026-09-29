@@ -553,14 +553,14 @@ const site = {
 						// Skip-to-content link: applies everywhere (including the staff
 						// dashboard), unlike the visitor search/chat widgets below.
 						el.prepend(SKIP_LINK_HTML, { html: true });
-						// The search overlay and chat bubble are left off in edit
+						// The search overlay and call/text buttons are left off in edit
 						// mode: both are interactive widgets that would sit on top of
 						// the words being edited, and both build their own DOM after
 						// load, which is exactly the kind of churn the editor's text
 						// walk is better off never seeing.
 						if (!isStaffPage && !editing) {
 							el.append(SEARCH_OVERLAY_HTML, { html: true });
-							el.append(CHAT_WIDGET_HTML, { html: true });
+							el.append(CONTACT_FAB_HTML, { html: true });
 						}
 						if (canEdit) el.append(editorLauncherHtml({ editing, previewing }), { html: true });
 					},
@@ -980,7 +980,7 @@ const SKIP_LINK_HTML = `<a data-tcb-injected class="skip-link" href="#main-conte
 // canonical tags. Visible at every breakpoint (it sits outside the
 // .main-nav/.header-actions containers that main.css hides on mobile), so it
 // doubles as the mobile search entry point next to the hamburger button.
-const SEARCH_TRIGGER_HTML = `<button data-tcb-injected type="button" class="search-trigger" data-search-open aria-label="Search the site" title="Search (press /)"><svg aria-hidden="true" class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg></button>`;
+const SEARCH_TRIGGER_HTML = `<button data-tcb-injected type="button" class="search-trigger" data-search-open aria-label="Search the site" title="Search (press /)"><svg aria-hidden="true" class="icon-line icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg></button>`;
 
 // Command-palette style overlay appended once per page, just before </body>.
 // assets/js/search.js wires it up and lazy-loads assets/search-index.json
@@ -988,11 +988,12 @@ const SEARCH_TRIGGER_HTML = `<button data-tcb-injected type="button" class="sear
 // removing, or retitling a page).
 const SEARCH_OVERLAY_HTML = `<div data-tcb-injected class="search-overlay" id="site-search" role="dialog" aria-modal="true" aria-label="Search the site" hidden><div class="search-backdrop" data-search-close></div><div class="search-panel"><div class="search-field"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input type="text" class="search-input" placeholder="Search services, suburbs, articles..." autocomplete="off" aria-label="Search"/><button type="button" class="search-close" data-search-close>Esc</button></div><div class="search-results"></div></div></div><script src="/assets/js/search.js?v=1" defer></script>`;
 
-// Floating chat bubble + panel appended once per page (skipped on the staff
-// admin page, which gets its own dashboard UI). assets/js/chat.js wires it
-// up and opens a WebSocket to /api/chat/ws, backed by the ChatHub Durable
-// Object above.
-const CHAT_WIDGET_HTML = `<button data-tcb-injected type="button" class="chat-bubble" data-chat-open aria-label="Chat with us" title="Chat with us"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></button><div data-tcb-injected class="chat-panel" id="site-chat" role="dialog" aria-modal="true" aria-label="Chat with TCB Pest Control" hidden><div class="chat-panel-inner"><div class="chat-header"><div class="chat-header-brand"><span class="chat-header-badge"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></span><div class="chat-header-text"><span class="chat-header-title">TCB Pest Control</span><span class="chat-header-subtitle">Chat with us</span></div></div><button type="button" class="chat-close" data-chat-close aria-label="Close chat"><span class="chat-close-esc">Esc</span><span class="chat-close-icon">&times;</span></button></div><div class="chat-intake" data-chat-intake><p class="chat-intake-title">Let's chat</p><p class="chat-intake-lead">Tell us who you are and we will get you sorted.</p><form class="form" data-chat-intake-form><div class="field"><label for="chat-name">Name</label><input id="chat-name" name="name" type="text" autocomplete="name" required/></div><div class="field"><label for="chat-email">Email</label><input id="chat-email" name="email" type="email" autocomplete="email" required/></div><div class="field"><label for="chat-phone">Phone</label><input id="chat-phone" name="phone" type="tel" autocomplete="tel" required/></div><div class="form-footer"><button class="btn btn-primary" type="submit">Start chat</button></div></form></div><div class="chat-messages" data-chat-messages hidden><p class="chat-hint">Send us a message and we will reply here as soon as we can.</p></div><form class="chat-input-row" data-chat-form hidden><input type="text" class="chat-input" data-chat-input placeholder="Type a message..." autocomplete="off" aria-label="Message" maxlength="2000" required/><button type="submit" class="btn btn-primary chat-send-icon" aria-label="Send"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button></form></div></div><script src="/assets/js/chat.js?v=3" defer></script>`;
+// Floating Call / Text buttons appended once per page (skipped on the staff
+// admin page). These replaced the live chat bubble on the public site; the
+// ChatHub Durable Object and assets/js/chat.js stay for the staff dashboard.
+const PHONE_ICON = `<svg aria-hidden="true" class="icon-line icon" width="18" height="18" viewBox="0 0 24 24"><use href="/assets/icons.svg?v=1#phone"></use></svg>`;
+const TEXT_ICON = `<svg aria-hidden="true" class="icon-line icon" width="18" height="18" viewBox="0 0 24 24"><use href="/assets/icons.svg?v=1#message-square"></use></svg>`;
+const CONTACT_FAB_HTML = `<div data-tcb-injected class="contact-fab"><a class="alt" href="sms:+61485034869" aria-label="Text TCB Pest Control on 0485 034 869">${TEXT_ICON}Text</a><a href="tel:0261059771" aria-label="Call TCB Pest Control on 02 6105 9771">${PHONE_ICON}Call</a></div>`;
 
 // One slice of the site-wide SEO scan. The page list comes from sitemap.xml,
 // which is the list Google actually crawls -- a page missing from it is

@@ -91,7 +91,7 @@ test("authoring notes are stripped, but the analytics comments survive", () => {
 	const html = renderPost(TEMPLATE, POST);
 	assert.doesNotMatch(html, /DO NOT EDIT/);
 	assert.doesNotMatch(html, /BLOG-GUIDE/);
-	assert.ok(html.includes("Deferred: chat widget and Meta Pixel"), "the deferred loader comment must still be there");
+	assert.ok(html.includes("Deferred: Meta Pixel loads"), "the deferred loader comment must still be there");
 	assert.ok(html.includes("connect.facebook.net/en_US/fbevents.js"), "the Meta Pixel loader must still be there");
 
 	// And the page itself is untouched apart from the comments.

@@ -388,3 +388,39 @@
     padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
   }
 }
+
+/* Floating Call / Text buttons -- replaced the live chat bubble on the public site */
+.contact-fab {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 90;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.contact-fab a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.625rem 1rem;
+  border-radius: 999px;
+  background: var(--accent-deep);
+  color: var(--ink-on-accent);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  text-decoration: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+.contact-fab a.alt {
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+.contact-fab a:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}

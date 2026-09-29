@@ -10,7 +10,7 @@ import { getModifierType, computePrice } from "../src/booking-config.js";
 
 test("getModifierType returns the right follow-up type per service", () => {
 	assert.equal(getModifierType("general-pest"), "bedrooms");
-	assert.equal(getModifierType("ants-spiders-roaches"), "bedrooms");
+	assert.equal(getModifierType("ants-spiders-roaches"), "none");
 	assert.equal(getModifierType("termite-inspection"), "property");
 	assert.equal(getModifierType("rodents"), "none");
 	assert.equal(getModifierType("wasps-bees"), "none");
@@ -23,14 +23,14 @@ test("getModifierType defaults to 'none' for an unknown service key", () => {
 test("computePrice: flat 'none' services ignore the modifier value", () => {
 	assert.deepEqual(computePrice("rodents", ""), { ok: true, amount: 289, modifierLabel: "" });
 	assert.deepEqual(computePrice("wasps-bees", "anything"), { ok: true, amount: 289, modifierLabel: "" });
+	// Ants are their own flat-price treatment, not part of general pest.
+	assert.deepEqual(computePrice("ants-spiders-roaches", "4-5"), { ok: true, amount: 289, modifierLabel: "" });
 });
 
 test("computePrice: bedrooms tiers resolve to the right fixed price and en-dash label", () => {
 	assert.deepEqual(computePrice("general-pest", "1-3"), { ok: true, amount: 249, modifierLabel: "1–3 bedrooms" });
 	assert.deepEqual(computePrice("general-pest", "4-5"), { ok: true, amount: 289, modifierLabel: "4–5 bedrooms" });
 	assert.deepEqual(computePrice("general-pest", "6+"), { ok: true, amount: 349, modifierLabel: "6 or more bedrooms" });
-	// Same table as general-pest, per the brief.
-	assert.deepEqual(computePrice("ants-spiders-roaches", "4-5"), { ok: true, amount: 289, modifierLabel: "4–5 bedrooms" });
 });
 
 test("computePrice: termite-inspection property tiers", () => {

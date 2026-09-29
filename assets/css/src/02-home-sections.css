@@ -87,7 +87,8 @@
 
 .section-title.lg {
   font-size: 3rem;
-  line-height: 0.95;
+  /* 0.95 squashed multi-line headings together (owner feedback). */
+  line-height: 1.05;
 }
 
 .section-link {

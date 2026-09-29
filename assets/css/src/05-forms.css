@@ -24,6 +24,14 @@
   padding: 2.5rem;
 }
 
+/* Cloudflare Turnstile is a fixed 300px wide; on small phones the 2.5rem
+   padding left less than that and pushed the page sideways. */
+@media (max-width: 420px) {
+  .form-panel {
+    padding-inline: 0.75rem;
+  }
+}
+
 .info-panel {
   background: var(--bg);
   padding: 2.5rem;

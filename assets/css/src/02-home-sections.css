@@ -62,9 +62,9 @@
 }
 
 .section-eyebrow {
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.2em;
   color: var(--accent-deep);
 }
 

@@ -278,6 +278,13 @@ function replaceAttrValue(tagText, attrText, attr, value) {
 // Mirrors fetchAsset() in src/index.js, which serves a directory path by
 // looking for index.html inside it.
 export function pathToFile(pagePath) {
-	const clean = String(pagePath || "/").replace(/^\/+|\/+$/g, "");
+	// Trimmed with a loop, not /^\/+|\/+$/: that regex rescans a long run of
+	// slashes from every position (quadratic -- CodeQL js/polynomial-redos).
+	const path = String(pagePath || "/");
+	let start = 0;
+	let end = path.length;
+	while (start < end && path[start] === "/") start++;
+	while (end > start && path[end - 1] === "/") end--;
+	const clean = path.slice(start, end);
 	return clean ? `${clean}/index.html` : "index.html";
 }

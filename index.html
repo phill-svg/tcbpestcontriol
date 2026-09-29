@@ -2,13 +2,13 @@
 
 <html lang="en-AU">
 <head>
-<meta charset="utf-8"/><link as="font" crossorigin href="/assets/fonts/inter-var.woff2" rel="preload" type="font/woff2"/><link as="font" crossorigin href="/assets/fonts/space-grotesk.woff2" rel="preload" type="font/woff2"/><link as="font" crossorigin href="/assets/fonts/ibm-plex-mono-400.woff2" rel="preload" type="font/woff2"/><link as="image" fetchpriority="high" href="assets/images/tcb-pest-control-technicians-treating-home-9300e-sm.webp" rel="preload"/>
-<!-- Deferred: chat widget and Meta Pixel load on first user interaction (or after
+<meta charset="utf-8"/><link as="font" crossorigin href="/assets/fonts/inter-var.woff2" rel="preload" type="font/woff2"/>
+<!-- Deferred: Meta Pixel loads on first user interaction (or after
      a timeout, whichever comes first) so they don't compete with page content for
      the main thread during initial render -->
 <script>
 (function () {
-  var pixelLoaded = false, chatLoaded = false;
+  var pixelLoaded = false;
   var events = ["scroll", "keydown", "mousemove", "touchstart", "pointerdown"];
   function loadPixel() {
     if (pixelLoaded) return;
@@ -24,24 +24,12 @@
     fbq("init", "1363820809022895");
     fbq("track", "PageView");
   }
-  function loadChat() {
-    if (chatLoaded) return;
-    chatLoaded = true;
-    var argrowScript = document.createElement("script");
-    argrowScript.src = "https://app.argrow.ai/api/s/g_c5hQeg_B7haDW1fDhu3eAC8N3WzX3E.js";
-    argrowScript.async = true;
-    document.body.appendChild(argrowScript);
-  }
   function onInteract() {
     events.forEach(function (ev) { window.removeEventListener(ev, onInteract); });
     clearTimeout(timer);
     loadPixel();
-    loadChat();
   }
   events.forEach(function (ev) { window.addEventListener(ev, onInteract, { passive: true, once: true }); });
-  // Chat widget loads only after genuine interaction so its text (e.g. "Chat with us")
-  // is never rendered into the DOM that Googlebot indexes and pulls into search snippets.
-  // The Meta Pixel still fires on the timeout fallback, so ad-tracking coverage is unchanged.
   var timer = setTimeout(loadPixel, 5000);
 })();
 </script>
@@ -53,7 +41,7 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>Canberra Pest Control Services | TCB Pest Control</title>
 <meta content="Need Canberra pest control? TCB treats termites, spiders, rodents and more across homes and businesses. Request a quote or book a service today." name="description"/><link href="https://www.tcbpestcontrolcanberra.com.au/" rel="canonical"/><meta content="website" property="og:type"/><meta content="Canberra Pest Control Services | TCB Pest Control" property="og:title"/><meta content="Need Canberra pest control? TCB treats termites, spiders, rodents and more across homes and businesses. Request a quote or book a service today." property="og:description"/><meta content="https://www.tcbpestcontrolcanberra.com.au/" property="og:url"/><meta content="https://www.tcbpestcontrolcanberra.com.au/assets/images/tcb-pest-control-og-card.png" property="og:image"/><meta content="image/png" property="og:image:type"/><meta content="1200" property="og:image:width"/><meta content="630" property="og:image:height"/><meta content="TCB Pest Control Canberra" property="og:image:alt"/><meta content="TCB Pest Control Canberra" property="og:site_name"/><meta content="en_AU" property="og:locale"/><meta content="summary_large_image" name="twitter:card"/><meta content="Canberra Pest Control Services | TCB Pest Control" name="twitter:title"/><meta content="Need Canberra pest control? TCB treats termites, spiders, rodents and more across homes and businesses. Request a quote or book a service today." name="twitter:description"/><meta content="https://www.tcbpestcontrolcanberra.com.au/assets/images/tcb-pest-control-og-card.png" name="twitter:image"/>
-<style>@font-face{font-family:"Inter";font-style:normal;font-weight:100 900;font-display:swap;src:url("/assets/fonts/inter-var.woff2") format("woff2")}@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:400 700;font-display:swap;src:url("/assets/fonts/space-grotesk.woff2") format("woff2")}@font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:400;font-display:swap;src:url("/assets/fonts/ibm-plex-mono-400.woff2") format("woff2")}@font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:500;font-display:swap;src:url("/assets/fonts/ibm-plex-mono-500.woff2") format("woff2")}:root{--bg:#ffffff;--bg-soft:#f5f5f7;--bg-elevated:#ffffff;--panel:#ebecef;--line:#e6e6ea;--ink:#111114;--ink-muted:#3f3f46;--ink-dim:#5a5a62;--ink-faint:#8a8a92;--ink-on-accent:#ffffff;--accent:#e5251a;--accent-deep:#c41613;--font-sans:"Inter",ui-sans-serif,system-ui,-apple-system,sans-serif;--font-display:"Space Grotesk",ui-sans-serif,system-ui,sans-serif;--font-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,monospace;--radius-sm:0.25rem;--container-max:80rem;--ease:cubic-bezier(0.4,0,0.2,1)}*{box-sizing:border-box;margin:0;padding:0}html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}body{min-height:100vh;display:flex;flex-direction:column;font-family:var(--font-sans);background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}img{display:block;max-width:100%}a{color:inherit}ul{list-style:none}svg{display:block}.mono{font-family:var(--font-mono)}.display{font-family:var(--font-display)}.container{width:100%;max-width:var(--container-max);margin-inline:auto;padding-inline:1.5rem}.icon{flex-shrink:0}.btn{display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;border-radius:var(--radius-sm);font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;text-decoration:none;white-space:nowrap;transition:background-color 0.15s var(--ease),color 0.15s var(--ease),border-color 0.15s var(--ease);cursor:pointer;border:1px solid transparent}.btn-primary{border-color:var(--accent);background:var(--accent);color:var(--ink-on-accent);padding:0.5rem 1rem}.btn-primary:hover{background:var(--bg);color:var(--accent)}.btn-lg{padding:0.875rem 1.5rem;font-size:0.875rem}.btn-white{border-color:var(--bg-elevated);background:var(--bg-elevated);color:var(--accent);padding:1rem 1.5rem;justify-content:space-between}.btn-white:hover{background:transparent;color:var(--ink-on-accent)}.btn-outline-white{border-color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.1);color:var(--ink-on-accent);padding:1rem 1.5rem;justify-content:space-between}.btn-outline-white:hover{border-color:var(--bg-elevated);background:var(--bg-elevated);color:var(--accent)}.link-phone{display:inline-flex;align-items:center;gap:0.75rem;border-bottom:1px solid transparent;padding-bottom:0.25rem;font-size:1rem;font-weight:600;color:var(--ink);text-decoration:none;transition:border-color 0.15s var(--ease),color 0.15s var(--ease)}.link-phone:hover{border-color:var(--accent);color:var(--accent)}.link-phone .icon{color:var(--accent)}.link-mono{display:inline-flex;align-items:center;gap:0.5rem;padding:0.125rem 0.5rem;font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.22em;color:rgba(255,255,255,0.7);text-decoration:none;transition:color 0.15s var(--ease)}.link-mono:hover{color:var(--ink-on-accent)}.site-header{position:sticky;top:0;z-index:40;border-bottom:1px solid var(--line);background:rgba(255,255,255,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}.site-header .container{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding-block:1rem}.logo{display:flex;align-items:center;gap:0.75rem;text-decoration:none}.logo-mark{position:relative;height:2rem;width:120px}.logo-mark img{position:absolute;inset:0;height:100%;width:100%;object-fit:contain}.logo-tag{display:none;font-size:10px;text-transform:uppercase;letter-spacing:0.22em;color:var(--ink-faint)}.main-nav{display:none;align-items:center;gap:1.125rem}.main-nav a{font-size:0.8125rem;color:var(--ink-muted);text-decoration:none;transition:color 0.15s var(--ease);white-space:nowrap}.main-nav a:hover{color:var(--ink)}.header-actions{display:none;align-items:center;gap:0.875rem}.header-phone{display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;font-weight:600;color:var(--ink);text-decoration:none;transition:color 0.15s var(--ease)}.header-phone:hover{color:var(--accent)}.header-phone .icon{color:var(--accent)}.menu-toggle{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:0.25rem;padding:0.5rem;background:transparent;color:var(--ink);cursor:pointer}.mobile-nav{display:none;flex-direction:column;border-top:1px solid var(--line);background:var(--bg);padding:1rem 1.5rem 1.5rem}.mobile-nav.is-open{display:flex}.mobile-nav a{padding:0.65rem 0;font-size:0.9375rem;color:var(--ink-muted);text-decoration:none;border-bottom:1px solid var(--line)}.mobile-nav a:last-child{border-bottom:none}.nav-item{position:relative;display:flex;align-items:center}.nav-expand{display:inline-flex;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;padding:0;border:0;background:0 0;color:var(--ink-muted);cursor:pointer}.nav-expand::before{content:"";width:.4rem;height:.4rem;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-25%) rotate(45deg);transition:transform .15s var(--ease)}.nav-item.is-open>.nav-expand::before{transform:translateY(25%) rotate(-135deg)}.nav-menu{display:none;flex-direction:column}.nav-item.is-open>.nav-menu{display:flex}.main-nav a:focus-visible,.mobile-nav a:focus-visible,.nav-expand:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}.mobile-nav .btn{margin-top:1rem;align-self:flex-start}.mobile-nav .nav-item{flex-wrap:wrap;border-bottom:1px solid var(--line)}.mobile-nav .nav-item>a{flex:1;border-bottom:none}.mobile-nav .nav-expand{width:2.75rem;height:2.75rem}.mobile-nav .nav-menu{flex-basis:100%;padding:0 0 .5rem 1rem}.mobile-nav .nav-menu a{padding:.5rem 0;font-size:.875rem;border-bottom:none}@media (min-width:640px){.logo-tag{display:inline}}@media (min-width:1320px){.main-nav{display:flex}.header-actions{display:flex}.menu-toggle,.mobile-nav{display:none !important}.main-nav .nav-menu{position:absolute;top:100%;left:-.75rem;min-width:12rem;padding:.5rem 0;border:1px solid var(--line);border-radius:.375rem;background:var(--bg);box-shadow:0 8px 24px rgb(0 0 0 / 8%)}.main-nav .nav-item:focus-within>.nav-menu,.main-nav .nav-item:hover>.nav-menu{display:flex}.main-nav .nav-item.is-dismissed>.nav-menu{display:none}.main-nav .nav-menu a{padding:.45rem .9rem}.main-nav .nav-menu a:hover{background:var(--bg-soft)}}.hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line)}.hero-media{position:absolute;inset:0;z-index:-1}.hero-media img{position:absolute;inset:0;height:100%;width:100%;object-fit:cover;opacity:0.5}.hero-media .gradient-x{position:absolute;inset:0;background:linear-gradient(to right,var(--bg) 0%,rgba(255,255,255,0.8) 45%,rgba(255,255,255,0) 100%)}.hero-media .gradient-y{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(255,255,255,0) 60%,var(--bg) 100%)}.hero .container{padding-top:5rem;padding-bottom:6rem}.hero-eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:0.22em;color:var(--accent)}.hero h1{margin-top:1.25rem;max-width:56rem;font-size:3rem;line-height:0.95;font-weight:700}.hero h1 .accent{color:var(--accent)}.hero-lead{margin-top:1.75rem;max-width:42rem;font-size:1.125rem;line-height:1.625;color:var(--ink-muted)}.hero-actions{margin-top:2.25rem;display:flex;flex-wrap:wrap;align-items:center;gap:1.25rem}.hero-stats{margin-top:4rem;display:grid;grid-template-columns:repeat(2,1fr);column-gap:1.5rem;row-gap:2rem;border-top:1px solid var(--line);padding-top:2rem}.hero-stat dt{font-size:1.875rem;font-weight:700;color:var(--accent)}.hero-stat dd{margin-top:0.25rem;font-size:10px;text-transform:uppercase;letter-spacing:0.22em;color:var(--ink-dim)}@media (min-width:768px){.hero .container{padding-top:7rem;padding-bottom:8rem}.hero h1{font-size:4.5rem}.hero-stats{grid-template-columns:repeat(4,1fr)}}.hero.simple{background:var(--bg)}.hero.simple .container{padding-top:5rem;padding-bottom:6rem}@media (min-width:768px){.hero.simple .container{padding-top:7rem;padding-bottom:7rem}}.hero.narrow .container{max-width:48rem;padding-top:4rem;padding-bottom:3rem}@media (min-width:768px){.hero.narrow .container{padding-top:5rem;padding-bottom:4rem}}.hero-meta{margin-top:1.5rem;display:flex;flex-wrap:wrap;align-items:center;gap:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:0.22em;color:var(--ink-dim)}.hero-meta .dot{color:var(--ink-faint)}.hero-meta .item{display:inline-flex;align-items:center;gap:0.375rem}.hero-meta-bar{margin-top:2rem;display:flex;flex-wrap:wrap;align-items:center;gap:0.75rem;border-top:1px solid var(--line);padding-top:1.5rem;font-size:10px;text-transform:uppercase;letter-spacing:0.22em;color:var(--ink-dim)}.hero-meta-bar a{display:inline-flex;align-items:center;gap:0.375rem;color:var(--ink);text-decoration:none}.hero-meta-bar a:hover{color:var(--accent)}.trust-bar{border-bottom:1px solid var(--line);background:var(--bg-soft)}.trust-bar .container{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:1rem 1.5rem;padding-block:1.5rem}.trust-item{display:flex;align-items:center;gap:0.75rem;font-size:10px;text-transform:uppercase;letter-spacing:0.22em;color:var(--ink-dim)}.trust-item .dash{width:1.5rem;height:1px;background:var(--accent);flex-shrink:0}.blog-hero-meta{margin-top:1.5rem;display:flex;flex-wrap:wrap;align-items:center;gap:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:0.22em;color:var(--ink-dim)}.blog-hero-meta .item{display:inline-flex;align-items:center;gap:0.375rem}.footer-rating svg{width:1rem;height:1rem;fill:var(--accent);color:var(--accent)}</style><link as="style" href="assets/css/style.css?v=45" onload="this.onload=null;this.rel='stylesheet'" rel="preload"/><noscript><link href="assets/css/style.css?v=45" rel="stylesheet"/></noscript><link href="https://www.tcbpestcontrolcanberra.com.au/feed.xml" rel="alternate" title="TCB Pest Control Canberra Blog" type="application/rss+xml"/>
+<style>@font-face{font-family:"Inter";font-style:normal;font-weight:100 900;font-display:swap;src:url("/assets/fonts/inter-var.woff2") format("woff2")}:root{--bg:#ffffff;--bg-soft:#f5f5f7;--bg-elevated:#ffffff;--panel:#ebecef;--line:#e6e6ea;--ink:#111114;--ink-muted:#3f3f46;--ink-dim:#5a5a62;--ink-faint:#8a8a92;--ink-on-accent:#ffffff;--accent:#e5251a;--accent-deep:#c41613;--font-sans:"Inter",ui-sans-serif,system-ui,-apple-system,sans-serif;--font-display:var(--font-sans);--font-mono:var(--font-sans);--radius-sm:0.25rem;--container-max:80rem;--ease:cubic-bezier(0.4,0,0.2,1)}*{box-sizing:border-box;margin:0;padding:0}html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}body{min-height:100vh;display:flex;flex-direction:column;font-family:var(--font-sans);background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}img{display:block;max-width:100%}a{color:inherit}ul{list-style:none}svg{display:block}.mono{font-family:var(--font-mono)}.display{font-family:var(--font-display)}.container{width:100%;max-width:var(--container-max);margin-inline:auto;padding-inline:1.5rem}.icon{flex-shrink:0}.btn{display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;border-radius:var(--radius-sm);font-size:0.9375rem;font-weight:700;letter-spacing:0;text-decoration:none;white-space:nowrap;transition:background-color 0.15s var(--ease),color 0.15s var(--ease),border-color 0.15s var(--ease);cursor:pointer;border:1px solid transparent}.btn-primary{border-color:var(--accent);background:var(--accent);color:var(--ink-on-accent);padding:0.5rem 1rem}.btn-primary:hover{background:var(--bg);color:var(--accent)}.btn-lg{padding:0.875rem 1.5rem;font-size:0.875rem}.btn-white{border-color:var(--bg-elevated);background:var(--bg-elevated);color:var(--accent);padding:1rem 1.5rem;justify-content:space-between}.btn-white:hover{background:transparent;color:var(--ink-on-accent)}.btn-outline-white{border-color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.1);color:var(--ink-on-accent);padding:1rem 1.5rem;justify-content:space-between}.btn-outline-white:hover{border-color:var(--bg-elevated);background:var(--bg-elevated);color:var(--accent)}.link-phone{display:inline-flex;align-items:center;gap:0.75rem;border-bottom:1px solid transparent;padding-bottom:0.25rem;font-size:1rem;font-weight:600;color:var(--ink);text-decoration:none;transition:border-color 0.15s var(--ease),color 0.15s var(--ease)}.link-phone:hover{border-color:var(--accent);color:var(--accent)}.link-phone .icon{color:var(--accent)}.link-mono{display:inline-flex;align-items:center;gap:0.5rem;padding:0.125rem 0.5rem;font-family:var(--font-mono);font-size:0.8125rem;letter-spacing:0;color:rgba(255,255,255,0.7);text-decoration:none;transition:color 0.15s var(--ease)}.link-mono:hover{color:var(--ink-on-accent)}.site-header{position:sticky;top:0;z-index:40;border-bottom:1px solid var(--line);background:rgba(255,255,255,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}.site-header .container{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding-block:1rem}.logo{display:flex;align-items:center;gap:0.75rem;text-decoration:none}.logo-mark{position:relative;height:2rem;width:120px}.logo-mark img{position:absolute;inset:0;height:100%;width:100%;object-fit:contain}.logo-tag{display:none;font-size:0.8125rem;letter-spacing:0;color:var(--ink-faint)}.main-nav{display:none;align-items:center;gap:1.125rem}.main-nav a{font-size:0.8125rem;color:var(--ink-muted);text-decoration:none;transition:color 0.15s var(--ease);white-space:nowrap}.main-nav a:hover{color:var(--ink)}.header-actions{display:none;align-items:center;gap:0.875rem}.header-phone{display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;font-weight:600;color:var(--ink);text-decoration:none;transition:color 0.15s var(--ease)}.header-phone:hover{color:var(--accent)}.header-phone .icon{color:var(--accent)}.menu-toggle{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:0.25rem;padding:0.5rem;background:transparent;color:var(--ink);cursor:pointer}.mobile-nav{display:none;flex-direction:column;border-top:1px solid var(--line);background:var(--bg);padding:1rem 1.5rem 1.5rem}.mobile-nav.is-open{display:flex}.mobile-nav a{padding:0.65rem 0;font-size:0.9375rem;color:var(--ink-muted);text-decoration:none;border-bottom:1px solid var(--line)}.mobile-nav a:last-child{border-bottom:none}.nav-item{position:relative;display:flex;align-items:center}.nav-expand{display:inline-flex;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;padding:0;border:0;background:0 0;color:var(--ink-muted);cursor:pointer}.nav-expand::before{content:"";width:.4rem;height:.4rem;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-25%) rotate(45deg);transition:transform .15s var(--ease)}.nav-item.is-open>.nav-expand::before{transform:translateY(25%) rotate(-135deg)}.nav-menu{display:none;flex-direction:column}.nav-item.is-open>.nav-menu{display:flex}.main-nav a:focus-visible,.mobile-nav a:focus-visible,.nav-expand:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}.mobile-nav .btn{margin-top:1rem;align-self:flex-start}.mobile-nav .nav-item{flex-wrap:wrap;border-bottom:1px solid var(--line)}.mobile-nav .nav-item>a{flex:1;border-bottom:none}.mobile-nav .nav-expand{width:2.75rem;height:2.75rem}.mobile-nav .nav-menu{flex-basis:100%;padding:0 0 .5rem 1rem}.mobile-nav .nav-menu a{padding:.5rem 0;font-size:.875rem;border-bottom:none}@media (min-width:640px){.logo-tag{display:inline}}@media (min-width:1320px){.main-nav{display:flex}.header-actions{display:flex}.menu-toggle,.mobile-nav{display:none !important}.main-nav .nav-menu{position:absolute;top:100%;left:-.75rem;min-width:12rem;padding:.5rem 0;border:1px solid var(--line);border-radius:.375rem;background:var(--bg);box-shadow:0 8px 24px rgb(0 0 0 / 8%)}.main-nav .nav-item:focus-within>.nav-menu,.main-nav .nav-item:hover>.nav-menu{display:flex}.main-nav .nav-item.is-dismissed>.nav-menu{display:none}.main-nav .nav-menu a{padding:.45rem .9rem}.main-nav .nav-menu a:hover{background:var(--bg-soft)}}.hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line)}.hero-media{position:absolute;inset:0;z-index:-1}.hero-media img{position:absolute;inset:0;height:100%;width:100%;object-fit:cover;opacity:0.5}.hero-media .gradient-x{position:absolute;inset:0;background:linear-gradient(to right,var(--bg) 0%,rgba(255,255,255,0.8) 45%,rgba(255,255,255,0) 100%)}.hero-media .gradient-y{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(255,255,255,0) 60%,var(--bg) 100%)}.hero .container{padding-top:5rem;padding-bottom:6rem}.hero-eyebrow{font-size:0.8125rem;letter-spacing:0;color:var(--ink-dim)}.hero h1{margin-top:1.25rem;max-width:56rem;font-size:3rem;line-height:0.95;font-weight:700}.hero h1 .accent{color:inherit}.hero-lead{margin-top:1.75rem;max-width:42rem;font-size:1.125rem;line-height:1.625;color:var(--ink-muted)}.hero-actions{margin-top:2.25rem;display:flex;flex-wrap:wrap;align-items:center;gap:1.25rem}.hero-stats{margin-top:4rem;display:grid;grid-template-columns:repeat(2,1fr);column-gap:1.5rem;row-gap:2rem;border-top:1px solid var(--line);padding-top:2rem}.hero-stat dt{font-size:1.875rem;font-weight:700;color:var(--ink)}.hero-stat dd{margin-top:0.25rem;font-size:0.8125rem;letter-spacing:0;color:var(--ink-dim)}@media (min-width:768px){.hero .container{padding-top:7rem;padding-bottom:8rem}.hero h1{font-size:4.5rem}.hero-stats{grid-template-columns:repeat(4,1fr)}}.hero.simple{background:var(--bg)}.hero.simple .container{padding-top:5rem;padding-bottom:6rem}@media (min-width:768px){.hero.simple .container{padding-top:7rem;padding-bottom:7rem}}.hero.narrow .container{max-width:48rem;padding-top:4rem;padding-bottom:3rem}@media (min-width:768px){.hero.narrow .container{padding-top:5rem;padding-bottom:4rem}}.hero-meta{margin-top:1.5rem;display:flex;flex-wrap:wrap;align-items:center;gap:0.5rem 1rem;font-size:0.8125rem;letter-spacing:0;color:var(--ink-dim)}.hero-meta .dot{color:var(--ink-faint)}.hero-meta .item{display:inline-flex;align-items:center;gap:0.375rem}.hero-meta-bar{margin-top:2rem;display:flex;flex-wrap:wrap;align-items:center;gap:0.75rem;border-top:1px solid var(--line);padding-top:1.5rem;font-size:0.8125rem;letter-spacing:0;color:var(--ink-dim)}.hero-meta-bar a{display:inline-flex;align-items:center;gap:0.375rem;color:var(--ink);text-decoration:none}.hero-meta-bar a:hover{color:var(--accent)}.trust-bar{border-bottom:1px solid var(--line);background:var(--bg-soft)}.trust-bar .container{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:1rem 1.5rem;padding-block:1.5rem}.trust-item{display:flex;align-items:center;gap:0.75rem;font-size:0.8125rem;letter-spacing:0;color:var(--ink-dim)}.trust-item .dash{width:1.5rem;height:1px;background:var(--accent);flex-shrink:0}.blog-hero-meta{margin-top:1.5rem;display:flex;flex-wrap:wrap;align-items:center;gap:0.5rem 1rem;font-size:0.8125rem;letter-spacing:0;color:var(--ink-dim)}.blog-hero-meta .item{display:inline-flex;align-items:center;gap:0.375rem}.footer-rating svg{width:1rem;height:1rem;fill:var(--accent);color:var(--accent)}</style><link as="style" href="assets/css/style.css?v=46" onload="this.onload=null;this.rel='stylesheet'" rel="preload"/><noscript><link href="assets/css/style.css?v=46" rel="stylesheet"/></noscript><link href="https://www.tcbpestcontrolcanberra.com.au/feed.xml" rel="alternate" title="TCB Pest Control Canberra Blog" type="application/rss+xml"/>
 <!-- Structured data — maintained in this repo; do not let automated tools overwrite this block -->
 <script type="application/ld+json">
 {
@@ -431,15 +419,10 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 <main>
 <!-- ========== HERO — the big headline block at the very top ("Pest control done right across the Canberra region") ========== -->
 <section class="hero">
-<div class="hero-media">
-<img alt="TCB Pest Control technicians in white coveralls treating a Canberra kitchen" src="assets/images/tcb-pest-control-technicians-treating-home-9300e-sm.webp" srcset="assets/images/tcb-pest-control-technicians-treating-home-9300e-sm.webp 760w, assets/images/tcb-pest-control-technicians-treating-home-9300e.webp 1146w" sizes="100vw" width="1146" height="763" fetchpriority="high"/>
-<div class="gradient-x"></div>
-<div class="gradient-y"></div>
-</div>
 <div class="container">
-<div class="hero-eyebrow mono">TCB PEST CONTROL CANBERRA ACT</div>
-<h1 class="display">Pest control in Canberra, <span class="accent">done right.</span></h1>
-<p class="hero-lead">TCB Pest Control Canberra provides professional pest control services across Canberra, offering licensed treatments for termites, spiders, rodents, cockroaches and more.</p>
+<div class="hero-eyebrow mono">TCB Pest Control · Canberra and Queanbeyan</div>
+<h1 class="display">Pest control in Canberra</h1>
+<p class="hero-lead">TCB Pest Control Canberra is a family-run business. Phill Johnston and the team treat termites, spiders, rodents, cockroaches, wasps and more in homes and businesses across Canberra and Queanbeyan.</p>
 <div class="hero-actions">
 <a class="btn btn-primary btn-lg" href="/book">
           Book Now
@@ -450,24 +433,7 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
           02 6105 9771
         </a>
 </div>
-<dl class="hero-stats">
-<div class="hero-stat">
-<dt class="display">24</dt>
-<dd class="mono">PESTS COVERED</dd>
-</div>
-<div class="hero-stat">
-<dt class="display">24h</dt>
-<dd class="mono">QUOTE TURNAROUND</dd>
-</div>
-<div class="hero-stat">
-<dt class="display">4.8★</dt>
-<dd class="mono">Google rating</dd>
-</div>
-<div class="hero-stat">
-<dt class="display">100%</dt>
-<dd class="mono">Satisfaction guarantee</dd>
-</div>
-</dl>
+<p class="hero-proof"><a href="/reviews"><span aria-hidden="true">★</span> 4.8 from 62 Google reviews</a><span>ACT licensed, licence no. 5098997</span><span>Termidor accredited</span></p>
 </div>
 </section>
 <!-- ========== SECTION [01] SERVICES — "Pest control for every kind of property" (the service cards) ========== -->
@@ -475,17 +441,16 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 <div class="container">
 <div class="section-head">
 <div>
-<div class="section-eyebrow mono">[01] Services</div>
+<div class="section-eyebrow mono">Services</div>
 <h2 class="section-title display">Pest control for every kind of property.</h2>
 </div>
 <a class="section-link mono" href="pests-we-treat">All services →</a>
 </div>
 <div class="services-grid">
 <a class="service-card" href="residential">
-<svg aria-hidden="true" class="icon-line icon icon-accent" height="24" viewbox="0 0 24 24" width="24"><use href="/assets/icons.svg?v=1#shield-check"></use></svg>
 <div>
 <p class="service-title display">Residential</p>
-<p>A healthier, safer living environment with proven treatments for everyday household pests.</p>
+<p>General pest sprays, termite checks and one-off jobs for Canberra homes, units and rentals.</p>
 </div>
 <ul class="service-list">
 <li>General pest treatments</li>
@@ -498,7 +463,6 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 </div>
 </a>
 <a class="service-card" href="commercial">
-<svg aria-hidden="true" class="icon-line icon icon-accent" height="24" viewbox="0 0 24 24" width="24"><use href="/assets/icons.svg?v=1#award"></use></svg>
 <div>
 <p class="service-title display">Commercial</p>
 <p>Discreet, compliant pest control for offices, retail, hospitality, schools and strata.</p>
@@ -515,7 +479,6 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 </div>
 </a>
 <a class="service-card" href="termite-treatment">
-<svg aria-hidden="true" class="icon-line icon icon-accent" height="24" viewbox="0 0 24 24" width="24"><use href="/assets/icons.svg?v=1#bug"></use></svg>
 <div>
 <p class="service-title display">Termites</p>
 <p>Termidor-accredited inspections, treatment and ongoing protection for your property.</p>
@@ -526,12 +489,11 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 <li>Annual monitoring</li>
 </ul>
 <div class="service-more mono">
-            LEARN MORE
+            Learn more
             <svg aria-hidden="true" class="icon-line icon" height="12" viewbox="0 0 24 24" width="12"><use href="/assets/icons.svg?v=1#arrow-right"></use></svg>
 </div>
 </a>
 <a class="service-card" href="pests-we-treat">
-<svg aria-hidden="true" class="icon-line icon icon-accent" height="24" viewbox="0 0 24 24" width="24"><use href="/assets/icons.svg?v=1#bug"></use></svg>
 <div>
 <p class="service-title display">Pests We Treat</p>
 <p>Ants, spiders, cockroaches, rodents, wasps, bees, silverfish, moths, fleas, bed bugs and more.</p>
@@ -550,67 +512,96 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 </div>
 </div>
 </section>
+<!-- ========== REVIEWS — three real Google reviews (copied from our Google listing) ========== -->
+<section class="section">
+<div class="container">
+<div class="section-head">
+<div>
+<div class="section-eyebrow mono">Reviews</div>
+<h2 class="section-title display">What customers say on Google</h2>
+</div>
+<a class="section-link mono" href="/reviews">More reviews →</a>
+</div>
+<div class="grid-cards cols-3">
+<div class="grid-card review-card">
+<span aria-label="5 out of 5 stars" class="review-stars">★★★★★</span>
+<p>"I felt that Phill really knew his stuff. He was efficient, as unobtrusive as possible given all the tapping he had to do for the termite check. His work boots were off before he stepped through the door. I got the inspection report quickly and I felt the inspection was good value for money."</p>
+<div class="review-name">Steve Dunn<span>Termite inspection</span></div>
+</div>
+<div class="grid-card review-card">
+<span aria-label="5 out of 5 stars" class="review-stars">★★★★★</span>
+<p>"Phil is an experienced and knowledgeable pest controller with excellent customer service. He managed to fit me in on very short notice after I spotted a rodent in the house. His professionalism and prompt response were outstanding."</p>
+<div class="review-name">Talha Tariq<span>Rodent control</span></div>
+</div>
+<div class="grid-card review-card">
+<span aria-label="5 out of 5 stars" class="review-stars">★★★★★</span>
+<p>"Phill was fantastic! Super responsive and dealt with our Indian Myna bird roof nesting challenges immediately. We had gutter guard securely installed to prevent future infestations and no more Myna bird issues!"</p>
+<div class="review-name">Mary Kary<span>Bird control</span></div>
+</div>
+</div>
+</div>
+</section>
 <!-- ========== SECTION [02] PESTS WE TREAT — "Twenty four pests. One specialist team" (grid of pests) ========== -->
 <section class="section bg-soft">
 <div class="container">
 <div class="section-head split">
 <div class="head-title">
-<div class="section-eyebrow mono">[02] Pests we treat</div>
-<h2 class="section-title display">Twenty four pest species. One specialist team.</h2>
+<div class="section-eyebrow mono">Pests we treat</div>
+<h2 class="section-title display">The pests we treat most</h2>
 </div>
 <div class="head-text">
-<p>Our most-requested species — plus pests other Canberra firms tend to pass on. Every treatment uses family-safe product and includes a written report you can keep.</p>
+<p>These are the jobs we get called about most, plus a few pests other Canberra firms tend to pass on. Every treatment comes with a written report you can keep. We cover 24 species in all.</p>
 <a class="section-link mono" href="pests-we-treat" style="margin-top:1.25rem;display:inline-flex;">See all pests →</a>
 </div>
 </div>
 <div class="tile-grid">
 <a class="tile" href="termite-treatment">
-<span class="tile-left"><svg aria-hidden="true" class="icon-line icon icon-muted" height="16" viewbox="0 0 24 24" width="16"><use href="/assets/icons.svg?v=1#bug"></use></svg><span>Termites</span></span>
+<span class="tile-left"><span>Termites</span></span>
 <svg aria-hidden="true" class="icon-line icon icon-arrow" height="12" viewbox="0 0 24 24" width="12"><use href="/assets/icons.svg?v=1#arrow-right"></use></svg>
 </a>
 <a class="tile" href="/spider-control">
-<span class="tile-left"><svg aria-hidden="true" class="icon-line icon icon-muted" height="16" viewbox="0 0 24 24" width="16"><use href="/assets/icons.svg?v=1#bug"></use></svg><span>Spiders</span></span>
+<span class="tile-left"><span>Spiders</span></span>
 <svg aria-hidden="true" class="icon-line icon icon-arrow" height="12" viewbox="0 0 24 24" width="12"><use href="/assets/icons.svg?v=1#arrow-right"></use></svg>
 </a>
 <a class="tile" href="/cockroach-control">
-<span class="tile-left"><svg aria-hidden="true" class="icon-line icon icon-muted" height="16" viewbox="0 0 24 24" width="16"><use href="/assets/icons.svg?v=1#bug"></use></svg><span>Cockroaches</span></span>
+<span class="tile-left"><span>Cockroaches</span></span>
 <svg aria-hidden="true" class="icon-line icon icon-arrow" height="12" viewbox="0 0 24 24" width="12"><use href="/assets/icons.svg?v=1#arrow-right"></use></svg>
 </a>
 <a class="tile" href="/ant-control">
-<span class="tile-left"><svg aria-hidden="true" class="icon-line icon icon-muted" height="16" viewbox="0 0 24 24" width="16"><use href="/assets/icons.svg?v=1#bug"></use></svg><span>Ant control</span></span>
+<span class="tile-left"><span>Ant control</span></span>
 <svg aria-hidden="true" class="icon-line icon icon-arrow" height="12" viewbox="0 0 24 24" width="12"><use href="/assets/icons.svg?v=1#arrow-right"></use></svg>
 </a>
 <a class="tile" href="rodent-control">
-<span class="tile-left"><svg aria-hidden="true" class="icon-line icon icon-muted" height="16" viewbox="0 0 24 24" width="16"><use href="/assets/icons.svg?v=1#bug"></use></svg><span>Mice &amp; Rats</span></span>
+<span class="tile-left"><span>Mice &amp; Rats</span></span>
 <svg aria-hidden="true" class="icon-line icon icon-arrow" height="12" viewbox="0 0 24 24" width="12"><use href="/assets/icons.svg?v=1#arrow-right"></use></svg>
 </a>
 <a class="tile" href="/bird-control">
-<span class="tile-left"><svg aria-hidden="true" class="icon-line icon icon-muted" height="16" viewbox="0 0 24 24" width="16"><use href="/assets/icons.svg?v=1#bug"></use></svg><span>Birds</span></span>
+<span class="tile-left"><span>Birds</span></span>
 <svg aria-hidden="true" class="icon-line icon icon-arrow" height="12" viewbox="0 0 24 24" width="12"><use href="/assets/icons.svg?v=1#arrow-right"></use></svg>
 </a>
 <a class="tile" href="bees">
-<span class="tile-left"><svg aria-hidden="true" class="icon-line icon icon-muted" height="16" viewbox="0 0 24 24" width="16"><use href="/assets/icons.svg?v=1#bug"></use></svg><span>Bee &amp; wasp removal</span></span>
+<span class="tile-left"><span>Bee &amp; wasp removal</span></span>
 <svg aria-hidden="true" class="icon-line icon icon-arrow" height="12" viewbox="0 0 24 24" width="12"><use href="/assets/icons.svg?v=1#arrow-right"></use></svg>
 </a>
 <a class="tile" href="silverfish-control">
-<span class="tile-left"><svg aria-hidden="true" class="icon-line icon icon-muted" height="16" viewbox="0 0 24 24" width="16"><use href="/assets/icons.svg?v=1#bug"></use></svg><span>Moths &amp; Silverfish</span></span>
+<span class="tile-left"><span>Moths &amp; Silverfish</span></span>
 <svg aria-hidden="true" class="icon-line icon icon-arrow" height="12" viewbox="0 0 24 24" width="12"><use href="/assets/icons.svg?v=1#arrow-right"></use></svg>
 </a>
 
 <a class="tile" href="bed-bug-treatment-canberra">
-<span class="tile-left"><svg aria-hidden="true" class="icon-line icon icon-muted" height="16" viewbox="0 0 24 24" width="16"><use href="/assets/icons.svg?v=1#bug"></use></svg><span>Bed Bug Treatment</span></span>
+<span class="tile-left"><span>Bed Bug Treatment</span></span>
 <svg aria-hidden="true" class="icon-line icon icon-arrow" height="12" viewbox="0 0 24 24" width="12"><use href="/assets/icons.svg?v=1#arrow-right"></use></svg>
 </a>
 <a class="tile" href="/flea-control">
-<span class="tile-left"><svg aria-hidden="true" class="icon-line icon icon-muted" height="16" viewbox="0 0 24 24" width="16"><use href="/assets/icons.svg?v=1#bug"></use></svg><span>Fleas</span></span>
+<span class="tile-left"><span>Fleas</span></span>
 <svg aria-hidden="true" class="icon-line icon icon-arrow" height="12" viewbox="0 0 24 24" width="12"><use href="/assets/icons.svg?v=1#arrow-right"></use></svg>
 </a>
 <a class="tile" href="/possum-control">
-<span class="tile-left"><svg aria-hidden="true" class="icon-line icon icon-muted" height="16" viewbox="0 0 24 24" width="16"><use href="/assets/icons.svg?v=1#bug"></use></svg><span>Possums</span></span>
+<span class="tile-left"><span>Possums</span></span>
 <svg aria-hidden="true" class="icon-line icon icon-arrow" height="12" viewbox="0 0 24 24" width="12"><use href="/assets/icons.svg?v=1#arrow-right"></use></svg>
 </a>
 <a class="tile" href="/stored-product-pest-control">
-<span class="tile-left"><svg aria-hidden="true" class="icon-line icon icon-muted" height="16" viewbox="0 0 24 24" width="16"><use href="/assets/icons.svg?v=1#bug"></use></svg><span>Stored Product Pests</span></span>
+<span class="tile-left"><span>Stored Product Pests</span></span>
 <svg aria-hidden="true" class="icon-line icon icon-arrow" height="12" viewbox="0 0 24 24" width="12"><use href="/assets/icons.svg?v=1#arrow-right"></use></svg>
 </a>
 </div>
@@ -624,9 +615,9 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 <div class="container">
 <div class="feature-grid">
 <div class="feature-text">
-<div class="section-eyebrow mono">[PEST FOCUS] TERMITES</div>
-<h2 class="section-title display lg">The quiet damage. <br/>Caught early.</h2>
-<p>A single colony can hollow structural timber in months — and the signs rarely show on the surface. Our Termidor-accredited inspections and treatment come with a structural warranty on qualifying work.</p>
+<div class="section-eyebrow mono">Termites</div>
+<h2 class="section-title display lg">Termites do the damage before you see them</h2>
+<p>A single colony can hollow structural timber in months, and the signs rarely show on the surface. Our Termidor-accredited inspections and treatment come with a structural warranty on qualifying work.</p>
 </div>
 <div class="feature-actions">
 <a class="btn btn-white" href="termite-treatment">
@@ -646,26 +637,23 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 <div class="container">
 <div class="section-head split">
 <div class="head-title">
-<div class="section-eyebrow mono">[03] WHY TCB</div>
-<h2 class="section-title display">A guarantee, not a hope.</h2>
+<div class="section-eyebrow mono">Why TCB</div>
+<h2 class="section-title display">Our guarantee</h2>
 </div>
 <div class="head-text">
-<p>We stand by our work with a 100% satisfaction guarantee — any follow-up treatment on a covered pest is wrapped into that guarantee. Clear written quotes, accredited technicians, family-safe product on every job. Your peace of mind is our promise.</p>
+<p>Every job comes with our satisfaction guarantee. If a covered pest needs a follow-up treatment, that follow-up is included. You get a written quote before we start, and every product we use is family-safe.</p>
 </div>
 </div>
 <div class="why-grid">
 <div class="why-card">
-<svg aria-hidden="true" class="icon-line icon icon-accent" height="24" viewbox="0 0 24 24" width="24"><use href="/assets/icons.svg?v=1#shield-check"></use></svg>
 <h3 class="display">Family-safe treatment</h3>
 <p>Pet and child-friendly products, applied by trained fully licensed technicians.</p>
 </div>
 <div class="why-card">
-<svg aria-hidden="true" class="icon-line icon icon-accent" height="24" viewbox="0 0 24 24" width="24"><use href="/assets/icons.svg?v=1#award"></use></svg>
 <h3 class="display">Termidor accredited</h3>
 <p>Industry-leading termite treatment with a structural warranty on qualifying work.</p>
 </div>
 <div class="why-card">
-<svg aria-hidden="true" class="icon-line icon icon-accent" height="24" viewbox="0 0 24 24" width="24"><use href="/assets/icons.svg?v=1#clock"></use></svg>
 <h3 class="display">Upfront written quotes</h3>
 <p>Every quote in writing. No surprises, no upsell, no late fees.</p>
 </div>
@@ -685,18 +673,18 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 <div class="container">
 <div class="approach-grid">
 <div class="approach-text">
-<div class="section-eyebrow mono">[04] Approach</div>
-<h2 class="section-title display">Safe pest control, from a local team.</h2>
-<p>We use Canberra's highest quality pest spray — effective on pests, gentle around family, pets and food prep. Every technician is fully licensed and insured, with up-to-date training in safe application and reporting.</p>
+<div class="section-eyebrow mono">Approach</div>
+<h2 class="section-title display">A small, local team</h2>
+<p>TCB is family-run and based in Canberra. Phill Johnston (ACT licence 5098997) and the team are licensed and insured, and we use APVMA-registered products chosen to be safe around kids, pets and food prep.</p>
 <ul class="approach-list">
-<li>Fully licensed &amp; insured local team</li>
-<li>Family-run, family-friendly products</li>
-<li>Upfront written quotes — no surprises</li>
-<li>twenty four pest species covered by the same team</li>
+<li>Licensed and insured</li>
+<li>Family-run, with family-safe products</li>
+<li>Written quote before any work starts</li>
+<li>24 pest species covered by the same team</li>
 </ul>
 </div>
 <div class="approach-image">
-<img alt="TCB Pest Control technician in a respirator spraying along an indoor window sill" src="assets/images/tcb-pest-control-spraying-service-701e1.webp" width="1000" height="667" loading="lazy"/>
+<img alt="TCB Pest Control ute with the business phone number, parked on a Canberra street" src="assets/images/tcb-pest-control-service-vehicle-fc3b9.webp" width="640" height="480" loading="lazy"/>
 </div>
 </div>
 </div>
@@ -706,11 +694,11 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 <div class="container">
 <div class="section-head split">
 <div class="head-title">
-<div class="section-eyebrow mono">[05] Areas</div>
-<h2 class="section-title display">Twelve suburbs. Pest control across the whole ACT</h2>
+<div class="section-eyebrow mono">Areas</div>
+<h2 class="section-title display">Where we work</h2>
 </div>
 <div class="head-text">
-<p>Our local teams cover every Canberra district and the surrounding region — from <a href="locations-pest-control-belconnen" style="color:inherit;">Belconnen</a> to <a href="locations-pest-control-tuggeranong" style="color:inherit;">pest control in Tuggeranong</a>, Woden to Molonglo Valley, plus Queanbeyan and Jerrabomberra.</p>
+<p>We cover every Canberra district, from <a href="locations-pest-control-belconnen" style="color:inherit;">Belconnen</a> to <a href="locations-pest-control-tuggeranong" style="color:inherit;">pest control in Tuggeranong</a>, Woden to Molonglo Valley, plus Queanbeyan and Jerrabomberra.</p>
 </div>
 </div>
 <div class="tile-grid areas">
@@ -772,7 +760,7 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 <div class="container">
 <div class="section-head split">
 <div class="head-title">
-<div class="section-eyebrow mono">[06] Local pest pressure</div>
+<div class="section-eyebrow mono">Local pest pressure</div>
 <h2 class="section-title display">Common pests in Canberra homes and businesses.</h2>
 </div>
 <div class="head-text">
@@ -781,34 +769,28 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 </div>
 <div class="grid-cards cols-3">
 <div class="grid-card">
-<svg aria-hidden="true" class="icon-line icon-accent" height="24" viewbox="0 0 24 24" width="24"><use href="/assets/icons.svg?v=1#shield-check"></use></svg>
 <h3 class="display">Cockroaches</h3>
 <p>A year-round pest in Canberra properties. German cockroaches thrive in kitchen and bathroom environments, breeding rapidly in warm conditions. A small infestation can become a significant bug problem within weeks if left untreated. Our <a href="/cockroach-control" style="color:var(--accent);text-decoration:none;border-bottom:1px solid currentColor;">cockroach control in Canberra</a> is matched to the species present.</p>
 </div>
 <div class="grid-card">
-<svg aria-hidden="true" class="icon-line icon-accent" height="24" viewbox="0 0 24 24" width="24"><use href="/assets/icons.svg?v=1#shield-check"></use></svg>
-<h3 class="display">Rodents — Rats &amp; Mice</h3>
-<p>Noticeably more active as temperatures drop in autumn. Cold winters drive rodents into roof voids, wall cavities and garages — see <a href="/rodent-control" style="color:var(--accent);text-decoration:none;border-bottom:1px solid currentColor;">rodent control in Canberra</a> for how we treat them, or our <a href="/blog-rat-and-mouse-pest-control-canberra-autumn" style="color:var(--accent);text-decoration:none;border-bottom:1px solid currentColor;">guide to rat and mouse pest control through autumn</a> for the signs to watch for.</p>
+<h3 class="display">Rats and mice</h3>
+<p>Noticeably more active as temperatures drop in autumn. Cold winters drive rodents into roof voids, wall cavities and garages. See <a href="/rodent-control" style="color:var(--accent);text-decoration:none;border-bottom:1px solid currentColor;">rodent control in Canberra</a> for how we treat them, or our <a href="/blog-rat-and-mouse-pest-control-canberra-autumn" style="color:var(--accent);text-decoration:none;border-bottom:1px solid currentColor;">guide to rat and mouse pest control through autumn</a> for the signs to watch for.</p>
 </div>
 <div class="grid-card">
-<svg aria-hidden="true" class="icon-line icon-accent" height="24" viewbox="0 0 24 24" width="24"><use href="/assets/icons.svg?v=1#shield-check"></use></svg>
 <h3 class="display">Spiders</h3>
 <p>Redbacks are common in Canberra gardens, garages and outdoor furniture through spring and summer. White-tailed spiders are found indoors year-round and are regularly encountered in bedrooms and living areas.</p>
 </div>
 <div class="grid-card">
-<svg aria-hidden="true" class="icon-line icon-accent" height="24" viewbox="0 0 24 24" width="24"><use href="/assets/icons.svg?v=1#shield-check"></use></svg>
 <h3 class="display">European Wasps</h3>
-<p>Vespula germanica builds large nests in Canberra roof spaces, wall cavities and in the ground. Colony numbers peak through summer and early autumn. Unlike bees, European wasps sting repeatedly — removal requires a licensed pest controller with appropriate protective equipment.</p>
+<p>Vespula germanica builds large nests in Canberra roof spaces, wall cavities and in the ground. Colony numbers peak through summer and early autumn. Unlike bees, European wasps sting repeatedly, so removal needs a licensed pest controller with appropriate protective equipment.</p>
 </div>
 <div class="grid-card">
-<svg aria-hidden="true" class="icon-line icon-accent" height="24" viewbox="0 0 24 24" width="24"><use href="/assets/icons.svg?v=1#shield-check"></use></svg>
 <h3 class="display">Ants</h3>
 <p>Multiple species forage actively through the warmer months, particularly during dry spells when ant colonies move inside Canberra homes in search of water. Perimeter treatment and targeted baiting address sustained pressure.</p>
 </div>
 <div class="grid-card">
-<svg aria-hidden="true" class="icon-line icon-accent" height="24" viewbox="0 0 24 24" width="24"><use href="/assets/icons.svg?v=1#shield-check"></use></svg>
 <h3 class="display">Termites</h3>
-<p>Subterranean termites are established across the ACT and can cause severe structural damage before becoming visible. Regular <a href="/termite-treatment" style="color:var(--accent);text-decoration:none;border-bottom:1px solid currentColor;">termite inspection in Canberra</a> is essential — termites are covered in detail in the section below.</p>
+<p>Subterranean termites are established across the ACT and can cause severe structural damage before becoming visible. Regular <a href="/termite-treatment" style="color:var(--accent);text-decoration:none;border-bottom:1px solid currentColor;">termite inspection in Canberra</a> is essential. Termites are covered in detail in the section below.</p>
 </div>
 </div>
 </div>
@@ -817,7 +799,7 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 <div class="container">
 <div class="section-head split">
 <div class="head-title">
-<div class="section-eyebrow mono">[07] The ACT pest calendar</div>
+<div class="section-eyebrow mono">The ACT pest calendar</div>
 <h2 class="section-title display">Do seasonal changes affect pest activity in Canberra?</h2>
 </div>
 <div class="head-text">
@@ -826,7 +808,7 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 </div>
 <div class="grid-cards cols-4">
 <div class="grid-card">
-<div class="step-num">SUMMER — DEC TO FEB</div>
+<div class="step-num">December to February</div>
 <h3 class="display">Summer</h3>
 <ul>
 <li>European wasp colonies reach maximum size</li>
@@ -835,15 +817,15 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 </ul>
 </div>
 <div class="grid-card">
-<div class="step-num">AUTUMN — MAR TO MAY</div>
+<div class="step-num">March to May</div>
 <h3 class="display">Autumn</h3>
 <ul>
-<li>Rodents begin moving inside as nights cool — the majority of rat and mouse calls come in across Canberra</li>
+<li>Rodents begin moving inside as nights cool. Most of our rat and mouse calls come in autumn</li>
 <li>Wasp queens seek sheltered spots to overwinter</li>
 </ul>
 </div>
 <div class="grid-card">
-<div class="step-num">WINTER — JUN TO AUG</div>
+<div class="step-num">June to August</div>
 <h3 class="display">Winter</h3>
 <ul>
 <li>Rodents remain active inside heated buildings</li>
@@ -851,11 +833,11 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 </ul>
 </div>
 <div class="grid-card">
-<div class="step-num">SPRING — SEP TO NOV</div>
+<div class="step-num">September to November</div>
 <h3 class="display">Spring</h3>
 <ul>
 <li>Ant colonies expand and begin foraging indoors</li>
-<li>Termite swarmers (alates) emerge as soil temperatures rise — a practical time to book an inspection if you haven't had one in the past 12 months</li>
+<li>Termite swarmers (alates) emerge as soil temperatures rise. A good time to book an inspection if you haven't had one in the past 12 months</li>
 </ul>
 </div>
 </div>
@@ -863,24 +845,21 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 </section>
 <section class="section">
 <div class="container">
-<div class="section-eyebrow mono">[08] Product safety</div>
+<div class="section-eyebrow mono">Product safety</div>
 <h2 class="section-title display">Are pest control treatments safe around children and pets? <br/></h2>
 <p style="margin-top:1.25rem;margin-bottom:3rem;max-width:48rem;color:var(--ink-muted);">All pest control products applied by licensed operators in Australia must be registered with the Australian Pesticides and Veterinary Medicines Authority (APVMA). Registration requires the product to meet assessed standards for human health, animal safety and environmental impact before commercial use is permitted.</p>
 <div class="grid-cards cols-3">
 <div class="grid-card">
-<svg aria-hidden="true" class="icon-line icon-accent" height="24" viewbox="0 0 24 24" width="24"><use href="/assets/icons.svg?v=1#circle-check"></use></svg>
 <h3 class="display">APVMA-registered products</h3>
-<p>Every product we apply is registered with the Australian Pesticides and Veterinary Medicines Authority. Registration requires assessed standards for human health, animal safety and environmental impact — not just pest efficacy.</p>
+<p>Every product we apply is registered with the Australian Pesticides and Veterinary Medicines Authority. Registration requires assessed standards for human health, animal safety and environmental impact, not just how well it kills pests.</p>
 </div>
 <div class="grid-card">
-<svg aria-hidden="true" class="icon-line icon-accent" height="24" viewbox="0 0 24 24" width="24"><use href="/assets/icons.svg?v=1#circle-check"></use></svg>
 <h3 class="display">Clear re-entry times</h3>
-<p>Most treatments call for a re-entry period after application — typically 30 minutes to four hours depending on the product and method. We tell you the specific timeframe before we start. Cockroach gel baits, for example, are highly targeted and involve far less product exposure than a perimeter spray.</p>
+<p>Most treatments call for a re-entry period after application, typically 30 minutes to four hours depending on the product and method. We tell you the specific timeframe before we start. Cockroach gel baits, for example, are highly targeted and involve far less product exposure than a perimeter spray.</p>
 </div>
 <div class="grid-card">
-<svg aria-hidden="true" class="icon-line icon-accent" height="24" viewbox="0 0 24 24" width="24"><use href="/assets/icons.svg?v=1#circle-check"></use></svg>
 <h3 class="display">We plan around your household</h3>
-<p>If you have specific concerns — a young infant, a pet with respiratory sensitivities, an aquarium — let us know when you book. We plan the treatment method and timing around those requirements rather than applying a one-size approach.</p>
+<p>If you have specific concerns, like a young baby, a pet with breathing problems or a fish tank, let us know when you book. We plan the treatment method and timing around those requirements rather than applying a one-size approach.</p>
 </div>
 </div>
 </div>
@@ -890,7 +869,7 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 <div class="feature-grid">
 <div class="feature-text">
 <div class="section-eyebrow mono">Ready to book</div>
-<h2 class="section-title display lg" style="font-size:3rem;">Get a quote today. <br/>Pest-free tomorrow.</h2>
+<h2 class="section-title display lg" style="font-size:3rem;">Get a written quote</h2>
 <p>Tell us about your property and pest problem. We'll get back within one business day with a written quote and booking options. No pressure, no upsell, no late fees.</p>
 </div>
 <div class="feature-actions">
@@ -915,7 +894,7 @@ src="https://www.facebook.com/tr?id=1363820809022895&ev=PageView&noscript=1"
 <div class="footer-logo">
 <img alt="TCB Pest Control Canberra" src="assets/images/tcb-pest-control-logo-03284.webp" width="280" height="118" loading="lazy"/>
 </div>
-<p class="footer-tagline">Canberra's family-run pest specialists. Termites, spiders, rodents, cockroaches, ants and more — across the Canberra region.</p>
+<p class="footer-tagline">Family-run pest control in Canberra, run by Phill Johnston (ACT licence 5098997). Termites, spiders, rodents, cockroaches, ants and more across Canberra and Queanbeyan.</p>
 <a class="footer-rating" href="https://www.google.com/maps?cid=16225855690319707620" rel="noopener" target="_blank">
 <svg aria-hidden="true" viewbox="0 0 24 24"><use href="/assets/icons.svg?v=1#icon-098db6"></use></svg>
 <svg aria-hidden="true" viewbox="0 0 24 24"><use href="/assets/icons.svg?v=1#icon-098db6"></use></svg>

@@ -166,9 +166,8 @@
 }
 .spec-item .label {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
   color: var(--ink-faint);
 }
 .spec-item .value {
@@ -220,9 +219,8 @@
 .pests-table .row.head {
   background: var(--bg-soft);
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
   color: var(--ink-faint);
 }
 .pests-table .row .pest-name {

@@ -60,9 +60,8 @@
 }
 
 .section-eyebrow {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
   color: var(--accent-deep);
 }
 
@@ -79,6 +78,8 @@
   margin-top: 0.75rem;
   font-size: 2.25rem;
   font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
   max-width: 42rem;
 }
 
@@ -89,8 +90,7 @@
 
 .section-link {
   font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
+  letter-spacing: 0;
   color: var(--accent-deep);
   text-decoration: none;
   transition: color 0.15s var(--ease);
@@ -212,9 +212,8 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
   color: var(--ink-dim);
   transition: color 0.15s var(--ease);
 }
@@ -494,9 +493,8 @@
 
 .accreditation-label,
 .accreditation-text {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
   color: var(--ink-dim);
 }
 
@@ -584,7 +582,7 @@
   position: relative;
   overflow: hidden;
   border-bottom: 1px solid var(--line);
-  background: linear-gradient(135deg, var(--accent-deep), var(--accent) 50%, var(--accent-deep));
+  background: var(--accent-deep);
 }
 
 .cta::before {
@@ -631,4 +629,27 @@
   .cta .container {
     padding-block: 3.5rem;
   }
+}
+
+/* Home page: real Google reviews */
+.review-card p {
+  margin-top: 0.75rem;
+  line-height: 1.6;
+}
+
+.review-stars {
+  color: #b7791f;
+  letter-spacing: 2px;
+}
+
+.review-name {
+  margin-top: 1rem;
+  font-weight: 600;
+}
+
+.review-name span {
+  display: block;
+  font-weight: 400;
+  font-size: 0.875rem;
+  color: var(--ink-dim);
 }

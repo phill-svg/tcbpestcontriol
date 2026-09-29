@@ -11,9 +11,8 @@
 }
 
 .pricing-figure .from {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
   color: var(--ink-dim);
 }
 

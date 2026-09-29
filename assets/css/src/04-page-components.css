@@ -35,9 +35,8 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem 1rem;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
   color: var(--ink-dim);
 }
 
@@ -59,9 +58,8 @@
   gap: 0.75rem;
   border-top: 1px solid var(--line);
   padding-top: 1.5rem;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
   color: var(--ink-dim);
 }
 
@@ -97,9 +95,8 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
   color: var(--ink-dim);
 }
 
@@ -205,9 +202,8 @@
 }
 
 .grid-card .step-num {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
   color: var(--ink-faint);
 }
 
@@ -273,9 +269,8 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
   color: var(--ink-dim);
   text-decoration: none;
   transition: color 0.15s var(--ease);
@@ -505,9 +500,8 @@
 }
 
 .accreditation-panel .list-col .label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
   color: var(--ink-dim);
 }
 

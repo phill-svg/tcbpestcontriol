@@ -100,9 +100,8 @@ html.search-open {
 
 .search-close {
   font-family: var(--font-mono);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
   color: var(--ink-faint);
   border: 1px solid var(--line);
   border-radius: 0.25rem;
@@ -148,8 +147,7 @@ html.search-open {
 .search-result-cat {
   font-family: var(--font-mono);
   font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: 0;
   color: var(--accent);
 }
 

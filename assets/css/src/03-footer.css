@@ -116,9 +116,8 @@
 
 .footer-heading {
   margin-bottom: 1rem;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
   color: var(--ink-dim);
 }
 
@@ -140,9 +139,8 @@
 }
 
 .footer-col .accent-link {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
   color: var(--accent-deep);
 }
 

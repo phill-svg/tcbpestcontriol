@@ -13,6 +13,7 @@ commit it — cloud sessions don't keep anything else between runs.
 - Goal in progress: make the site read less AI-generated — plainer, local-sounding
   headlines, fewer stock phrases, correct counts, real reviews/people.
 - **Booking address lookup** (`/book`): street, suburb and postcode fill in from
-  Google Places, called through the Worker at `/api/address/*`
-  (`src/address-lookup.js`). The key is the Worker secret `GOOGLE_MAPS_KEY`
-  (Places API (New)). No key = no dropdown, form still works by typing.
+  free OpenStreetMap data (Photon, photon.komoot.io), called through the Worker at
+  `/api/address/suggest` (`src/address-lookup.js`). No key or account. Google
+  Places was dropped: it wanted a $40 upfront payment. Some house numbers are
+  missing from OpenStreetMap; the customer's typed number is kept then.

@@ -164,9 +164,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // -- Address lookup ------------------------------------------------------
   // Type 3+ letters, pick from the list, and street/suburb/postcode fill in.
-  // Suggestions come from Google via our Worker (/api/address/*). If that
-  // isn't set up or fails, the list just stops appearing and the three
-  // fields are typed by hand as normal.
+  // Suggestions come from free OpenStreetMap data via our Worker
+  // (/api/address/suggest). If that fails, the list just stops appearing and
+  // the three fields are typed by hand as normal.
   var addrInput = form.querySelector("#bk-address");
   var addrList = form.querySelector("[data-address-list]");
   var suburbInput = form.querySelector("#bk-suburb");
@@ -176,13 +176,6 @@ document.addEventListener("DOMContentLoaded", function () {
   var addrSeq = 0;
   var addrItems = [];
   var addrActive = -1;
-  var addrSession = "";
-
-  function newAddrSession() {
-    var a = new Uint8Array(16);
-    (window.crypto || window.msCrypto).getRandomValues(a);
-    return Array.prototype.map.call(a, function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
-  }
 
   function closeAddrList() {
     addrItems = [];
@@ -229,19 +222,10 @@ document.addEventListener("DOMContentLoaded", function () {
     var it = addrItems[i];
     closeAddrList();
     if (!it) return;
-    var session = addrSession;
-    addrSession = ""; // one session per address picked
-    fetchAddr("/api/address/details?id=" + encodeURIComponent(it.id) + "&session=" + session)
-      .then(function (d) {
-        if (!d || !d.ok) return;
-        if (d.street) addrInput.value = d.street;
-        if (d.suburb && suburbInput) suburbInput.value = d.suburb;
-        if (d.postcode && postcodeInput) postcodeInput.value = d.postcode;
-        if (serviceSelect && !serviceSelect.value) serviceSelect.focus();
-      })
-      .catch(function () {
-        // Leave whatever they typed; they can fill suburb/postcode by hand.
-      });
+    if (it.street) addrInput.value = it.street;
+    if (it.suburb && suburbInput) suburbInput.value = it.suburb;
+    if (it.postcode && postcodeInput) postcodeInput.value = it.postcode;
+    if (serviceSelect && !serviceSelect.value) serviceSelect.focus();
   }
 
   if (addrInput && addrList) {
@@ -250,9 +234,8 @@ document.addEventListener("DOMContentLoaded", function () {
       var q = addrInput.value.trim();
       if (addrOff || q.length < 3) { closeAddrList(); return; }
       addrTimer = setTimeout(function () {
-        if (!addrSession) addrSession = newAddrSession();
         var seq = ++addrSeq;
-        fetchAddr("/api/address/suggest?q=" + encodeURIComponent(q) + "&session=" + addrSession)
+        fetchAddr("/api/address/suggest?q=" + encodeURIComponent(q))
           .then(function (d) {
             if (seq !== addrSeq) return; // a newer keystroke already asked
             showAddrList((d && d.suggestions) || []);

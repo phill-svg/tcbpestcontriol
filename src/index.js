@@ -422,10 +422,10 @@ const site = {
 			return handleAvailability(request, env);
 		}
 
-		// Address lookup for the /book form (Google Places, key kept here as
-		// the GOOGLE_MAPS_KEY secret). See src/address-lookup.js.
+		// Address lookup for the /book form (free OpenStreetMap search via
+		// Photon, no key). See src/address-lookup.js.
 		if (url.pathname.startsWith("/api/address/") && request.method === "GET") {
-			return handleAddressLookup(request, env);
+			return handleAddressLookup(request);
 		}
 
 		// The /contact enquiry form posts straight here: emails the office,

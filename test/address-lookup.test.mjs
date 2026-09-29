@@ -1,58 +1,67 @@
-// Unit tests for the booking form's address lookup: turning Google's
-// addressComponents into street/suburb/postcode, and putting the three
-// fields back together into the one line ServiceM8 and the emails get.
+// Unit tests for the booking form's address lookup: turning an OpenStreetMap
+// (Photon) result into street/suburb/postcode, and putting the three fields
+// back together into the one line ServiceM8 and the emails get.
 // Run with:  node --test test/address-lookup.test.mjs
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseAddressComponents, stateForPostcode } from "../src/address-lookup.js";
+import { parsePhotonFeature, stateForPostcode } from "../src/address-lookup.js";
 import { composeAddress, validateBookingFields } from "../src/booking.js";
 
-const comp = (type, longText, shortText = longText) => ({ types: [type], longText, shortText });
+// Trimmed from real Photon (OpenStreetMap) responses for Canberra queries.
+const feat = (props) => ({ type: "Feature", properties: { countrycode: "AU", ...props } });
+const weetangera = feat({ osm_type: "W", osm_id: 921885371, type: "house", housenumber: "12", street: "Smith Street", district: "Weetangera", city: "Belconnen", state: "Australian Capital Territory", postcode: "2614" });
+const lonsdale = feat({ osm_type: "W", osm_id: 1096468598, type: "street", name: "Lonsdale Street", district: "Braddon", city: "North Canberra", state: "Australian Capital Territory", postcode: "2612" });
+const busStop = feat({ osm_type: "N", osm_id: 13011316092, osm_key: "highway", osm_value: "bus_stop", type: "house", name: "Crawford St before Campbell St", street: "Crawford Street", district: "Queanbeyan", city: "Queanbeyan", state: "New South Wales", postcode: "2620" });
 
-test("parses a plain Canberra house address", () => {
-	const got = parseAddressComponents([
-		comp("street_number", "12"),
-		comp("route", "Smith Street", "Smith St"),
-		comp("locality", "Kambah"),
-		comp("administrative_area_level_1", "Australian Capital Territory", "ACT"),
-		comp("postal_code", "2902"),
-	]);
-	assert.deepEqual(got, { street: "12 Smith Street", suburb: "Kambah", state: "ACT", postcode: "2902" });
+test("an ACT house takes its suburb from district, not the town centre", () => {
+	assert.deepEqual(parsePhotonFeature(weetangera, "12 smith st"), {
+		id: "W921885371",
+		text: "12 Smith Street, Weetangera ACT 2614",
+		street: "12 Smith Street",
+		suburb: "Weetangera",
+		state: "ACT",
+		postcode: "2614",
+	});
 });
 
-test("puts a unit number in front of the street number", () => {
-	const got = parseAddressComponents([
-		comp("subpremise", "4"),
-		comp("street_number", "20"),
-		comp("route", "Lonsdale Street"),
-		comp("locality", "Braddon"),
-		comp("administrative_area_level_1", "Australian Capital Territory", "ACT"),
-		comp("postal_code", "2612"),
-	]);
-	assert.equal(got.street, "4/20 Lonsdale Street");
+test("a street-only match keeps the house number the customer typed", () => {
+	const got = parsePhotonFeature(lonsdale, "20 Lonsdale St Braddon");
+	assert.equal(got.street, "20 Lonsdale Street");
+	assert.equal(got.text, "20 Lonsdale Street, Braddon ACT 2612");
 });
 
-test("a street with no number still gives the street name", () => {
-	const got = parseAddressComponents([comp("route", "Monaro Highway"), comp("locality", "Hume")]);
-	assert.deepEqual(got, { street: "Monaro Highway", suburb: "Hume", state: "", postcode: "" });
+test("unit numbers typed as 4/20 are kept too", () => {
+	assert.equal(parsePhotonFeature(lonsdale, "4/20 lonsdale").street, "4/20 Lonsdale Street");
 });
 
-test("NSW suburbs keep their own state", () => {
-	const got = parseAddressComponents([
-		comp("street_number", "3"),
-		comp("route", "Crawford Street"),
-		comp("locality", "Queanbeyan"),
-		comp("administrative_area_level_1", "New South Wales", "NSW"),
-		comp("postal_code", "2620"),
-	]);
+test("a street-only match with no typed number is just the street", () => {
+	assert.equal(parsePhotonFeature(lonsdale, "lonsdale st").street, "Lonsdale Street");
+});
+
+test("Queanbeyan comes back as NSW", () => {
+	const house = feat({ osm_type: "N", osm_id: 1, type: "house", housenumber: "3", street: "Crawford Street", district: "Queanbeyan", city: "Queanbeyan", state: "New South Wales", postcode: "2620" });
+	const got = parsePhotonFeature(house, "3 crawford");
 	assert.equal(got.state, "NSW");
-	assert.equal(got.suburb, "Queanbeyan");
+	assert.equal(got.text, "3 Crawford Street, Queanbeyan NSW 2620");
 });
 
-test("empty or missing components give empty fields, not a crash", () => {
-	assert.deepEqual(parseAddressComponents(undefined), { street: "", suburb: "", state: "", postcode: "" });
+test("a different house on the same street takes the number the customer typed", () => {
+	const house94 = feat({ osm_type: "N", osm_id: 2, type: "house", housenumber: "94", street: "Crawford Street", district: "Queanbeyan", state: "New South Wales", postcode: "2620" });
+	assert.equal(parsePhotonFeature(house94, "3 Crawford St Queanbeyan").text, "3 Crawford Street, Queanbeyan NSW 2620");
+});
+
+test("with no typed number, a house keeps its own number", () => {
+	assert.equal(parsePhotonFeature(weetangera, "smith street weet").street, "12 Smith Street");
+});
+
+test("bus stops and other places with no house number are dropped", () => {
+	assert.equal(parsePhotonFeature(busStop, "3 crawford st"), null);
+});
+
+test("results outside Australia are dropped", () => {
+	assert.equal(parsePhotonFeature({ properties: { ...weetangera.properties, countrycode: "TT" } }, "12 smith"), null);
 });
 
 test("works out ACT or NSW from the postcode", () => {

@@ -399,6 +399,11 @@
   gap: 0.5rem;
 }
 
+/* Admins also get the editor's "Edit page" button in this corner; sit above it. */
+body:has([data-tcb-editor="root"]) .contact-fab {
+  bottom: 4.75rem;
+}
+
 .contact-fab a {
   display: inline-flex;
   align-items: center;
@@ -406,18 +411,19 @@
   min-height: 2.75rem;
   padding: 0.625rem 1rem;
   border-radius: 999px;
-  background: var(--accent-deep);
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
   color: var(--ink-on-accent);
   font-weight: 600;
   font-size: 0.9375rem;
   text-decoration: none;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 12px 28px rgba(229, 37, 26, 0.35);
 }
 
 .contact-fab a.alt {
   background: var(--bg);
   color: var(--ink);
   border: 1px solid var(--line);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
 }
 
 .contact-fab a:focus-visible {

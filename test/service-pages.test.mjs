@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 
 import { renderServicePage, findUnfilledPlaceholders, renderFaqSection, renderFaqSchema } from "../src/service-pages.js";
 import { TITLE_MIN, TITLE_MAX, DESCRIPTION_MIN, DESCRIPTION_MAX } from "../assets/js/seo-check.js";
+import { locateMenus } from "../src/site-menu.js";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TEMPLATE = readFileSync(path.join(repoRoot, "_service-template.html"), "utf8");
@@ -56,7 +57,19 @@ test("the page it builds is about the thing it was asked for", () => {
 	// The template is derived from the ant page, so its slug leaking through
 	// would point the canonical, the breadcrumb and the schema at a different
 	// page entirely -- and every one of those is invisible to a reader.
-	assert.ok(!html.includes("ant-control"), "the template's origin must not leak");
+	//
+	// The site menu is the one place the ant page is meant to appear: it links
+	// to /ant-control from every page, the template included, and
+	// site-menu.test.mjs already holds it to assets/menu.json. So the menu links
+	// are cut out first and everything else is checked. Found rather than
+	// assumed, so a template that lost its menu fails here instead of passing.
+	const menus = locateMenus(html);
+	assert.ok(!menus.error, menus.error);
+	const outsideMenus = [menus.mobile, menus.main].reduce(
+		(rest, span) => rest.slice(0, span.innerStart) + rest.slice(span.linksEnd),
+		html
+	);
+	assert.ok(!outsideMenus.includes("ant-control"), "the template's origin must not leak");
 	assert.match(html, /<title>Borer Control Canberra \| TCB Pest Control<\/title>/);
 	assert.match(html, /href="https:\/\/www\.tcbpestcontrolcanberra\.com\.au\/borer-control" rel="canonical"/);
 	assert.match(html, /"serviceType": "Borer control"/);

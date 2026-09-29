@@ -19,7 +19,8 @@ commit it — cloud sessions don't keep anything else between runs.
   labels, no icons, no red accents) went live in #176 and the owner hated it;
   #177 put the original look back. Don't restyle without showing screenshots first.
 - **Owner:** Phill Johnston, ACT pest licence no. 5098997. Name and licence can
-  go on the site; no photo of his face. Mobile for the Text button: 0485 034 869.
+  go on the site, but **not the home page** (name removed there, #182; licence
+  stays); no photo of his face. Mobile for the Text button: 0485 034 869.
 - Real Google reviews come from google.com/maps?cid=16225855690319707620 — copy
   them word for word. Don't put the ute photo on every page; wait for real job photos.
 - **Booking address lookup** (`/book`): street, suburb and postcode fill in from
@@ -27,3 +28,6 @@ commit it — cloud sessions don't keep anything else between runs.
   `/api/address/suggest` (`src/address-lookup.js`). No key or account. Google
   Places was dropped: it wanted a $40 upfront payment. Some house numbers are
   missing from OpenStreetMap; the customer's typed number is kept then.
+- **No size exception for skills.** Invoke the matching superpowers skill before
+  every task, even a three-line copy edit ("too small for a skill" is how it got
+  skipped on 2026-09-30). Verification skill before any "done" claim.

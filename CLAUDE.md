@@ -11,6 +11,8 @@ commit it — cloud sessions don't keep anything else between runs.
   numbers in labels: the owner had those removed (#178).
 - Folders stay flat: the folder path is the live URL. See `.navigation/README.md`.
 - Owner preference: sweet and quick to the point.
+- No AI attribution in commit messages or PR descriptions (no "Co-Authored-By:
+  Claude", no "Generated with Claude Code"). The owner asked for this.
 - Goal in progress: make the site read less AI-generated — plainer, local-sounding
   headlines, fewer stock phrases, correct counts, real reviews/people.
   **Change the words, not the look.** A site-wide restyle (one font, no caps

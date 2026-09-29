@@ -9,7 +9,7 @@
 // one -- only the chosen `modifier` / `quoteRequested`.
 var PRICING = {
   "general-pest": { modifier: "bedrooms", prices: { "1-3": 249, "4-5": 289, "6+": 349 } },
-  "ants-spiders-roaches": { modifier: "bedrooms", prices: { "1-3": 249, "4-5": 289, "6+": 349 } },
+  "ants-spiders-roaches": { modifier: "none", price: 289 },
   "termite-inspection": { modifier: "property", prices: { subfloor: 320, slab: 289 } },
   "rodents": { modifier: "none", price: 289 },
   "wasps-bees": { modifier: "none", price: 289 },

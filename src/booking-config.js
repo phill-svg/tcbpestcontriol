@@ -97,7 +97,9 @@ export const SERVICES = {
 		badges: WEBSITE_BOOKING_BADGES,
 	},
 	"ants-spiders-roaches": {
-		label: "Ants / Spiders / Cockroaches",
+		// Key kept from when this was a combined ants/spiders/cockroaches item, so
+		// existing bookings still resolve. Spiders and cockroaches are general-pest.
+		label: "Ant treatment",
 		durationMin: 60,
 		category: "97af1d3c-07ac-4aae-8862-23184055ce5b", // Premium Pest Treatment
 		template: "4122de2a-6289-46e5-9b26-2319a3e5c2ed", // Premium Control Treatment
@@ -202,7 +204,7 @@ export function isBookableService(key) {
 // `price` with no follow-up.
 export const PRICING = {
 	"general-pest": { modifier: "bedrooms", prices: { "1-3": 249, "4-5": 289, "6+": 349 } },
-	"ants-spiders-roaches": { modifier: "bedrooms", prices: { "1-3": 249, "4-5": 289, "6+": 349 } },
+	"ants-spiders-roaches": { modifier: "none", price: 289 },
 	"termite-inspection": { modifier: "property", prices: { subfloor: 320, slab: 289 } },
 	"rodents": { modifier: "none", price: 289 },
 	"wasps-bees": { modifier: "none", price: 289 },

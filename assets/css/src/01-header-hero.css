@@ -46,8 +46,9 @@
 
 .logo-tag {
   display: none;
-  font-size: 0.8125rem;
-  letter-spacing: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
   color: var(--ink-faint);
 }
 
@@ -320,9 +321,10 @@
 }
 
 .hero-eyebrow {
-  font-size: 0.8125rem;
-  letter-spacing: 0;
-  color: var(--ink-dim);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--accent);
 }
 
 .hero h1 {
@@ -335,7 +337,7 @@
 }
 
 .hero h1 .accent {
-  color: inherit;
+  color: var(--accent);
 }
 
 .hero-lead {
@@ -367,13 +369,14 @@
 .hero-stat dt {
   font-size: 1.875rem;
   font-weight: 700;
-  color: var(--ink);
+  color: var(--accent);
 }
 
 .hero-stat dd {
   margin-top: 0.25rem;
-  font-size: 0.8125rem;
-  letter-spacing: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
   color: var(--ink-dim);
 }
 
@@ -388,20 +391,4 @@
   .hero-stats {
     grid-template-columns: repeat(4, 1fr);
   }
-}
-
-.hero-proof {
-  margin-top: 2.5rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.5rem;
-  border-top: 1px solid var(--line);
-  padding-top: 1.5rem;
-  font-size: 0.9375rem;
-  color: var(--ink-muted);
-}
-
-.hero-proof a {
-  font-weight: 600;
-  color: var(--ink);
 }

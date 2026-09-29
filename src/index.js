@@ -1,7 +1,8 @@
 export { ChatHub } from "./chat-hub.js";
 import { loginCookieHeader, logoutCookieHeader, getStaffSession, shouldRenewSession } from "./staff-auth.js";
 import { sendPasswordResetEmail } from "./email.js";
-import { validateBookingFields, validateEnquiryFields, createBookingAndNotify } from "./booking.js";
+import { validateBookingFields, validateEnquiryFields, createBookingAndNotify, composeAddress } from "./booking.js";
+import { handleAddressLookup } from "./address-lookup.js";
 import { diagnoseServiceM8, readStaffOccupancy } from "./servicem8.js";
 import { handleMcp } from "./mcp.js";
 import { handleIndexJson } from "./index-json.js";
@@ -421,6 +422,12 @@ const site = {
 			return handleAvailability(request, env);
 		}
 
+		// Address lookup for the /book form (Google Places, key kept here as
+		// the GOOGLE_MAPS_KEY secret). See src/address-lookup.js.
+		if (url.pathname.startsWith("/api/address/") && request.method === "GET") {
+			return handleAddressLookup(request, env);
+		}
+
 		// The /contact enquiry form posts straight here: emails the office,
 		// creates a ServiceM8 Quote job and pings staff in the app, then sends
 		// the visitor on to /thank-you. See handleContactEnquiry.
@@ -713,15 +720,19 @@ async function handleBooking(request, env, ctx) {
 	const name = String(body.name || "").trim();
 	const email = String(body.email || "").trim();
 	const phone = String(body.phone || "").trim();
-	const address = String(body.address || "").trim();
+	const street = String(body.address || "").trim();
+	// Only present from the current /book form -- see validateBookingFields.
+	const suburb = body.suburb === undefined ? undefined : String(body.suburb).trim();
+	const postcode = body.postcode === undefined ? undefined : String(body.postcode).trim();
 	const service = String(body.service || "").trim();
 	const date = String(body.date || "").trim();
 	const time = String(body.time || "").trim();
 	const message = String(body.message || "").trim();
 
-	const fields = { name, email, phone, address, service, date, time, message };
-	const errors = validateBookingFields(fields);
+	const errors = validateBookingFields({ name, email, phone, address: street, suburb, postcode, service, date, time, message });
 	if (errors.length) return jsonError(400, errors[0]);
+	const address = composeAddress({ address: street, suburb, postcode });
+	const fields = { name, email, phone, address, service, date, time, message };
 
 	// Optional Turnstile -- only enforced once TURNSTILE_SECRET is configured.
 	if (env.TURNSTILE_SECRET) {

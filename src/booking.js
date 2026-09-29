@@ -16,6 +16,7 @@ import {
 import { sendBookingNotification, sendBookingConfirmation } from "./email.js";
 import { STAFF_UUID, SERVICE_BADGES, SERVICE_CATEGORIES, SERVICE_TEMPLATES } from "./booking-config.js";
 import { sydneyLocalToMs } from "./availability.js";
+import { stateForPostcode } from "./address-lookup.js";
 
 // Deliberately not a single regex like /^[^\s@]+@[^\s@]+\.[^\s@]+$/ -- since
 // "." is a valid member of [^\s@], the two variable-length groups either
@@ -38,9 +39,26 @@ export function validateBookingFields(f) {
 	if (!isValidEmail(f.email)) errors.push("Please enter a valid email address.");
 	if (f.phone.replace(/\D/g, "").length < 6) errors.push("Please enter a valid phone number.");
 	if (!f.address) errors.push("Please enter the service address.");
+	// Suburb and postcode are their own fields on /book. The MCP tool and any
+	// old cached copy of the form send one address line only, so these are
+	// checked only when the caller sends them.
+	if (f.suburb !== undefined || f.postcode !== undefined) {
+		if (!f.suburb) errors.push("Please enter the suburb.");
+		if (!/^\d{4}$/.test(f.postcode || "")) errors.push("Please enter a 4-digit postcode.");
+	}
 	if (!f.service) errors.push("Please choose a service.");
 	if (f.message.length > 2000) errors.push("Message is too long.");
 	return errors;
+}
+
+// Street, suburb and postcode back into the one line that ServiceM8 and the
+// emails use: "12 Smith Street, Kambah ACT 2902". A caller that only sent a
+// single address line gets it back unchanged.
+export function composeAddress({ address, suburb, postcode }) {
+	const street = String(address || "").trim();
+	if (!suburb && !postcode) return street;
+	const place = [suburb, postcode ? stateForPostcode(postcode) : "", postcode].filter(Boolean).join(" ");
+	return [street, place].filter(Boolean).join(", ");
 }
 
 // The /contact enquiry form asks for less than /book does: no address, and

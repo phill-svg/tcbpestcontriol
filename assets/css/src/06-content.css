@@ -260,6 +260,12 @@
   align-items: end;
 }
 
+/* The level-with-the-question nudge only makes sense for top-aligned heads. */
+.section-head.split.align-middle .head-text,
+.section-head.split.align-bottom .head-text {
+  padding-top: 0;
+}
+
 .split-media-image {
   position: relative;
   aspect-ratio: 4 / 3;

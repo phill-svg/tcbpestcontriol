@@ -1127,7 +1127,9 @@ function slugifyImageName(name) {
 		.replace(/\.[a-z0-9]{1,5}$/i, "")
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-+|-+$/g, "");
+		// The line above leaves at most one dash at each end, so no "-+" here --
+		// that form rescans long dash runs (CodeQL js/polynomial-redos).
+		.replace(/^-|-$/g, "");
 }
 
 // Five digits, matching the names already in assets/images/. Derived from the

@@ -515,4 +515,16 @@ test("pathToFile mirrors how the Worker serves a directory path", () => {
 	assert.equal(pathToFile("/"), "index.html");
 	assert.equal(pathToFile("/spider-control"), "spider-control/index.html");
 	assert.equal(pathToFile("/locations-pest-control-acton"), "locations-pest-control-acton/index.html");
+	assert.equal(pathToFile("///spider-control///"), "spider-control/index.html");
+	assert.equal(pathToFile(""), "index.html");
+});
+
+test("pathToFile stays fast on a path made of thousands of slashes (CodeQL js/polynomial-redos)", () => {
+	const started = performance.now();
+	// The slow case is a long run of slashes that does NOT reach the end: each
+	// start position scans the whole run looking for the end of the string.
+	const middle = "a" + "/".repeat(50000) + "b";
+	assert.equal(pathToFile(middle), `${middle}/index.html`);
+	assert.equal(pathToFile("/".repeat(50000)), "index.html");
+	assert.ok(performance.now() - started < 50, "trimming slashes must be linear, not quadratic");
 });

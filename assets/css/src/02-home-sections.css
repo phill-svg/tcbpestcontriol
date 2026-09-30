@@ -23,6 +23,11 @@
   background: var(--bg-soft);
 }
 
+/* Cool blue-grey band, used on the home page to break up the white. */
+.section.bg-tint {
+  background: #e4ecf4;
+}
+
 .section.on-dark {
   background: var(--ink);
   color: var(--ink-on-accent);
